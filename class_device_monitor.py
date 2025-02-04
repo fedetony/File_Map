@@ -1,7 +1,6 @@
 
 import psutil
 import subprocess
-import re
 import platform
 import time
 
@@ -16,8 +15,23 @@ class DeviceMonitor:
 
 
     @staticmethod
-    def linux_disk_drive_to_dict(text):
-        return {"test":text}
+    def linux_disk_drive_to_dict(text:str):
+        """Set udevadm info --query=all --name=/dev/... information response in a dictionary.
+
+        Args:
+            text (str): Output from udevadm info query
+
+        Returns:
+            dict: dictionary with information
+        """
+        splitted=text.split("\n")
+        # Initialize an empty dictionary to store the result
+        disk_drive_info = {}
+        for txt in splitted:
+            if 'E: ' in txt:
+                rem_e_list=txt.replace('E: ','').split('=')
+                disk_drive_info.update({rem_e_list[0]:rem_e_list[1]})
+        return disk_drive_info 
 
     @staticmethod
     def win32_disk_drive_to_dict(instance):
@@ -81,27 +95,6 @@ class DeviceMonitor:
                     disk_drive_info[key] = str(value)
 
         return disk_drive_info
-    
-    @staticmethod
-    def extract_serial(string):
-        """Regex search for Serial pattern
-
-        Args:
-            string (_type_): text from getserial
-
-        Returns:
-            tuple: (id_name, serial_value)
-        """
-        pattern = r"ID_\w+:\s*(.*?)"
-        match = re.search(pattern, string)
-        
-        if match is None:
-            return None
-        
-        id_name = match.group(1).strip()
-        serial_value = match.group(2).strip()
-        
-        return (id_name, serial_value)
 
     def get_serial_number_of_physical_disk(self,drive_letter='C:'):
         """Using wmi library for windows, extract Serial Number.
@@ -134,16 +127,18 @@ class DeviceMonitor:
             str: Serial Number of device
         """
         # on linux generates error if you import wmi outside. Does not find the dependencies.
-        import wmi
-        try:
-            c = wmi.WMI()
-            logical_disk = c.Win32_LogicalDisk(Caption=drive_letter)[0]
-            partition = logical_disk.associators()[1]
-            physical_disc = partition.associators()[0]
-            return self.win32_disk_drive_to_dict(physical_disc)
-        except Exception as eee:
-            print (eee)
-            return None
+        if platform.system() == 'Windows':
+            import wmi
+            try:
+                c = wmi.WMI()
+                logical_disk = c.Win32_LogicalDisk(Caption=drive_letter)[0]
+                partition = logical_disk.associators()[1]
+                physical_disc = partition.associators()[0]
+                return self.win32_disk_drive_to_dict(physical_disc)
+            except Exception as eee:
+                print (eee)
+                return None
+        return None
     
     
     def get_info_linux_device(self,device_path="/dev/sda"):
@@ -173,19 +168,19 @@ class DeviceMonitor:
         """
         if device_path.startswith('/') and platform.system() == 'Linux':
             # Linux
-            disk = next((d for d in psutil.disk_partitions() if device_path == d.device), None)
-            if disk:
-                # output = subprocess.check_output(['dmidecode', '-s', 'system-uuid', device_path]) # not working
-                # return output.decode().strip()
-                # udevadm info --query=all --name=/dev/sdc1
-                #print(device_path)
-                output = subprocess.check_output(['udevadm', 'info', '--query=all', "--name="+device_path]) 
-                splitted=str(output.decode()).split("\n")
-                endtxt=''
-                for txt in splitted:
-                    if "SERIAL" in txt:
-                        endtxt=endtxt+txt.replace(txt.split(" ",1)[0],"")
-                return endtxt #extract_serial(output.decode())
+            info_dict=self.get_info_linux_device(device_path)
+            endtxt=''
+            iii=0
+            sep=''
+            for key,value in info_dict.items():
+                if 'SERIAL' in key:
+                    if key == 'ID_SERIAL_SHORT':
+                        return value   
+                    if iii>0:
+                        sep='|'
+                    endtxt=endtxt+sep+value
+                    iii=iii+1
+            return endtxt #extract_serial(output.decode())
         elif device_path.endswith(':\\') and platform.system() == 'Windows':
             # Windows
             if self.log_print:
@@ -249,11 +244,13 @@ if __name__ == '__main__':
             md.check_none_devices()
 
     print(md.devices)
-    info=md.get_info_windows_device("F:")
-    print("info:\n",info)
-    print("type:\n",type(info))
-    result = md.win32_disk_drive_to_dict(info)
-    print (result)
-    #print(json.dumps(result[0], indent=2))
-    
+    if platform.system() == 'Windows':
+        info=md.get_info_windows_device(md.devices[0][0])
+        print("info:\n",info)
+        print("type:\n",type(info))
+        result = md.win32_disk_drive_to_dict(info)
+        print (result)
+    if platform.system() == 'Linux':
+        info=md.get_info_linux_device(md.devices[2][0])        
+        print("info:\n",info)
 
