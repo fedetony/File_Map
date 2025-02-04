@@ -5,6 +5,8 @@ import re
 import platform
 import time
 
+
+
 class DeviceMonitor:
     def __init__(self,time_delay_s=0.33,log_print=False):
         self.devices = []
@@ -12,6 +14,74 @@ class DeviceMonitor:
         self.log_print=log_print
         self.monitor_devices()
 
+
+    @staticmethod
+    def linux_disk_drive_to_dict(text):
+        return {"test":text}
+
+    @staticmethod
+    def win32_disk_drive_to_dict(instance):
+        """
+        Converts a Win32_DiskDrive instance to a dictionary.
+        
+        Args:
+            instance (object): The Win32_DiskDrive instance as an object.
+
+        Returns:
+            dict: A dictionary representation of the Win32_DiskDrive instance with all keys.
+        """
+
+        # Define the properties and their corresponding keys in a dictionary
+        property_map = {
+            "BytesPerSector": "bytes_per_sector",
+            "Capabilities": "capabilities",
+            "CapabilityDescriptions": "capability_descriptions",
+            "Caption": "caption",
+            "ConfigManagerErrorCode": "config_manager_error_code",
+            "ConfigManagerUserConfig": "config_manager_user_config",
+            "CreationClassName": "creation_class_name",
+            "Description": "description",
+            "DeviceID": "device_id",
+            "FirmwareRevision": "firmware_revision",
+            "Index": "index",
+            "InterfaceType": "interface_type",
+            "Manufacturer": "manufacturer",
+            "MediaLoaded": "media_loaded",
+            "MediaType": "media_type",
+            "Model": "model",
+            "Name": "name",
+            "Partitions": "partitions",
+            "PNPDeviceID": "pnp_device_id",
+            "SCSIBus": "scsi_bus",
+            "SCSILogicalUnit": "scsi_logical_unit",
+            "SCSIPort": "scsip_port",
+            "SCSITargetId": "scsit_target_id",
+            "SectorsPerTrack": "sectors_per_track",
+            "SerialNumber": "serial_number",
+            "Size": "size",
+            "Status": "status",
+            "SystemCreationClassName": "system_creation_class_name",
+            "SystemName": "system_name",
+            "TotalCylinders": "total_cylinders",
+            "TotalHeads": "total_heads",
+            "TotalSectors": "total_sectors",
+            "TotalTracks": "total_tracks",
+            "TracksPerCylinder": "tracks_per_cylinder"
+        }
+        # Initialize an empty dictionary to store the result
+        disk_drive_info = {}
+
+        # Iterate over the properties and add them to the dictionary
+        for prop, key in property_map.items():
+            if hasattr(instance, prop):
+                value = getattr(instance, prop)
+                if isinstance(value, (tuple, list)):
+                    disk_drive_info[key] = ', '.join(map(str, value))
+                else:
+                    disk_drive_info[key] = str(value)
+
+        return disk_drive_info
+    
     @staticmethod
     def extract_serial(string):
         """Regex search for Serial pattern
@@ -53,6 +123,44 @@ class DeviceMonitor:
         except Exception as eee:
             print (eee)
             return None
+    
+    def get_info_windows_device(self,drive_letter='C:'):
+        """Using wmi library for windows, extract Serial Number.
+            Note: physical_disk has all info of device
+        Args:
+            drive_letter (str, optional): Drive letter as windows mounted. Defaults to 'C:'.
+
+        Returns:
+            str: Serial Number of device
+        """
+        # on linux generates error if you import wmi outside. Does not find the dependencies.
+        import wmi
+        try:
+            c = wmi.WMI()
+            logical_disk = c.Win32_LogicalDisk(Caption=drive_letter)[0]
+            partition = logical_disk.associators()[1]
+            physical_disc = partition.associators()[0]
+            return self.win32_disk_drive_to_dict(physical_disc)
+        except Exception as eee:
+            print (eee)
+            return None
+    
+    
+    def get_info_linux_device(self,device_path="/dev/sda"):
+        """Using udevadm info --query=all --name=/dev/... , extract all info.
+            Note: physical_disk has all info of device
+        Args:
+            device_path (str, optional): Drive letter as windows mounted. Defaults to '/dev/sda'.
+
+        Returns:
+            str: Serial Number of device
+        """
+        if device_path.startswith('/') and platform.system() == 'Linux':
+            # Linux
+            disk = next((d for d in psutil.disk_partitions() if device_path == d.device), None)
+            if disk:
+                output = subprocess.check_output(['udevadm', 'info', '--query=all', "--name="+device_path]) 
+                return self.linux_disk_drive_to_dict(str(output.decode()))
 
     def get_serial_number(self,device_path):
         """Gets serial numbers in windows and linux for a device.
@@ -113,7 +221,7 @@ class DeviceMonitor:
     def check_none_devices(self):
         """Search again no serial devices which are connected devices and list their serial numbers
            Sometimes the windows api does not respond correctly. You can recheck as many times you want.
-           
+
         Returns:
             list[list]: list of [device,serial] pairs
         """
@@ -141,3 +249,11 @@ if __name__ == '__main__':
             md.check_none_devices()
 
     print(md.devices)
+    info=md.get_info_windows_device("F:")
+    print("info:\n",info)
+    print("type:\n",type(info))
+    result = md.win32_disk_drive_to_dict(info)
+    print (result)
+    #print(json.dumps(result[0], indent=2))
+    
+
