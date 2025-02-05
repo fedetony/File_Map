@@ -45,16 +45,14 @@ class SQLiteDatabase:
         self.key = key
 
     def decrypt_db(self):
-        """Decrypt the database file using AES-256 encryption.
- 
-        """
+        """Decrypt the database file using AES-256 encryption."""
         if self.key:
             fernet = Fernet(self.key)
             # Decrypt the database file using AES-256 encryption
-            with open('mydatabase.db', 'rb') as f:
+            with open(self.db_path, 'rb') as f:
                 encrypted_data = f.read()
             decrypted_data = fernet.decrypt(encrypted_data)
-            with open('mydatabase.db', 'wb') as f:
+            with open(self.db_path, 'wb') as f:
                 f.write(decrypted_data)
 
     def save_key_to_file(self,key_path):
@@ -202,12 +200,22 @@ class SQLiteDatabase:
             c.close()  
     
     def tables_in_db(self):
+        """Get the list of tables in the database
+
+        Returns:
+            list: table names
+        """
         c = self.conn.cursor()
-        # Get the list of tables in the database
+        
         tables=c.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         return tables
     
     def print_all_rows(self,table):
+        """Prints all rows in table
+
+        Args:
+            table (str): table
+        """
         # Execute a SELECT statement and fetch all rows from the files table
         rows = self.get_data_from_table(table)
         # Print the values of each row
@@ -264,6 +272,14 @@ class SQLiteDatabase:
         
     
     def edit_value_in_table(self, table_name:str, id:int, column_name:str, new_value):
+        """Edits a value in a table.
+
+        Args:
+            table_name (str): table
+            id (int): id to edit
+            column_name (str): column item
+            new_value (_type_): value
+        """
         try:
             c = self.conn.cursor()
             # Update the specified column with the given value for all rows that match the condition
@@ -415,6 +431,14 @@ class SQLiteDatabase:
             c.close()  
     
     def get_next_available_id(self,table:str)->int:
+        """Gets the next id that is available in a table
+
+        Args:
+            table (str): table
+
+        Returns:
+            int: next available id
+        """
         id_list=self.get_data_from_table(table,'id')
         for iii,idtup in enumerate(id_list):
             if iii+1 < idtup[0]:
@@ -469,10 +493,6 @@ class SQLiteDatabase:
         finally:
             # Release all resources
             c.close()  
-
-
-      
-
 
 # Example usage
 if __name__ == "__main__":
