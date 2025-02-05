@@ -28,8 +28,9 @@ tablename="table_test_2"
 if new_map:
     # path_to_map="D:\Downloads"
     path_to_map="C:\\Users\\Tony\\Downloads"
-    
-    fm.delete_map(fm.db,tablename)      
+    print(fm.db.table_exists(tablename))
+    if fm.db.table_exists(tablename):
+        fm.delete_map(fm.db,tablename)      
     print(fm.db.table_exists(tablename))
     print(fm.db.table_exists('Cow'))  
     fm.map_a_path_to_db(fm.db,tablename,path_to_map,True)

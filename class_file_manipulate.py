@@ -3,11 +3,13 @@
 # creation: 03.02.2025
 ########################
 import os
+import re
 import sys
 from datetime import datetime
 import shutil
 import psutil
 
+ALLOWED_CHARS = 'áéíóúüöäÜÖÄÁÉÍÓÚçÇabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_ -'
 
 class FileManipulate:
     def __init__(self):
@@ -160,4 +162,216 @@ class FileManipulate:
         elif __file__:
             application_path = os.path.dirname(__file__)
         return application_path    
+    
+    def copy_file(self,file_path, new_file_path):
+        """copy a file using shutil.copy2 to preserve metadata
 
+        Args:
+            file_path (str): path and file origin
+            new_file_path (str): path and file destination
+
+        Returns:
+            bool: True if moved
+        """
+        try:
+            if os.path.exists(file_path):
+                new_folder_path=self.extract_path(new_file_path)
+                if not os.path.exists(new_folder_path):
+                    os.makedirs(new_folder_path)    
+                shutil.copy2(new_file_path, new_file_path) # Use copy2 to preserve metadata
+                return True
+        except Exception as eee:
+            print(f"Could not copy file! {file_path} to {new_file_path}\nCopy Error: {eee}")
+            return False
+
+    def move_file(self,file_path, new_file_path):
+        """Move file or rename.
+
+        Args:
+            file_path (str): path and file origin
+            new_file_path (str): path and file destination
+
+        Returns:
+            bool: True if moved
+        """
+        if self.copy_file(file_path, new_file_path):
+            # Remove the original file if it was copied
+            return self.delete_file(file_path)
+        return False
+    
+    def delete_file(self,file_path):
+        """Delete file.
+
+        Args:
+            file_path (_type_): path and file origin
+
+        Returns:
+            bool: True if removed
+        """
+        try:
+            os.remove(file_path)  
+            return True
+        except Exception as eee:
+            print(f"Could not remove {file_path}\nDelete Error: {eee}")
+        return False
+    
+    def copy_folder(self,src_path: str, dst_path: str) -> bool:
+        """
+        Recursively copies the contents of src_path to dst_path.
+        Args:
+            src_path (str): The source directory path.
+            dst_path (str): The destination directory path.
+        Returns:
+            bool: True if all files and folders were copied
+        """
+            
+        # Check if the source and destination paths exist
+        if not os.path.exists(src_path):
+            print(f"Source path '{src_path}' does not exist.")
+            return False
+
+        # Create parent directories in dst_path if they don't exist
+        for dir_name, dirs, _ in os.walk(dst_path):
+            dir_path = os.path.join(dir_name)
+            while not os.path.exists(os.path.dirname(dir_path)):
+                try:
+                    os.makedirs(dir_path)
+                except OSError as eee:
+                    print(f"Error creating directory {dir_path}: {eee}")
+                    return False
+                
+        all_copied=True
+        for item in os.listdir(src_path):
+            try:
+                src_item = os.path.join(src_path, item)
+                dst_item = os.path.join(dst_path, item)
+                # If the current item is a file
+                if os.path.isfile(src_item):
+                    copy_result=self.copy_file(src_item, dst_item)  
+                    if not copy_result:
+                        print(f"{src_item} Not copied !!!")
+                # If the current item is a directory
+                elif os.path.isdir(src_item):
+                    copy_result=self.copy_folder(src_item, dst_item)
+                    if not copy_result:
+                        print(f"Not copied items in folder {src_item}!!!")
+                all_copied &= copy_result
+            except Exception as eee:
+                print(f"Error Coping folder {src_path}: {eee}")
+                all_copied = False
+        return all_copied
+    
+    def move_folder(self,src_path: str, dst_path: str) -> bool:
+        """
+        Recursively moves the contents of src_path to dst_path.
+
+        Args:
+            src_path (str): The source directory path.
+            dst_path (str): The destination directory path.
+        Returns:
+            bool: True if all files and folders were copied
+        """
+        
+        # Check if the source and destination paths exist
+        if not os.path.exists(src_path):
+            print(f"Source path '{src_path}' does not exist.")
+            return False
+
+        # Create parent directories in dst_path if they don't exist
+        for dir_name, dirs, _ in os.walk(dst_path):
+            dir_path = os.path.join(dir_name)
+            while not os.path.exists(os.path.dirname(dir_path)):
+                try:
+                    os.makedirs(dir_path)
+                except OSError as eee:
+                    print(f"Error creating directory {dir_path}: {eee}")
+                    return False
+                
+        all_moved=True
+        for item in os.listdir(src_path):
+            try:
+                src_item = os.path.join(src_path, item)
+                dst_item = os.path.join(dst_path, item)
+                # If the current item is a file
+                if os.path.isfile(src_item):
+                    moved_result=self.move_file(src_item, dst_item)  
+                    if not moved_result:
+                        print(f"{src_item} Not copied !!!")  
+                # If the current item is a directory
+                elif os.path.isdir(src_item):
+                    moved_result=self.move_folder(src_item, dst_item)
+                    if not moved_result:
+                        print(f"Not moved items in folder {src_item}!!!")
+                    else:
+                        self.remove_empty_folders(src_item)
+                all_moved &= moved_result
+            except Exception as eee:
+                print(f"Error Moving folder {src_path}: {eee}")
+                all_moved= False
+                
+        return all_moved
+
+    @staticmethod
+    def rename_folder(src_path: str, new_name: str) -> bool:
+        """
+        Renames a folder from src_path to new_name.
+        
+        Args:
+            src_path (str): The source path of the folder to be renamed.
+            new_name (str): The new name for the folder.
+            
+        Returns:
+            bool: True if the rename operation is successful, False otherwise
+        """
+        # Check if the source directory exists
+        if not os.path.exists(src_path):
+            print(f"Source directory '{src_path}' does not exist.")
+            return False
+        # Construct the new path with the new name
+        dst_path = os.path.join(os.path.dirname(src_path), new_name)
+        try:
+            # Rename the folder using os.rename()
+            os.rename(src_path, dst_path)
+            print(f"Folder '{src_path}' renamed to '{dst_path}'")
+            return True
+        except Exception as eee:
+            print(f"Error renaming folder {src_path}: {eee}")
+            return False
+    
+    def clean_filename(self, filename, allowed_chars=ALLOWED_CHARS):
+        """Remove all undesired characters from a file name while preserving the file extension.
+
+        Args:
+            filename (str): The file name to be cleaned.
+            allowed_chars (str): A string of allowed characters. Defaults to 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._ -'.
+
+        Returns:
+            str: The cleaned file name.
+        """
+        base =self.extract_filename(filename,False)
+        baseext=self.extract_filename(filename,True)
+        extension = baseext.replace(base,'')
+        base = base.strip("¿?")
+        cleaned_base = re.sub('[^' + allowed_chars + ']', '', base)
+        return cleaned_base + extension
+    
+    @staticmethod
+    def validate_path(path: str) -> bool:
+        """
+        Validate the input path.
+        
+        Args:
+            path (str): The input path to be validated.
+        
+        Returns:
+            bool: True if the path is valid, False otherwise.
+        """
+
+        # Check for empty string
+        if not path.strip():
+            return False
+
+        # Check length of path
+        if len(path) > 256:  # windows & ubuntu limit, adjust as n
+            print(f"Path '{path}' exceeds maximum allowed length (256 characters).")
+            return False
