@@ -29,6 +29,8 @@ class FileMapper:
         self.mapper_reference_table="__File_Mapper_Reference__"
 
     def look_for_active_devices(self):
+        """Looks for devices mounted sets the device, serial list to active_devices
+        """
         md=DeviceMonitor(log_print=True)
         for _,serial in md.devices:
             if not serial:
@@ -38,6 +40,16 @@ class FileMapper:
         
     @staticmethod
     def start_db(db_path_file,key_filepath,password = None):
+        """Starts a database. If not existing, database is created. Returns connected database object.
+
+        Args:
+            db_path_file (str): database file with path
+            key_filepath (str): if encrypted, encryption key file with path else None 
+            password (str, optional): if db is password proteced. Defaults to None.
+
+        Returns:
+            SQLiteDatabase: database
+        """
         key = None
         # 
         if os.path.exists(db_path_file): #if db exists
@@ -105,6 +117,14 @@ class FileMapper:
         return path.replace(mount,'')
 
     def find_mount_serial_of_path(self,path):
+        """Returns the mount point and serial for a path on an active device.
+
+        Args:
+            path (str): path to look for
+
+        Returns:
+            tuple: (mount, serial)
+        """
         # find mounting point
         mount=''
         serial=''
@@ -131,9 +151,10 @@ class FileMapper:
                                         ('mount','TEXT',True), 
                                         ('serial', 'TEXT', True), 
                                         ('mapname', 'TEXT', True), 
+                                        ('maptype', 'TEXT', True),
                                         ])
         mapname=""
-        
+        maptype="Device Map"
         dt_map_created=datetime.now()
         dt_map_modified=datetime.now()
         # find mounting point
@@ -144,13 +165,8 @@ class FileMapper:
             db.edit_value_in_table(self.mapper_reference_table,id,'dt_map_modified',dt_map_modified)
             db.edit_value_in_table(self.mapper_reference_table,id,'mount',mount)
         else:
-            data=(dt_map_created,dt_map_modified,mappath,table_name,mount,serial,mapname)
+            data=(dt_map_created,dt_map_modified,mappath,table_name,mount,serial,mapname,maptype)
             db.insert_data_to_table(self.mapper_reference_table,[data])
-            
-    def map_a_path_to_db(self,db: SQLiteDatabase,table_name,path_to_map,log_print=True):
-        self.add_table_to_mapper_index(db,table_name,path_to_map)
-        try:
-            #if not db.table_exists(table_name):
             db.create_table(table_name,[('dt_data_created', 'DATETIME DEFAULT CURRENT_TIMESTAMP', True),
                                         ('dt_data_modified', 'DATETIME', True),
                                         ('filepath','TEXT',True), 
@@ -161,6 +177,18 @@ class FileMapper:
                                         ('dt_file_accessed','DATETIME',False),
                                         ('dt_file_modified','DATETIME',False),
                                         ])
+            
+    def map_a_path_to_db(self,db: SQLiteDatabase,table_name,path_to_map,log_print=True):
+        """Maps a path in a device into a table in the database.
+
+        Args:
+            db (SQLiteDatabase): database
+            table_name (_type_): table to map the path
+            path_to_map (_type_): path to map on the device
+            log_print (bool, optional): print logs. Defaults to True.
+        """
+        try:
+            self.add_table_to_mapper_index(db,table_name,path_to_map)
             data=[]
             iii=0
             files_processed=0
@@ -226,8 +254,6 @@ class FileMapper:
             dict[list]: {(ordered column name):(list of other columns repeated)..} 
             repeated file ids
             default:  md5sum:[id of files repeated]
-                        
-                        
         """
         repeated={}
         try:
@@ -262,7 +288,7 @@ class FileMapper:
 
     @staticmethod
     def repeated_list_show(repeated_dict:dict,key,db_list: list[SQLiteDatabase],table_name_list: list,db_cols:list=['id','filepath','filename','md5']):
-        """_summary_
+        """Gets additional information on repeated_dict items.
 
         Args:
             repeated_dict (dict): repeated dictionary
@@ -272,7 +298,7 @@ class FileMapper:
             db_cols (list, optional): colums to show. Defaults to ['id','filepath','filename','md5']. if None will add all columns.
 
         Returns:
-            _type_: _description_
+            list: additional info list
         """
         if not db_cols:
             # add all columns 
@@ -356,4 +382,5 @@ class FileMapper:
             return mount, mount_active, mappath_exists
     
     def close(self):
+        """Close db connection"""
         self.db.close_connection()
