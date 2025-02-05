@@ -275,24 +275,22 @@ class SQLiteDatabase:
             # Release all resources
             c.close()  
     
-    def table_exists(self,table:str)->bool:
+    def table_exists(self, table: str) -> bool:
         """Table exists
 
         Args:
-            table (str): table to look in db
+            table (str): Table name to look in db
 
         Returns:
-            bool: True if exists
+            bool: True if the table exists, False otherwise.
         """
-        exists=False
         try:
             c = self.conn.cursor()
-            c.execute(f"SELECT * FROM sqlite_master WHERE type='table' AND name='{table}'")
-            _=c.fetchall()
-            exists=True
-        except sqlite3.OperationalError as eee:
+            c.execute(f"SELECT 1 FROM sqlite_master WHERE type='table' AND name='{table}'")
+            return len(c.fetchall()) > 0
+        except (sqlite3.OperationalError, ValueError) as eee:
             print("No table:", eee)
-        return exists
+            return False
 
     def describe_table_in_db(self, table:str)->list:
         """returns the column structure of the table
