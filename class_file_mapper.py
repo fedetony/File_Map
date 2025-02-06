@@ -184,7 +184,7 @@ class FileMapper:
                     serial=md[1]
             return mount, serial
 
-    def add_table_to_mapper_index(self,db: SQLiteDatabase,table_name,path_to_map):
+    def add_table_to_mapper_index(self,table_name,path_to_map):
         """Adds the information of the table to mapper index table
 
         Args:
@@ -192,8 +192,9 @@ class FileMapper:
             table_name (str): table in database
             path_to_map (str): path in device
         """
-        if not db.table_exists(self.mapper_reference_table):
-            db.create_table(self.mapper_reference_table,[('dt_map_created', 'DATETIME DEFAULT CURRENT_TIMESTAMP', True),
+        db=self.db
+        #if not db.table_exists(self.mapper_reference_table):
+        db.create_table(self.mapper_reference_table,[('dt_map_created', 'DATETIME DEFAULT CURRENT_TIMESTAMP', True),
                                         ('dt_map_modified', 'DATETIME', True),
                                         ('mappath','TEXT',True),
                                         ('tablename','TEXT',True), 
@@ -202,6 +203,18 @@ class FileMapper:
                                         ('mapname', 'TEXT', True), 
                                         ('maptype', 'TEXT', True),
                                         ])
+        db_result=DBResult(db.describe_table_in_db(self.mapper_reference_table))
+        db_result.set_values(db.get_data_from_table(self.mapper_reference_table,'*',f"tablename='{table_name}'"))
+        table_indexed=False
+        if len(db_result.dbr)>0:
+            # 'id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype'
+            for dbr in db_result.dbr:
+                if dbr.tablename == table_name:
+                    table_indexed=True
+                    an_id=dbr.id
+                    break
+        if not table_indexed:
+            print(f"Table {table_name} is Not in reference indexed")
         mapname=""
         maptype="Device Map"
         dt_map_created=datetime.now()
@@ -209,18 +222,20 @@ class FileMapper:
         # find mounting point
         mount, serial =self.find_mount_serial_of_path(path_to_map)
         mappath=self.remove_mount_from_path(mount,path_to_map)
-        if db.table_exists(table_name):
-            idlist=db.get_data_from_table(self.mapper_reference_table,'id',f"tablename={table_name}")
-            if len(idlist)>0:
-                an_id=idlist[0]
-                db.edit_value_in_table(self.mapper_reference_table,an_id,'dt_map_modified',dt_map_modified)
-                db.edit_value_in_table(self.mapper_reference_table,an_id,'mount',mount)
+        if table_indexed:
+            # Update mount point and date modified
+            print(f"Editing table {table_name}")
+            db.edit_value_in_table(self.mapper_reference_table,an_id,'dt_map_modified',dt_map_modified)
+            db.edit_value_in_table(self.mapper_reference_table,an_id,'mount',mount)
         else:
-            data=(dt_map_created,dt_map_modified,mappath,table_name,mount,serial,mapname,maptype)
-            db.insert_data_to_table(self.mapper_reference_table,[data])
+            print(f"Indexing table {table_name}")
+            data=[(dt_map_created,dt_map_modified,mappath,table_name,mount,serial,mapname,maptype)]
+            db.insert_data_to_table(self.mapper_reference_table,data)
+        # # check
+        # if db.get_number_or_rows_in_table(self.mapper_reference_table):
+        #     raise ValueError("No data was added to index")    
             
-            
-    def map_a_path_to_db(self,db: SQLiteDatabase,table_name,path_to_map,log_print=True):
+    def map_a_path_to_db(self,table_name,path_to_map,log_print=True):
         """Maps a path in a device into a table in the database.
 
         Args:
@@ -229,8 +244,9 @@ class FileMapper:
             path_to_map (_type_): path to map on the device
             log_print (bool, optional): print logs. Defaults to True.
         """
+        db=self.db
         try:
-            self.add_table_to_mapper_index(db,table_name,path_to_map)
+            self.add_table_to_mapper_index(table_name,path_to_map)
             db.create_table(table_name,[('dt_data_created', 'DATETIME DEFAULT CURRENT_TIMESTAMP', True),
                                         ('dt_data_modified', 'DATETIME', True),
                                         ('filepath','TEXT',True), 
@@ -372,7 +388,7 @@ class FileMapper:
                     info.append(data[0])
         return info
     
-    def delete_map(self,db:SQLiteDatabase,table_name):
+    def delete_map(self,table_name):
         """Removes a map from index and its referenced table from db.
 
         Args:
@@ -380,14 +396,22 @@ class FileMapper:
             table_name (str): table
         """
         try:
-            if db.table_exists(table_name) and db.table_exists(self.mapper_reference_table):
-                idlist=db.get_data_from_table(self.mapper_reference_table,'id',f"tablename={table_name}")
-                if len(idlist)>0:
-                    an_id=idlist[0]
+            if self.db.table_exists(self.mapper_reference_table):
+                db_result=DBResult(self.db.describe_table_in_db(self.mapper_reference_table))
+                db_result.set_values(self.db.get_data_from_table(self.mapper_reference_table,'*',f"tablename='{table_name}'"))
+                if len(db_result.dbr)>0:
+                    # 'id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype'
+                    an_id=getattr(db_result.dbr[0],'id')
                     print(f"Here id {an_id}")
-                    db.delete_data_from_table(self.mapper_reference_table,f'id={an_id}')
-                    db.delete_table_from_db(table_name)
-                    print(f"{table_name} was deleted!!")
+                    self.db.delete_data_from_table(self.mapper_reference_table,f'id={an_id}')
+                    print(f"{table_name} reference was deleted!!")
+                else:
+                    print(f"{table_name} Not found in reference!")
+            if self.db.table_exists(table_name):
+                self.db.delete_data_from_table(table_name,None) #remove all data
+                self.db.delete_table_from_db(table_name)
+                print(f"{table_name} was deleted!!")
+                
         except Exception as eee:
             print(f"{table_name} was not deleted: {eee}")
 
@@ -421,7 +445,7 @@ class FileMapper:
                     mp_mount=getattr(db_result.dbr[0],'mount')
                     serial=getattr(db_result.dbr[0],'serial')
                 else:
-                    print(f"No data found in table {table_name}")
+                    print(f"No data found in reference table for {table_name}")
                     return mount, mount_active, mappath_exists    
                 
                 for md in self.active_devices:

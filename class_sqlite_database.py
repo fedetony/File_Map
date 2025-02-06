@@ -447,7 +447,9 @@ class SQLiteDatabase:
     
     def get_number_or_rows_in_table(self,table:str)->int:
         """Get number of rows"""
-        return self.get_data_from_table(table,'COUNT(*)',None)[0][0]
+        if self.table_exists(table):
+            return self.get_data_from_table(table,'COUNT(*)',None)[0][0]
+        return None
     
     def reenumerate_id_sequence(self,table:str):
         """Reorganized ids in sequential order in the table
