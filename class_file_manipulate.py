@@ -175,10 +175,10 @@ class FileManipulate:
         """
         try:
             if os.path.exists(file_path):
-                new_folder_path=self.extract_path(new_file_path)
+                new_folder_path=self.extract_path(new_file_path,True)
                 if not os.path.exists(new_folder_path):
                     os.makedirs(new_folder_path)    
-                shutil.copy2(new_file_path, new_file_path) # Use copy2 to preserve metadata
+                shutil.copy2(file_path, new_file_path) # Use copy2 to preserve metadata
                 return True
         except Exception as eee:
             print(f"Could not copy file! {file_path} to {new_file_path}\nCopy Error: {eee}")
@@ -261,7 +261,7 @@ class FileManipulate:
                 all_copied = False
         return all_copied
     
-    def move_folder(self,src_path: str, dst_path: str) -> bool:
+    def move_folder(self,src_path: str, dst_path: str,remove_empty=True) -> bool:
         """
         Recursively moves the contents of src_path to dst_path.
 
@@ -308,7 +308,8 @@ class FileManipulate:
             except Exception as eee:
                 print(f"Error Moving folder {src_path}: {eee}")
                 all_moved= False
-                
+        if all_moved and remove_empty:
+            os.rmdir(src_path)  # Remove the empty folder        
         return all_moved
 
     @staticmethod
@@ -374,4 +375,42 @@ class FileManipulate:
         # Check length of path
         if len(path) > 256:  # windows & ubuntu limit, adjust as n
             print(f"Path '{path}' exceeds maximum allowed length (256 characters).")
+            return False
+           
+    def delete_folder_recursive(self,directory):
+        """
+        Recursively deletes all files and subdirectories in the given directory.
+        
+        Args:
+            directory (str): The path of the directory to be deleted.
+            
+        Returns:
+            bool: True if all items were successfully deleted, False otherwise.
+        """
+
+        try:
+            # Iterate over each item in the directory
+            for item in os.listdir(directory):
+                item_path = os.path.join(directory, item)
+                
+                # If it's a file, delete it
+                if os.path.isfile(item_path):
+                    os.remove(item_path)
+                    
+                # If it's a folder, recursively call this function on it
+                elif os.path.isdir(item_path):
+                    if not self.delete_folder_recursive(item_path):  # Recursively check the subdirectory
+                        return False
+                    
+            # After deleting all items in the directory and its subdirectories,
+            # remove the empty directory itself.
+            try:
+                os.rmdir(directory)
+            except OSError:  # If the directory is not empty, this will fail
+                pass
+            
+            return True
+        
+        except FileNotFoundError:
+            print(f"Directory '{directory}' does not exist.")
             return False
