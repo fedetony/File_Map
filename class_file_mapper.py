@@ -1,3 +1,7 @@
+########################
+# F.garcia
+# creation: 05.02.2025
+########################
 import os
 from datetime import datetime
 import hashlib
@@ -5,6 +9,7 @@ import hashlib
 from class_sqlite_database import SQLiteDatabase
 from class_file_manipulate import FileManipulate
 from class_device_monitor import DeviceMonitor
+from class_database_result import DBResult
 
 
 class FileMapper:
@@ -93,12 +98,56 @@ class FileMapper:
                 md5 = hashlib.md5()
                 while chunk := f.read(4096):
                     md5.update(chunk)
-                    
                 return md5.hexdigest()
 
         except FileNotFoundError:
             print(f"File {file_path} not found.")
             exit(1)
+
+    @staticmethod
+    def calculate_sha1(file_path):
+        """
+        Calculate the SHA128 hash of a file.
+        
+        Args:
+            file_path (str): The path to the file for which the MD5 hash is calculated.
+            
+        Returns:
+            str: The SHA128 hash as a string.
+        """
+        try:
+            with open(file_path, 'rb') as f:
+                sha1 = hashlib.sha1()
+                while chunk := f.read(4096):
+                    sha1.update(chunk)  
+                return sha1.hexdigest()
+
+        except FileNotFoundError:
+            print(f"File {file_path} not found.")
+            exit(1)
+
+    @staticmethod
+    def calculate_sha256(file_path):
+        """
+        Calculate the SHA256 hash of a file.
+        
+        Args:
+            file_path (str): The path to the file for which the MD5 hash is calculated.
+            
+        Returns:
+            str: The SHA256 hash as a string.
+        """
+        try:
+            with open(file_path, 'rb') as f:
+                sha256 = hashlib.sha256()
+                while chunk := f.read(4096):
+                    sha256.update(chunk)   
+                return sha256.hexdigest()
+
+        except FileNotFoundError:
+            print(f"File {file_path} not found.")
+            exit(1)
+
     @staticmethod
     def remove_mount_from_path(mount:str,path:str) -> str:
         """Removes the mounting point
@@ -161,22 +210,15 @@ class FileMapper:
         mount, serial =self.find_mount_serial_of_path(path_to_map)
         mappath=self.remove_mount_from_path(mount,path_to_map)
         if db.table_exists(table_name):
-            id=db.get_data_from_table(self.mapper_reference_table,'id',f"tablename={table_name}")[0]
-            db.edit_value_in_table(self.mapper_reference_table,id,'dt_map_modified',dt_map_modified)
-            db.edit_value_in_table(self.mapper_reference_table,id,'mount',mount)
+            idlist=db.get_data_from_table(self.mapper_reference_table,'id',f"tablename={table_name}")
+            if len(idlist)>0:
+                an_id=idlist[0]
+                db.edit_value_in_table(self.mapper_reference_table,an_id,'dt_map_modified',dt_map_modified)
+                db.edit_value_in_table(self.mapper_reference_table,an_id,'mount',mount)
         else:
             data=(dt_map_created,dt_map_modified,mappath,table_name,mount,serial,mapname,maptype)
             db.insert_data_to_table(self.mapper_reference_table,[data])
-            db.create_table(table_name,[('dt_data_created', 'DATETIME DEFAULT CURRENT_TIMESTAMP', True),
-                                        ('dt_data_modified', 'DATETIME', True),
-                                        ('filepath','TEXT',True), 
-                                        ('filename','TEXT',True), 
-                                        ('md5', 'TEXT', True), 
-                                        ('size', 'REAL', True), 
-                                        ('dt_file_created','DATETIME',False),
-                                        ('dt_file_accessed','DATETIME',False),
-                                        ('dt_file_modified','DATETIME',False),
-                                        ])
+            
             
     def map_a_path_to_db(self,db: SQLiteDatabase,table_name,path_to_map,log_print=True):
         """Maps a path in a device into a table in the database.
@@ -189,6 +231,16 @@ class FileMapper:
         """
         try:
             self.add_table_to_mapper_index(db,table_name,path_to_map)
+            db.create_table(table_name,[('dt_data_created', 'DATETIME DEFAULT CURRENT_TIMESTAMP', True),
+                                        ('dt_data_modified', 'DATETIME', True),
+                                        ('filepath','TEXT',True), 
+                                        ('filename','TEXT',True), 
+                                        ('md5', 'TEXT', True), 
+                                        ('size', 'REAL', True), 
+                                        ('dt_file_created','DATETIME',False),
+                                        ('dt_file_accessed','DATETIME',False),
+                                        ('dt_file_modified','DATETIME',False),
+                                        ])
             data=[]
             iii=0
             files_processed=0
@@ -266,19 +318,19 @@ class FileMapper:
 
             iii=0
             last_anmd5=None
-            last_anid=None
+            last_an_id=None
             last_db=None
-            for dbtable,anid,anmd5 in data_list:
+            for dbtable,an_id,anmd5 in data_list:
                 if last_anmd5 == anmd5:
                     if anmd5 in repeated:
                         rep_list=repeated[anmd5]
                         if isinstance(rep_list,list):
-                            rep_list.append((dbtable,anid))
+                            rep_list.append((dbtable,an_id))
                             repeated.update({anmd5:rep_list})
                     else:
-                        repeated.update({anmd5:[(last_db,last_anid),(dbtable,anid)]})
+                        repeated.update({anmd5:[(last_db,last_an_id),(dbtable,an_id)]})
                 last_anmd5=anmd5
-                last_anid=anid
+                last_an_id=an_id
                 last_db=dbtable
                 iii=iii+1
         except Exception as e:
@@ -316,7 +368,8 @@ class FileMapper:
                 table_name=table_name_list[a_db]
                 where= f"id={an_id}"
                 data=db.get_data_from_table(table_name,from_txt,where)
-                info.append(data)
+                if len(data)>0:
+                    info.append(data[0])
         return info
     
     def delete_map(self,db:SQLiteDatabase,table_name):
@@ -328,10 +381,13 @@ class FileMapper:
         """
         try:
             if db.table_exists(table_name) and db.table_exists(self.mapper_reference_table):
-                id=db.get_data_from_table(self.mapper_reference_table,'id',f"tablename={table_name}")[0]
-                db.delete_data_from_table(self.mapper_reference_table,f'id={id}')
-                db.delete_table_from_db(table_name)
-                print(f"{table_name} was deleted!!")
+                idlist=db.get_data_from_table(self.mapper_reference_table,'id',f"tablename={table_name}")
+                if len(idlist)>0:
+                    an_id=idlist[0]
+                    print(f"Here id {an_id}")
+                    db.delete_data_from_table(self.mapper_reference_table,f'id={an_id}')
+                    db.delete_table_from_db(table_name)
+                    print(f"{table_name} was deleted!!")
         except Exception as eee:
             print(f"{table_name} was not deleted: {eee}")
 
@@ -351,35 +407,46 @@ class FileMapper:
         """
         if rescan_devices:
             self.look_for_active_devices()
+        mount=None
+        mount_active=False
+        mappath_exists=None
         if db.table_exists(table_name):
-            id=db.get_data_from_table(self.mapper_reference_table,'id',f"tablename={table_name}")[0]
-            mappath=db.get_data_from_table(self.mapper_reference_table,'mappath',f"tablename={table_name}")[0]
-            serial=db.get_data_from_table(self.mapper_reference_table,'serial',f"tablename={table_name}")[0]
-            mp_mount=db.get_data_from_table(self.mapper_reference_table,'mount',f"tablename={table_name}")[0]
-            mount=None
-            mount_active=False
-            for md in self.active_devices:
-                if md[1] in serial:
-                    mount=md[0]
-                    mount_active=True 
-            # Check if path exists
-            mappath_exists=None
-            if mount:
-                mappath_exists=os.path.exists(os.path.join(mount,mappath))
-            else:
+            try:
+                db_result=DBResult(db.describe_table_in_db(self.mapper_reference_table))
+                db_result.set_values(db.get_data_from_table(self.mapper_reference_table,'*',f"tablename='{table_name}'"))
+                if len(db_result.dbr)>0:
+                    # 'id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype'
+                    an_id=getattr(db_result.dbr[0],'id')
+                    mappath=getattr(db_result.dbr[0],'mappath')
+                    mp_mount=getattr(db_result.dbr[0],'mount')
+                    serial=getattr(db_result.dbr[0],'serial')
+                else:
+                    print(f"No data found in table {table_name}")
+                    return mount, mount_active, mappath_exists    
+                
                 for md in self.active_devices:
-                    if os.path.exists(os.path.join(md[0],mappath)):
+                    if md[1] in serial:
                         mount=md[0]
-                        print(f"path exists on device {md[1]} not found in {serial}")
-                        mount_active=True
-                        break
-            # update mounting point
-            if mappath_exists and mp_mount!=mount and mount:
-                dt_map_modified=datetime.now()
-                db.edit_value_in_table(self.mapper_reference_table,id,'dt_map_modified',dt_map_modified)
-                db.edit_value_in_table(self.mapper_reference_table,id,'mount',mount)
-            
-            return mount, mount_active, mappath_exists
+                        mount_active=True 
+                # Check if path exists
+                if mount:
+                    mappath_exists=os.path.exists(os.path.join(mount,mappath))
+                else:
+                    for md in self.active_devices:
+                        if os.path.exists(os.path.join(md[0],mappath)):
+                            mount=md[0]
+                            print(f"path exists on device {md[1]} not found in {serial}")
+                            mount_active=True
+                            break
+                # update mounting point
+                if mappath_exists and mp_mount!=mount and mount:
+                    dt_map_modified=datetime.now()
+                    db.edit_value_in_table(self.mapper_reference_table,an_id,'dt_map_modified',dt_map_modified)
+                    db.edit_value_in_table(self.mapper_reference_table,an_id,'mount',mount)
+            except IndexError:
+                pass
+
+        return mount, mount_active, mappath_exists
     
     def close(self):
         """Close db connection"""

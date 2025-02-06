@@ -39,8 +39,16 @@ if new_map:
 repeated_dict=fm.get_repeated_files(fm.db,tablename)
 #print("repeated files:",repeated_dict)
 key_list=list(repeated_dict.keys())
+
 showing=['id','filepath','filename','md5','size']
-print("Show:", fm.repeated_list_show(repeated_dict,key_list[3],[fm.db],[tablename],showing))
+filelist3=fm.repeated_list_show(repeated_dict,key_list[33],[fm.db],[tablename],showing)
+print("Show:", filelist3)
+mount, mount_active, mappath_exists=fm.check_if_map_device_active(fm.db,tablename,False)
+print("Check result:", mount, mount_active, mappath_exists)
+
+if mount_active and mappath_exists:
+    for item in filelist3:
+        print(os.path.join(mount,item[1],item[2]))
 
 fm.db.close_connection()
 end_datetime=datetime.now()
