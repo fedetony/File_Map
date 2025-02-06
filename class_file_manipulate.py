@@ -414,3 +414,35 @@ class FileManipulate:
         except FileNotFoundError:
             print(f"Directory '{directory}' does not exist.")
             return False
+
+    def delete_files_folders(self,file_folder_list):
+        """
+        Recursively deletes all files and subdirectories in the given directory or any file given in the list.
+        
+        Args:
+            file_folder_list (list): List of paths or files to be deleted.
+            
+        Returns:
+            bool: True if all items were successfully deleted, False otherwise.
+        """
+        # Iterate over each item in the directory
+        for iii,item_path in enumerate(file_folder_list):
+            try:
+                deleted_all=True
+                if os.path.exists(item_path):
+                    # If it's a file, delete it
+                    if os.path.isfile(item_path):
+                        os.remove(item_path)
+                    # If it's a folder, recursively call this function on it
+                    elif os.path.isdir(item_path):
+                        result_del = self.delete_folder_recursive(item_path)  # Recursively check the subdirectory
+                        if not result_del:
+                            print(f"Not all files deleted on folder '{file_folder_list[iii]}'.")
+                        deleted_all &= result_del
+                else:
+                    print(f"Item '{file_folder_list[iii]}' does nor exist.") 
+            except Exception as eee:
+                print(f"Issue deleting item '{file_folder_list[iii]}': {eee}.")       
+        return deleted_all
+        
+            
