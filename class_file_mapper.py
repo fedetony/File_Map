@@ -370,11 +370,8 @@ class FileMapper:
         """
         if not db_cols:
             # add all columns 
-            db_cols=[]
-            description=db_list[0].describe_table_in_db(table_name_list[0])
-            for ddd in description:
-                db_cols.append(ddd[1])
-
+            db_cols=db_list[0].get_column_list_of_table(table_name_list[0])
+            
         rep_tup=repeated_dict[key]
         from_txt= str(db_cols).replace("[","").replace("'","").replace("]","")
         info=[]
@@ -472,6 +469,84 @@ class FileMapper:
 
         return mount, mount_active, mappath_exists
     
+    def get_dbresult_list(self,db_list: list[SQLiteDatabase],table_name_list: list) -> list[DBResult]:
+        """Returns a list with the dbresult objects for each database,table pair.
+
+        Args:
+            db_list (list[SQLiteDatabase]): database list
+            table_name_list (list): table list
+
+        Returns:
+            list[DBResult]: Dbresult of each db, table pair
+        """
+        dbresult_list=[]
+        if len(db_list)!=len(table_name_list):
+            print("Error: database,table Pairs have deffernt lengths!")
+            return  dbresult_list
+        for a_db,table_name in zip(db_list,table_name_list):
+            db_result=DBResult(a_db.describe_table_in_db(table_name))
+            db_result.set_values(a_db.get_data_from_table(table_name,'*',None))
+            dbresult_list.append(db_result)
+        return  dbresult_list
+    
+    @staticmethod
+    def repeated_in_same_db(repeated_dict,key)->bool:
+        """Finds if items are repeated in the same database
+
+        Args:
+            repeated_dict (dict): repeated item dictionary
+            key (str): None to look all dictionary. or key of specific item
+
+        Returns:
+            _type_: _description_
+        """
+        same_db=None
+        for a_key,value in repeated_dict.items():
+            if a_key==key or not key:
+                same_db=True
+                last_index=0
+                for iii,(index,_) in enumerate(value):
+                    if iii==0:
+                        last_index=index
+                    else:
+                        if index!=last_index:
+                             return False
+        return same_db
+    
+    def repeated_list_info(self,repeated_dict:dict,key, dbresult_list: list):
+        """Gets all information on repeated_dict items and node.
+            
+        Args:
+            repeated_dict (dict): Repeated
+            key (str, None): Specific key to get result. if None returs all keys.
+            dbresult_list (list): list of dbresult objects
+
+        Returns:
+            dict: result_dict type dictionary with:
+            {key:[(index of repeated item,
+            db,table pair index,
+            id in db of repeated item,
+            index of dbr_key in dbresult List,
+            Node object in dbresult.dbr[dbr_key]
+            )]} 
+            
+        """
+        node_dict={}
+        for a_key,value in repeated_dict.items():   
+            if a_key==key or not key:
+                print("Here -----> ",a_key,value)
+                node_list=[]
+                for iii,(index,an_id) in enumerate(value):
+                    dbresult=dbresult_list[index]
+                    dbr_key=dbresult.find_dbr_key_with_att('id',an_id,True) #list of keys
+                    # print("Now --->",iii,index,an_id,dbr_key)
+                    if len(dbr_key)>0:
+                        node_list.append((iii,index,an_id,dbr_key[0],dbresult.dbr[dbr_key[0]]))
+                        #print(iii,an_id,dbr_key,dbresult.dbr[dbr_key[0]].filename,dbresult.dbr[dbr_key[0]].size,dbresult.dbr[dbr_key[0]].md5)
+                if len(node_list)>0:
+                    node_dict.update({a_key:node_list})
+        return node_dict       
+                        
     def close(self):
         """Close db connection"""
         self.db.close_connection()

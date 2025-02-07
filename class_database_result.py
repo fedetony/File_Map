@@ -40,6 +40,81 @@ class DBResult:
                 attr=self.description[index][1]
                 setattr(obj,attr,value)
             self.dbr.append(obj)
+            
+    @staticmethod
+    def list_node_attr(a_node:Node):
+        """lists node attributes
+
+        Args:
+            a_node (Node): node
+
+        Returns:
+            list: attributes
+        """
+        att_list=[]
+        for item in dir(a_node):
+            if not item.startswith("__"):
+                att_list.append(item)    
+        return att_list
+
+    def compare_nodes(self,node_1:Node,node_2:Node, comparison:str='==') -> dict: 
+        """compares every repeated attribute in two nodes.
+            True if comparison True
+            False if comparison False
+            None if can't compare
+
+        Args:
+            node_1 (Node): Node 1
+            node_2 (Node): Node 2
+            comparison (str, optional): comparison type '==','!=','<','>','<=','>='. Defaults to '=='.
+
+        Returns:
+            dict: comparison {atrribute: True/False/None}
+        """
+        n1_attr_list=self.list_node_attr(node_1)
+        n2_attr_list=self.list_node_attr(node_2)
+        compare={}
+        for n1_attr in n1_attr_list:
+            if n1_attr in n2_attr_list:
+                try:
+                    if comparison == '==':
+                        compare.update({n1_attr:getattr(node_1,n1_attr)==getattr(node_2,n1_attr)})
+                    elif comparison == '<=':
+                        compare.update({n1_attr:getattr(node_1,n1_attr)<=getattr(node_2,n1_attr)})
+                    elif comparison == '>=':
+                        compare.update({n1_attr:getattr(node_1,n1_attr)>=getattr(node_2,n1_attr)})   
+                    elif comparison == '!=':
+                        compare.update({n1_attr:getattr(node_1,n1_attr)!=getattr(node_2,n1_attr)}) 
+                    elif comparison == '<':
+                        compare.update({n1_attr:getattr(node_1,n1_attr)<getattr(node_2,n1_attr)})
+                    elif comparison == '>':
+                        compare.update({n1_attr:getattr(node_1,n1_attr)>getattr(node_2,n1_attr)})
+                except Exception as eee:
+                    compare.update({n1_attr:None})
+                    # print(f"Comparison {n1_attr} {eee}")
+        return compare
+
+    def find_dbr_key_with_att(self,attr,value,return_on_first_found:bool=False)->list:
+        """finds list of index positions of items with attribute = value
+
+        Args:
+            attr (str): attribute
+            value (any): value to compare
+            return_on_first_found(bool): if found return immediately. Default False
+
+        Returns:
+            list: list of index position in dbr where dbr[index].attr = value
+        """
+        found=[]
+        try:
+            for iii,item in enumerate(self.dbr):
+                if getattr(item,attr) == value:
+                    found.append(iii)
+                    if return_on_first_found:
+                        return found
+        except Exception as eee:
+            print(f"Error: finding dbr value {eee}")
+        return found
     
 # Example usage
 if __name__ == "__main__":

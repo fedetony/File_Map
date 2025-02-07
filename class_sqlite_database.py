@@ -199,6 +199,21 @@ class SQLiteDatabase:
             # Release all resources
             c.close()  
     
+    def get_column_list_of_table(self,table)->list:    
+        """Returns a list with all columns in table
+
+        Args:
+            table (str): table name
+
+        Returns:
+            list: all column names
+        """
+        db_cols=[]
+        description=self.db.describe_table_in_db(table)
+        for ddd in description:
+            db_cols.append(ddd[1])
+        return db_cols
+
     def tables_in_db(self):
         """Get the list of tables in the database
 
