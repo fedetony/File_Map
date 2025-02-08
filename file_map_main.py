@@ -13,65 +13,43 @@ from class_file_manipulate import FileManipulate
 from class_device_monitor import DeviceMonitor
 from class_file_mapper import FileMapper
 
+FILE_MAP_LOGO=""">>=========================================<<
+||..._____._._........__..__...............||
+||..|..___(_).|.___..|..\/..|.__._._.__....||
+||..|.|_..|.|.|/._.\.|.|\/|.|/._`.|.'_.\...||
+||..|.._|.|.|.|..__/.|.|..|.|.(_|.|.|_).|..||
+||..|_|...|_|_|\___|.|_|..|_|\__,_|..__/...||
+||................................|_|......||
+>>=========================================<<
+>>======by FG with coffee and Love=========<<
+>>=========================================<<"""
+
+MENU_HEADER="""
+>>================FILE MAP=================<<
+>>======by FG with coffee and Love=========<<
+>>=========================================<<
+"""
+__version__="v.1.1.333 beta"
 
 def calculate_time_elapsed(start_datetime,end_datetime):
     """Calculate the time elapsed between two timestamps"""
     time_elapsed = (end_datetime - start_datetime).total_seconds()
     return time_elapsed
 
-# db_path=os.path.join(FileManipulate.get_app_path(),"db_Files")
-# db_name="test_files_db.db"
-# key_file= None#os.path.join(db_path,FileManipulate.extract_filename(db_name,False)+'_key.txt')
-# db_path_file=os.path.join(db_path,db_name)
-# fm=FileMapper(db_path_file,key_file,None)
-
-# start_datetime=datetime.now()
-# new_map=True
-# #db = SQLiteDatabase(db_path_file,False,None,None)    
-
-# tablename="table_test_2"
-
-# if new_map:
-#     # path_to_map="D:\Downloads"
-#     path_to_map="C:\\Users\\Tony\\Downloads"
-#     print(fm.db.table_exists(tablename))
-#     if fm.db.table_exists(tablename):
-#         fm.delete_map(fm.db,tablename)      
-#     print(fm.db.table_exists(tablename))
-#     print(fm.db.table_exists('Cow'))  
-#     fm.map_a_path_to_db(fm.db,tablename,path_to_map,True)
-
-# # print("repeated files:",get_repeated_files(db,"table_test"))
-# repeated_dict=fm.get_repeated_files(fm.db,tablename)
-# #print("repeated files:",repeated_dict)
-# key_list=list(repeated_dict.keys())
-
-# showing=['id','filepath','filename','md5','size']
-# filelist3=fm.repeated_list_show(repeated_dict,key_list[33],[fm.db],[tablename],showing)
-# print("Show:", filelist3)
-# mount, mount_active, mappath_exists=fm.check_if_map_device_active(fm.db,tablename,False)
-# print("Check result:", mount, mount_active, mappath_exists)
-
-# if mount_active and mappath_exists:
-#     for item in filelist3:
-#         print(os.path.join(mount,item[1],item[2]))
-
-# fm.db.close_connection()
-# end_datetime=datetime.now()
-# print(f" took {calculate_time_elapsed(start_datetime,end_datetime)} s")
-
 def ask_password(prompt):
     """Prompts the user for a password and returns it."""
     while True:
         password = getpass.getpass(f"Enter your {prompt} password (or leave blank to skip): ")
         if not password or password.strip() == "":
-            continue
+            return None
         else:
             return password
     
 
 def main():
-    parser = argparse.ArgumentParser(description="Example program")
+    os.system('cls' if os.name == 'nt' else 'clear')
+    print(FILE_MAP_LOGO)
+    parser = argparse.ArgumentParser(description=f"File Map {__version__}")
     parser.add_argument("files", nargs="+", help="Enter one or several Files to process")
     parser.add_argument("-p", "--password",required=False, nargs="+", type=int, default=None, help="File number to prompt for Password for password protected files (default: None)")
     parser.add_argument("-k", "--keyfile", required=False,  nargs="+", type=str, default=None, help="For each File enter Path to keyfile for decryption, Enter None if not Encrypted.")
@@ -92,9 +70,9 @@ def main():
                 if a_pwd == iii+1:
                     if not password_list[iii]: 
                         #Here store true, and prompt for password next time you need it
-                        #password_list[iii]=True
+                        password_list[iii]=True
                         # Comment remove when debugged and works
-                        password_list[iii]=ask_password(file)
+                        # password_list[iii]=ask_password(file)
 
     if args.keyfile:
         if len(file_list) != len(args.keyfile):
@@ -107,14 +85,17 @@ def main():
     
     
     # Ask for user input for name
-    name = input("Enter your name: ")
+    # name = input("Enter your name: ")
     # Print the name without prompting for password or using keyfile
-    print(f"And your name is {name}")
+    # print(f"And your name is {name}")
     print(file_list,password_list,key_list)
+    menu(file_list,password_list,key_list)
 
 
 def menu(file_list,password_list,key_list):
     while True:
+        os.system('cls' if os.name == 'nt' else 'clear')
+        print(MENU_HEADER)
         print("\nMain Menu:")
         print("1. Print files")
         print("2. Inspect files")
@@ -128,23 +109,24 @@ def menu(file_list,password_list,key_list):
         if choice == "1":
             # Clear the screen and display menu 2
             os.system('cls' if os.name == 'nt' else 'clear')
-            print("\nMenu 2:")
-            print("Select File to print:")
-            for i, file in enumerate(file_list):
-                print(f"{i+1}. {file}")
-            choice = input("Enter your choice (1-N): ")
-            
-            if choice == "X":
-                # Go back to main menu
-                continue
-            elif choice.isdigit() and int(choice) > 0 and int(choice) <= len(file_list):
-                # Print the selected file
-                print(f"{file_list[int(choice)-1]}")
-            else:
-                print("Invalid choice. Please try again.")
+            print(MENU_HEADER)
+            print("\nMenu 2:")  
+            while choice not in ["X","x"]:
+                print("Select File to print:")
+                for i, file in enumerate(file_list):
+                    print(f"{i+1}. {file}")
+                print(f"X. Back")
+                choice=-1
+                choice = input("Enter your choice (1-N): ")
+                if choice.isdigit() and int(choice) > 0 and int(choice) <= len(file_list):
+                    # Print the selected file
+                    print(f"{file_list[int(choice)-1]}")
+                else:
+                    print("Invalid choice. Please try again. X to go back")
         elif choice == "2":
             # Clear the screen and display menu 3
             os.system('cls' if os.name == 'nt' else 'clear')
+            print(MENU_HEADER)
             print("\nMenu 3:")
             print("Select File to inspect:")
             for i, file in enumerate(file_list):
@@ -162,6 +144,7 @@ def menu(file_list,password_list,key_list):
         elif choice == "3":
             # Clear the screen and display menu 4
             os.system('cls' if os.name == 'nt' else 'clear')
+            print(MENU_HEADER)
             print("\nMenu 4:")
             print("Enter File :")
             for i, file in enumerate(file_list):
@@ -230,6 +213,52 @@ def menu(file_list,password_list,key_list):
             os.system('cls' if os.name == 'nt' else 'clear')
             sys.exit(0)
 	
+def main_debug():
+    db_path=os.path.join(FileManipulate.get_app_path(),"db_Files")
+    db_name="test_files_db.db"
+    key_file= None#os.path.join(db_path,FileManipulate.extract_filename(db_name,False)+'_key.txt')
+    db_path_file=os.path.join(db_path,db_name)
+
+    start_datetime=datetime.now()
+    file_list=[db_path_file]
+    password_list=[None]
+    key_list=[key_file]
+    menu(file_list,password_list,key_list)
+    # fm=FileMapper(db_path_file,key_file,None)
+    # new_map=True
+    # #db = SQLiteDatabase(db_path_file,False,None,None)    
+
+    # tablename="table_test_2"
+
+    # if new_map:
+    #     # path_to_map="D:\Downloads"
+    #     path_to_map="C:\\Users\\Tony\\Downloads"
+    #     print(fm.db.table_exists(tablename))
+    #     if fm.db.table_exists(tablename):
+    #         fm.delete_map(fm.db,tablename)      
+    #     print(fm.db.table_exists(tablename))
+    #     print(fm.db.table_exists('Cow'))  
+    #     fm.map_a_path_to_db(fm.db,tablename,path_to_map,True)
+
+    # # print("repeated files:",get_repeated_files(db,"table_test"))
+    # repeated_dict=fm.get_repeated_files(fm.db,tablename)
+    # #print("repeated files:",repeated_dict)
+    # key_list=list(repeated_dict.keys())
+
+    # showing=['id','filepath','filename','md5','size']
+    # filelist3=fm.repeated_list_show(repeated_dict,key_list[33],[fm.db],[tablename],showing)
+    # print("Show:", filelist3)
+    # mount, mount_active, mappath_exists=fm.check_if_map_device_active(fm.db,tablename,False)
+    # print("Check result:", mount, mount_active, mappath_exists)
+
+    # if mount_active and mappath_exists:
+    #     for item in filelist3:
+    #         print(os.path.join(mount,item[1],item[2]))
+
+    # fm.db.close_connection()
+    end_datetime=datetime.now()
+    print(f" took {calculate_time_elapsed(start_datetime,end_datetime)} s")
 
 if __name__ == '__main__':
-    main()
+    #main()
+    main_debug()
