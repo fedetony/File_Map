@@ -376,6 +376,10 @@ class FileManipulate:
         if len(path) > 256:  # windows & ubuntu limit, adjust as n
             print(f"Path '{path}' exceeds maximum allowed length (256 characters).")
             return False
+        if os.path.exists(path):
+            if os.path.isdir(path):
+                return True
+        return False
            
     def delete_folder_recursive(self,directory):
         """
