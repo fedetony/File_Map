@@ -6,6 +6,7 @@ import sys
 import argparse
 import getpass
 from datetime import datetime
+from rich import print
 import hashlib
 
 from class_sqlite_database import SQLiteDatabase
@@ -24,12 +25,13 @@ FILE_MAP_LOGO=""">>=========================================<<
 >>======by FG with coffee and Love=========<<
 >>=========================================<<"""
 
-MENU_HEADER="""
->>================FILE MAP=================<<
+MENU_HEADER=""">>================FILE MAP=================<<
 >>======by FG with coffee and Love=========<<
 >>=========================================<<
 """
 __version__="v.1.1.333 beta"
+
+F_M=FileManipulate()
 
 def calculate_time_elapsed(start_datetime,end_datetime):
     """Calculate the time elapsed between two timestamps"""
@@ -89,26 +91,18 @@ def main():
                 key_list[iii]=None 
             else:      
                 key_list[iii]=str(a_kf).strip()
-    
-    
-    # Ask for user input for name
-    # name = input("Enter your name: ")
-    # Print the name without prompting for password or using keyfile
-    # print(f"And your name is {name}")
-    print(file_list,password_list,key_list)
+
+    #print(file_list,password_list,key_list)
+    activate_databases(None)
     main_menu()
+    
 
 def activate_databases(db_file_name=None):
     """Activates all databases in file_list using the key. Will prompt for password if DB is password protected.
     """
     for file,pwd,keyf in zip(file_list,password_list,key_list):
         if not db_file_name or db_file_name==file:
-            is_active=False
-            for adb in active_databases:
-                if adb['file']==file:
-                    is_active=True
-                    break
-            if not is_active:
+            if not is_database_active(file):
                 the_ppp=None
                 if pwd:
                     the_ppp =ask_password()
@@ -147,10 +141,10 @@ def menu_activate_deactivate_databases(activate):
             print("-----------------------")
             ia_list=show_active_inactive_databases(True,True)
         if len(ia_list)>0:
-            print("*. ALL")
+            print("\t*. ALL")
         else:
             break    
-        print("X. Back")
+        print("\tX. Back")
         choice = input("Enter your choice (1-N): ")
         is_valid,is_digit=is_choice_valid(choice,1,len(ia_list),["*","X","x"])
         if choice == '*':
@@ -197,14 +191,14 @@ def menu_handle_databases():
         print(MENU_HEADER)
         show_databases_listed()
         print("---------------------------------")
-        print("\nEdit Active File Map Databases:")
-        print("1. Create New Database File")
-        print("2. Append Database File")
-        print("3. Remove Database File")
-        print("4. Activate Database File")
-        print("5. Deactivate Database File")
-        print("X. Back")
-        
+        print("Edit Active File Map Databases:")
+        print("\t1. Create New Database File")
+        print("\t2. Append Database File")
+        print("\t3. Remove Database File")
+        print("\t4. Activate Database File")
+        print("\t5. Deactivate Database File")
+        print("\tX. Back")
+        print("---------------------------------")
         choice = input("Enter your choice (1-N): ")
         if choice == '1':
             create_new_database_file()
@@ -225,7 +219,7 @@ def show_databases_listed():
     """
     print("File Map Databases listed:")
     for iii,(file,pwd,keyf) in enumerate(zip(file_list,password_list,key_list)):
-        print(f"{iii+1}. {file} {'(pwd)' if pwd else ''} {keyf} {'ACTIVE' if is_database_active(file) else ''}")
+        print(f"\t{iii+1}. {file} {'[yellow](pwd)[/yellow]' if pwd else '()'} {keyf} {'[green]ACTIVE[/green]' if is_database_active(file) else '[magenta]NOT ACTIVE[/magenta]'}")
 
 def show_active_inactive_databases(show_active:bool=True,do_print=True):
     """Prints databases listed
@@ -243,16 +237,18 @@ def show_active_inactive_databases(show_active:bool=True,do_print=True):
         for iii,a_db in enumerate(active_databases):
             #'keyfile','haspassword'
             if do_print:
-                print(f"{iii+1}. {a_db['file']} {'(pwd)' if a_db['haspassword'] else ''} {a_db['keyfile']}")
+                print(f"\t{iii+1}. {a_db['file']} {'(pwd)' if a_db['haspassword'] else ''} {a_db['keyfile']}")
             ai_list.append([iii,a_db['file']])
     else:
         if do_print:
             print("Inactive Databases:")
-        for iii,(file,pwd,keyf) in enumerate(zip(file_list,password_list,key_list)):
+        iii=0
+        for file,pwd,keyf in zip(file_list,password_list,key_list):
             if not is_database_active(file):
                 if do_print:
-                    print(f"{iii+1}. {file} {'(pwd)' if pwd else ''} {keyf}")
+                    print(f"\t{iii+1}. {file} {'(pwd)' if pwd else ''} {keyf}")
                 ai_list.append([iii,file])
+                iii=iii+1
     return ai_list
 
 def is_database_active(db_file_name:str)->bool:
@@ -271,16 +267,34 @@ def is_database_active(db_file_name:str)->bool:
             break
     return is_active
 
+def remove_database_file(filename):
+    """Removes a file from lists
+
+    Args:
+        filename (str): file to remove
+    """
+    if filename in file_list:
+        f_list=file_list.copy()
+        for iii,fn in enumerate(f_list):
+            if fn==filename:
+                file_list.pop(iii)
+                password_list.pop(iii)
+                key_list.pop(iii)
+                break
+
 
 def menu_remove_database_file():
     """Removes a database from the file_list
     """
     while len(file_list)>0:
         show_databases_listed()
-        print(f"*. Select All")
-        print(f"X. Back")
+        print(f"\t*. Select All")
+        print(f"\tX. Back")
         
         choice=input("Enter selection to remove from list: ")
+        if len(file_list)==0:
+            break
+        is_valid,is_digit=is_choice_valid(choice,1,len(file_list),["*","X","x"])
         if choice in ["*"]:
             if input("Remove all databases? y/n: ") in ['y','Y','yes','Yes','YES']:
                 deactivate_databases(None)
@@ -291,50 +305,26 @@ def menu_remove_database_file():
             
         elif choice in ["X","x"]:
             break
+        elif is_valid and is_digit:
+            val=int(choice)
+            f_r=file_list[val-1]
+            if input(f"Remove {f_r} database? y/n: ") in ['y','Y','yes','Yes','YES']:
+                deactivate_databases(f_r)
+                remove_database_file(f_r)
         else:
-            try:
-                val=int(choice)
-                if val<len(file_list) and val>0:
-                    f_r=file_list[val-1]
-                    if input(f"Remove {f_r} database? y/n: ") in ['y','Y','yes','Yes','YES']:
-                        deactivate_databases(f_r)
-                        f_list=file_list.copy()
-                        for iii,fn in enumerate(f_list):
-                            if fn==f_r:
-                                file_list.remove(iii)
-                                password_list.remove(iii)
-                                key_list.remove(iii)
-                                break
-            except (TypeError, ValueError):
-                print("Not a valid choice, try again.")
+            print("Not a valid choice, try again.")
 
     
 def append_database_file():
     """Adds a database to the file_list
     """
-    print(f" File Map path: {FileManipulate.get_app_path()}")
-    dir_available=False
+    dir_available,path_user=get_a_directory(False)
     file_available=False
     file_path=''
-    path_user=input("Enter complete path of DB (Enter to use File Map path): ")
-    if not path_user or path_user.strip()=="":
-        path_user=FileManipulate.get_app_path()
-        dir_available=True
-    else:
-        if FileManipulate.validate_path(path_user):
-            dir_available=True
-        else:
-            print("Path does not exist") 
     if dir_available:
-        file_user=input("Enter File name of DB: ")
-        file_user=FileManipulate.extract_filename(file_user,False)
-        file_path=os.path.join(path_user,file_user+".db")
-        file_available=True
-    if file_available:
-        if not os.path.exists(file_path):
-            if input("File does not exist create it? y/n: ") in ['y','Y','yes','Yes','YES']:
-                create_filemap_database(file_path)
-        else:
+        file_available,file_user=get_an_existing_file(path_user,".db")
+        if file_available:
+            file_path=os.path.join(path_user,file_user)
             open_filemap(file_path)
 
 def open_filemap(file_path):
@@ -345,59 +335,98 @@ def open_filemap(file_path):
     """
     keyfile=None
     a_pwd=None
-    can_open=True
+    file_available=False
     if input(f"Is {file_path} encrypted? y/n: ") in ['y','Y','yes','Yes','YES']:
-        print(f"db path: {FileManipulate.extract_path(file_path)}")
-        path_key=input("Enter complete path for new DB (Enter to use db path): ")
-        if not path_key or path_key.strip()=="":
-            path_key=FileManipulate.extract_path(file_path)
-        if os.path.exists(path_key):    
-            default_fn=kf=FileManipulate.extract_filename(file_path,False)+'_key.txt'
-            file_key=input(f"Enter DB filename (Enter to use {default_fn} path): ")
-            if not file_key or file_key=='':
-                keyfile=os.path.join(path_key,default_fn)
-            else:
-                keyfile=os.path.join(path_key,file_key)
-            if not os.path.exists(keyfile):
-                print(f"File {keyfile} does not exist!")
-                can_open=False    
-        else:
-            print("Path does not exist!")
-            can_open=False
+        print("-"*5+"Key"+"-"*5)
+        dir_available,path_key=get_a_directory(False)
+        if dir_available:    
+            # default_fn=F_M.extract_filename(file_path,False)+'_key.txt'
+            file_available,file_key=get_an_existing_file(path_key,".txt")
+            if file_available:
+                keyfile=os.path.join(path_key,file_key) 
     if input(f"Is {file_path} password protected? y/n: ") in ['y','Y','yes','Yes','YES']:
         a_pwd=ask_password()
-    if can_open:
+    if file_available:
         file_list.append(file_path)
-        password_list.append(keyfile)
-        key_list.append(a_pwd)
+        password_list.append(a_pwd)
+        key_list.append(keyfile)
+        if input(f"Activate {file_path}? y/n: ") in ['y','Y','yes','Yes','YES']:
+            activate_databases(file_path)
+
+def get_a_directory(allow_create_dir=False):
+    """Gets a directory from user
+
+    Args:
+        allow_create_dir (bool, optional): If does not exit create the dir?. Defaults to False.
+
+    Returns:
+        tuple: dir_available, path_user
+    """
+    print("-"*5+"Select Directory"+"-"*5)
+    print(f"Press [cyan]Enter[/cyan] to use File Map path: {F_M.get_app_path()}")
+    show_databases_listed()
+    print(f"Select a digit to use same path as file (1-{len(file_list)})")
+    dir_available=False
+    path_user=input("Or type complete directory path: ")
+    num_active=len(file_list)
+    is_valid,is_digit=is_choice_valid(path_user,1,num_active,None)
+    if not path_user or path_user.strip()=="":
+        path_user=F_M.get_app_path()
+        dir_available=True
+    elif is_valid and is_digit:
+        path_user=F_M.extract_path(file_list[int(path_user)-1])
+        dir_available=True
+    else:
+        if F_M.validate_path(path_user):
+            dir_available=True
+        else:
+            if allow_create_dir:
+                if input("Path {path_user} does not exist create it? y/n: ") in ['y','Y','yes','Yes','YES']:
+                    try:
+                        os.makedirs(path_user)
+                        dir_available=True
+                    except Exception as eee:
+                        print(f'Could not create path directory {path_user}: {eee}')
+                        path_user=F_M.get_app_path()
+    return dir_available, path_user
+
+def get_an_existing_file(path, extension=".db"):
+    """Gets a file from user selection of files with extension in path folder.
+
+    Args:
+        path (str): fath to look for files
+        extension (str, optional): None or "" for all files. Defaults to ".db".
+
+    Returns:
+        _type_: _description_
+    """
+    print("-"*5+"Select File"+"-"*5)
+    file_available=False
+    file_user=None
+    database_list=F_M.get_file_list(path,extension)
+    if database_list:
+        for iii, a_file in enumerate(database_list):
+            print(f"\t{iii+1}. {a_file}")
+    
+        choice=input("Select File: ")
+        is_valid,is_digit=is_choice_valid(choice,1,len(database_list),None)
+        if is_valid and is_digit:
+            file_user=database_list[int(choice)-1]
+            file_available=True
+    else:
+        print(f"No {extension} files found on {path}")
+    return file_available,file_user
+    
 
 def create_new_database_file():
     """Create New Database File
     """
-    print(f" File Map path: {FileManipulate.get_app_path()}")
-    dir_available=False
-    file_available=False
-    file_path=''
-    path_user=input("Enter complete path for new DB (Enter to use File Map path): ")
-    if not path_user or path_user.strip()=="":
-        path_user=FileManipulate.get_app_path()
-        dir_available=True
-    else:
-        
-        if FileManipulate.validate_path(path_user):
-            dir_available=True
-        else:
-            if input("Path does not exist create it? y/n: ") in ['y','Y','yes','Yes','YES']:
-                try:
-                    os.makedirs(path_user)
-                    dir_available=True
-                except Exception as eee:
-                    print(f'Could not create path directory {path_user}: {eee}')
-                    path_user=FileManipulate.get_app_path()
+    dir_available,path_user=get_a_directory(True)
+    
     if dir_available:
         file_user=input("Enter File name for new DB: ")
-        file_user=FileManipulate.clean_filename(file_user)
-        file_user=FileManipulate.extract_filename(file_user,False)
+        file_user=F_M.clean_filename(file_user)
+        file_user=F_M.extract_filename(file_user,False)
         file_path=os.path.join(path_user,file_user+".db")
         file_available=True
     if file_available:
@@ -411,8 +440,8 @@ def create_filemap_database(file_path):
         file_path (str): Path and filename of new database
     """
     if input("Encrypt Database? y/n: ") in ['y','Y','yes','Yes','YES']:
-        path=FileManipulate.extract_path(file_path)
-        kf=FileManipulate.extract_filename(file_path,False)+'_key.txt'
+        path=F_M.extract_path(file_path)
+        kf=F_M.extract_filename(file_path,False)+'_key.txt'
         keyfile=os.path.join(path,kf)
         print(f'New keyfile will be set to: {keyfile}')
         print("Warning: If you erase, or loose the file, you will not be able to access the database anymore!")
@@ -422,75 +451,105 @@ def create_filemap_database(file_path):
         a_pwd=''
         while True:
             a_pwd=ask_password("New password for:")
-            r_pwd=ask_password("Repeat password for:")
             if not a_pwd or a_pwd=='':
                 a_pwd=None
                 print("Setting no password")
-                continue
+                break
+            r_pwd=ask_password("Repeat password for:")
             if a_pwd != r_pwd:
                 print("Passwords did not match, try again!")
             else:
-                continue
+                break
     else:
         a_pwd=None
     fm=FileMapper(file_path,keyfile,a_pwd)
     fm.close()
     file_list.append(file_path)
-    password_list.append(keyfile)
-    key_list.append(a_pwd)
+    password_list.append(a_pwd)
+    key_list.append(keyfile)
+
+def create_new_map():
+    """New map"""
+    pass
+
+def delete_map():
+    """Kill map"""
+    pass
+
+def get_file_map(dbfile) -> FileMapper:
+    """Returns the File Map object for database
+
+    Args:
+        dbfile (str): path and filename of db
+
+    Returns:
+        FileMapper: File map object
+    """
+    for a_db in active_databases:
+        if a_db['file'] == dbfile:
+            return a_db['mapdb']
+    return None
+
+
+def show_maps():
+    for iii,a_db in enumerate(active_databases):
+        fm=a_db['mapdb']
+        if isinstance(fm,FileMapper):
+            print(f"{iii+1}. Maps in {a_db['file']}:")
+            table_list=fm.db.get_data_from_table(fm.mapper_reference_table,'*')
+            jjj=0
+            if len(table_list)>0:
+                print('\t(id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype)')
+            for table in table_list:
+                print(f"\t{jjj+1}. {table}")
+                jjj=jjj+1
+        
+
+def menu_mapping_functions():
+    """Interactive menu handle databases"""
+    os.system('cls' if os.name == 'nt' else 'clear')
+    while True:
+        print(MENU_HEADER)
+        if len(active_databases)==0:
+            break
+        show_maps()
+        print("---------------------------------")
+        print("Mapping:")
+        print("\t1. Create New Map")
+        print("\t2. Delete Map")
+        # print("\t3. Find File")
+        # print("\t4. Activate Database File")
+        # print("\t5. Deactivate Database File")
+        print("\tX. Back")
+        print("---------------------------------")
+        choice = input("Enter your choice (1-N): ")
+        if choice == '1':
+            create_new_map()
+        elif choice == '2': 
+            delete_map()
+        elif choice in ["X","x"]:
+            break
 
 def main_menu():
     """Interactive menu main"""
     while True:
         os.system('cls' if os.name == 'nt' else 'clear')
         print(MENU_HEADER)
-        print("\nMain Menu:")
-        print("1. Handle Databases")
-        print("2. Browse databases")
-        print("3. Add File")
-        print("4. Add password to file")
-        print("5. Add key file to file")
-        print("6. Exit")
+        print("Main Menu:")
+        print("----------")
+        print("\t1. Handle Databases")
+        print("\t2. Mapping")
+        print("\t3. Add File")
+        print("\t4. Add password to file")
+        print("\t5. Add key file to file")
+        print("\t6. Exit")
         
         choice = input("Enter your choice (1-6): ")
         
         if choice == "1":
             menu_handle_databases()
-            # Clear the screen and display menu 2
-
-            # os.system('cls' if os.name == 'nt' else 'clear')
-            # print(MENU_HEADER)
-            # print("\nMenu 2:")  
-            # while choice not in ["X","x"]:
-            #     print("Select File to print:")
-            #     for i, file in enumerate(file_list):
-            #         print(f"{i+1}. {file}")
-            #     print(f"X. Back")
-            #     choice=-1
-            #     choice = input("Enter your choice (1-N): ")
-            #     if choice.isdigit() and int(choice) > 0 and int(choice) <= len(file_list):
-            #         # Print the selected file
-            #         print(f"{file_list[int(choice)-1]}")
-            #     else:
-            #         print("Invalid choice. Please try again. X to go back")
         elif choice == "2":
-            # Clear the screen and display menu 3
-            os.system('cls' if os.name == 'nt' else 'clear')
-            print(MENU_HEADER)
-            print("\nMenu 3:")
-            print("Select File to inspect:")
-            for i, file in enumerate(file_list):
-                print(f"{i+1}. {file}")
-            choice = input("Enter your choice (1-N): ")
-            
-            if choice == "X":
-                # Go back to main menu
-                continue
-            elif choice.isdigit() and int(choice) > 0 and int(choice) <= len(file_list):
-                # Inspect the selected file
-                print(f"inspect_files {[int(choice)-1]}")
-            else:
-                print("Invalid choice. Please try again.")
+            menu_mapping_functions()
         elif choice == "3":
             # Clear the screen and display menu 4
             os.system('cls' if os.name == 'nt' else 'clear')
@@ -564,15 +623,16 @@ def main_menu():
             sys.exit(0)
 	
 def main_debug():
-    db_path=os.path.join(FileManipulate.get_app_path(),"db_Files")
+    db_path=os.path.join(F_M.get_app_path(),"db_Files")
     db_name="test_files_db.db"
-    key_file= None#os.path.join(db_path,FileManipulate.extract_filename(db_name,False)+'_key.txt')
+    key_file= None#os.path.join(db_path,F_M.extract_filename(db_name,False)+'_key.txt')
     db_path_file=os.path.join(db_path,db_name)
 
     start_datetime=datetime.now()
     file_list.append(db_path_file)
     password_list.append(None)
     key_list.append(key_file)
+    activate_databases(None)
     main_menu()
     # fm=FileMapper(db_path_file,key_file,None)
     # new_map=True

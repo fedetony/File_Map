@@ -18,17 +18,17 @@ class FileMapper:
         self.db_path_file=db_filepath
         self.db_file=FileManipulate.extract_filename(db_filepath,True)
         self.db_path=FileManipulate.extract_path(db_filepath,True)
+        if not os.path.exists(self.db_path):
+            os.makedirs(self.db_path)
         self.key_filepath=''
         if key_filepath:
             self.key_filepath=key_filepath
         self.key = None
-        self.db =self.start_db(self.db_path_file,self.key_filepath,self.password)
+        
+        self.db, self.is_db_encrypted, self.db_has_password = self.start_db(self.db_path_file,self.key_filepath,self.password)
         self.db_list=[self.db]
-        self.is_db_encrypted=False
-        if os.path.exists(self.key_filepath):
-            self.is_db_encrypted=True
-        if not os.path.exists(self.db_path):
-            os.mkdir(self.db_path)
+        # connect
+        self.db.create_connection()
         self.active_devices = []
         self.look_for_active_devices()
         self.mapper_reference_table="__File_Mapper_Reference__"
@@ -54,28 +54,37 @@ class FileMapper:
 
         Returns:
             SQLiteDatabase: database
+            bool: is_encrypted
+            bool: has_password 
         """
         key = None
+        has_password=False
         # 
         if os.path.exists(db_path_file): #if db exists
             if os.path.exists(key_filepath):
                 with open(key_filepath, 'rb') as f:
                     key = f.read()
                 db = SQLiteDatabase(db_path_file,True,key,password)
+                is_encrypted=True
             else:
+                is_encrypted=False
                 db = SQLiteDatabase(db_path_file,False,None,password)
         else: #if db not exists
             if key_filepath:
                 # Create new encrypted database
+                is_encrypted=True
                 db = SQLiteDatabase(db_path_file,True,None,password)
                 key_generated=db.encrypt_db()
                 if key_generated:
                     db.save_key_to_file(key_filepath)
                     db.decrypt_db()
             else:
+                is_encrypted=False
                 db = SQLiteDatabase(db_path_file,False,None,password)
-        db.create_connection()
-        return db
+        if password:
+            has_password=True
+        print("Started:",db,is_encrypted,has_password)
+        return db,is_encrypted,has_password
 
     def calculate_time_elapsed(start_datetime,end_datetime):
         """Calculate the time elapsed between two timestamps"""
@@ -385,6 +394,18 @@ class FileMapper:
                     info.append(data[0])
         return info
     
+    def set_mapname(self,table_name,name):
+        """Renames name field in Reference
+
+        Args:
+            table_name (str): table 
+            name (str): new name
+        """
+        if self.db.table_exists(self.mapper_reference_table):
+            id_list=self.db.get_data_from_table(self.mapper_reference_table,'id',f"tablename='{table_name}'")
+            if len(id_list)>0:
+                self.db.edit_value_in_table(self.mapper_reference_table,id_list[0],'mapname',name)
+
     def delete_map(self,table_name):
         """Removes a map from index and its referenced table from db.
 
@@ -546,7 +567,18 @@ class FileMapper:
                 if len(node_list)>0:
                     node_dict.update({a_key:node_list})
         return node_dict       
-                        
+
+    def __del__(self):
+        """On deletion close correctly"""
+        try:
+            self.close()
+        finally:
+            pass
+
     def close(self):
         """Close db connection"""
+        if self.is_db_encrypted:
+            self.db.encrypt_db()
         self.db.close_connection()
+    
+

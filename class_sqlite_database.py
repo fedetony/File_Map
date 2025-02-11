@@ -51,9 +51,12 @@ class SQLiteDatabase:
             # Decrypt the database file using AES-256 encryption
             with open(self.db_path, 'rb') as f:
                 encrypted_data = f.read()
-            decrypted_data = fernet.decrypt(encrypted_data)
-            with open(self.db_path, 'wb') as f:
-                f.write(decrypted_data)
+            try:
+                decrypted_data = fernet.decrypt(encrypted_data)
+                with open(self.db_path, 'wb') as f:
+                    f.write(decrypted_data)
+            except Exception as eee:
+                raise(eee)
 
     def save_key_to_file(self,key_path):
         """Save the key in a file
@@ -80,7 +83,7 @@ class SQLiteDatabase:
             self.conn = sqlite3.connect(self.db_path)
             print(f"Connected to {self.db_path}")
         except sqlite3.Error as eee:
-            print(eee)
+            print(f"Could not connect to {self.db_path} {eee}")
 
     def create_table(self,table_name:str,Columns:list[tuple],temporary: bool=False):
         """Creates table if it does not exist
