@@ -270,6 +270,21 @@ class FileManipulate:
         return cleaned_base + extension
     
     @staticmethod
+    def fix_path_separators(pathfile):
+        # to fix the separators
+        try:
+            splitted_path=os.path.split(pathfile)
+            end_path=''
+            for iii,sss in enumerate(splitted_path):
+                if iii==0:
+                    end_path=sss
+                else:
+                    end_path=end_path+os.sep+sss
+        except:
+            return pathfile
+        return end_path
+
+    @staticmethod
     def get_file_list(directory,extension:str=None):
         """
         Returns a list of file names with .txt extension from the given directory.

@@ -4,8 +4,9 @@ import os
 import glob as gb
 import pyperclip 
 from class_file_manipulate import FileManipulate
+from rich import print
 f_m=FileManipulate() 
-
+APP_PATH=f_m.get_app_path()
 
 class _Getch:
     """Gets a single character from standard input.  Does not echo to the
@@ -45,8 +46,6 @@ class _GetchWindows:
 
 getch = _Getch()
 
-
-
 # Backspace (delete previous character): \x08 or b'\x08'
 # Tab (move to next tab stop): \t or b'\t'
 # Enter (submit form, end line): \n or b'\n'
@@ -65,11 +64,14 @@ getch = _Getch()
 # Control+Z (suspend program, send SIGSTOP signal): \x1b[33m or b'\x1b[33m'
 
 class AutocompletePathFile:
-    def __init__(self, prompt):
+    def __init__(self, prompt,base_path=APP_PATH,absolute_path=True,verbose=True):
         self.prompt = prompt
         self.line_user_input=''
         self.line_autocompleted=""
         self.autocomplete_options=[]
+        self.base_path=base_path
+        self.absolute_path=absolute_path
+        self.verbose=verbose
         print(self.prompt)
         
     def _get_possible_path_list(self, path)->list[str]:
@@ -83,17 +85,14 @@ class AutocompletePathFile:
         """
         try:
             if os.path.isdir(path):
-                return gb.glob(os.path.join(path, '*'))
-            else:
-                list_ans= gb.glob(path + '*')
+                    return gb.glob(os.path.join(path, '*'))    
+            list_ans= gb.glob(path + '*')
             # from application path
             if len(list_ans)==0:
-                app_path=f_m.get_app_path()
-                path_app=os.path.join(app_path,path)
+                path_app=os.path.join(self.base_path,path)
                 if os.path.isdir(path_app):
                     return gb.glob(os.path.join(path_app, '*'))
-                else:
-                    list_ans=gb.glob(path_app + '*')
+                list_ans=gb.glob(path_app + '*')
                 if len(list_ans)>0:
                     return list_ans
                 return [path]
@@ -156,9 +155,19 @@ class AutocompletePathFile:
             _type_: autocompleted path
         """
         list_auto=self._get_possible_path_list(a_path_file)
-        # print(f"List----->>>>{list_auto}")
+        #print(f"List----->>>>{list_auto}")
+        #print(f"base Path----->>>>{self.base_path} -> {a_path_file}")
         if len(list_auto)==1:
-            return list_auto[0]
+            end_path=list_auto[0]
+            if not self.absolute_path and os.path.exists(os.path.join(self.base_path,end_path)):
+                end_path=os.path.join(self.base_path,end_path)
+            path_exists=os.path.exists(end_path)
+            if self.verbose:    
+                print(f"File/Path exists: {path_exists}")
+            if path_exists:
+                # to fix the separators
+                end_path=f_m.fix_path_separators(end_path)   
+            return end_path
         elif len(list_auto)>1:
             comp_list=[]
             fill_add2,_=self.get_commontxt_optionlist(list_auto)
@@ -170,7 +179,8 @@ class AutocompletePathFile:
                 end_path=fill_add2
             else:
                 end_path=a_path_file+fill_add
-            print(f"Options: {end_path}+{comp_list}")
+            if self.verbose:
+                print(f"Options: {end_path}+{comp_list}")
             return end_path
         return a_path_file
 
@@ -181,23 +191,24 @@ class AutocompletePathFile:
         while True:
             char = getch()
             os.system('cls' if os.name == 'nt' else 'clear')
-            print(self.prompt)
+            if self.verbose:
+                print(self.prompt)
             if char in [b'\r', b'\n']: #enter
                 return self.line_autocompleted
             if char == b'\t': #tab
                 self.line_user_input=self.autocomplete_path(self.line_user_input)
                 char = None 
             elif char == b'\x1b': # esc
-                return ''
-            elif char == b'\x03': # ctrl + c
-                break
-            elif char == b'\x18': # ctrl + v
+                return None
+            elif char == b'\x03': # cntr + c
+                pass
+            elif char == b'\x18': # cntr + v
                 # paste clipboard
                 pyperclip.paste()
                 pass
-            elif char == b'\x1a': # ctrl + z
+            elif char == b'\x1a': # cntr + z
                 pass
-            elif char == b'\x1a': # ctrl + z
+            elif char == b'\x1a': # cntr + z
                 pass    
             elif last_char == b'\x00':
                 if char == b'I': # page up
@@ -216,9 +227,9 @@ class AutocompletePathFile:
                     pass
                 elif char == b'S': #Delete
                     pass
-                elif char == b's': #ctrl + arrow left
+                elif char == b's': #cntr + arrow left
                     pass
-                elif char == b't': #ctrl + arrow right
+                elif char == b't': #cntr + arrow right
                     pass
                 elif char == b'G': #Home
                     pass
@@ -246,8 +257,6 @@ class AutocompletePathFile:
             
             
 if __name__ == "__main__":
-    input_path = AutocompletePathFile('Please enter path: ').get_input
+    input_path = AutocompletePathFile('return string (ENTER), Autofill path/file (TAB), Cancel (ESC) Paste (CTRL+V)\nPlease type path: ',APP_PATH,False,True).get_input
     my_path = input_path()
     print("entered", my_path)
-    
-
