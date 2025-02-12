@@ -114,22 +114,34 @@ class AutocompletePathFile:
                     List with non repeated end of strings
         """
         fill_add=''
+        ini_str=''
         comp_list=a_string_list.copy()
         all_same=True
-        ini_str=comp_list[0][0]
-        fill_add=''
-        while all_same:
+        if isinstance(comp_list,list) and len(comp_list)>0:
+            if len(comp_list[0])>0:
+                ini_str=comp_list[0][0]
+        
+        while all_same and ini_str != '':
             new_comp=[]
             for ccc in comp_list:
-                if ccc[0] == ini_str:
-                    new_comp.append(ccc[1:]) 
+                if len(ccc)>0:
+                    if ccc[0] == ini_str:
+                        new_comp.append(ccc[1:]) 
+                    else:
+                        all_same=False
+                        break
                 else:
-                    all_same=False
                     break
             if all_same:
                 fill_add=fill_add+ini_str
-                ini_str=new_comp[0][0]
-                comp_list=new_comp.copy()    
+                if isinstance(new_comp,list) and len(new_comp)>0:
+                    if len(new_comp[0])>0:
+                        ini_str=new_comp[0][0]
+                    else:
+                        break
+                    comp_list=new_comp.copy()
+                else:
+                    break    
             # print(f"options: {comp_list}")
         return fill_add,comp_list
 
@@ -176,16 +188,16 @@ class AutocompletePathFile:
                 self.line_user_input=self.autocomplete_path(self.line_user_input)
                 char = None 
             elif char == b'\x1b': # esc
-                return None
-            elif char == b'\x03': # cntr + c
-                pass
-            elif char == b'\x18': # cntr + v
+                return ''
+            elif char == b'\x03': # ctrl + c
+                break
+            elif char == b'\x18': # ctrl + v
                 # paste clipboard
                 pyperclip.paste()
                 pass
-            elif char == b'\x1a': # cntr + z
+            elif char == b'\x1a': # ctrl + z
                 pass
-            elif char == b'\x1a': # cntr + z
+            elif char == b'\x1a': # ctrl + z
                 pass    
             elif last_char == b'\x00':
                 if char == b'I': # page up
@@ -204,9 +216,9 @@ class AutocompletePathFile:
                     pass
                 elif char == b'S': #Delete
                     pass
-                elif char == b's': #cntr + arrow left
+                elif char == b's': #ctrl + arrow left
                     pass
-                elif char == b't': #cntr + arrow right
+                elif char == b't': #ctrl + arrow right
                     pass
                 elif char == b'G': #Home
                     pass
