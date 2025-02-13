@@ -1,8 +1,10 @@
 #!/usr/bin/env python  # shebang for Unix-based systems
 #!pythonw        # shebang for Windows systems
+from __future__ import print_function, unicode_literals
 
 import os
 import sys
+import re
 import argparse
 import getpass
 from datetime import datetime
@@ -13,6 +15,8 @@ from class_sqlite_database import SQLiteDatabase
 from class_file_manipulate import FileManipulate
 from class_device_monitor import DeviceMonitor
 from class_file_mapper import FileMapper
+from class_autocomplete_input import AutocompletePathFile
+
 
 FILE_MAP_LOGO=""">>=========================================<<
 ||..._____._._........__..__...............||
@@ -31,6 +35,22 @@ MENU_HEADER=""">>================FILE MAP=================<<
 """
 __version__="v.1.1.333 beta"
 
+
+
+
+from pprint import pprint
+from PyInquirer import style_from_dict, Token, prompt
+from PyInquirer import Validator, ValidationError
+
+
+style = style_from_dict({
+    Token.QuestionMark: '#E91E63 bold',
+    Token.Selected: '#673AB7 bold',
+    Token.Instruction: '',  # default
+    Token.Answer: '#2196f3 bold',
+    Token.Question: '',
+})
+
 F_M=FileManipulate()
 
 def calculate_time_elapsed(start_datetime,end_datetime):
@@ -46,7 +66,7 @@ def ask_password(prompt):
             return None
         else:
             return password
-    
+        
 file_list=[]
 password_list=[]
 key_list=[]
@@ -130,89 +150,78 @@ def menu_activate_deactivate_databases(activate):
     """Menu for Deactivating Databases
     """
     while True:
+        os.system('cls' if os.name == 'nt' else 'clear')
         print(MENU_HEADER)
         if activate:
-            print("\nActivate Databases:")
+            print("Activate Databases:")
             print("-----------------------")
-            ia_list=show_active_inactive_databases(False,True)
-        else:
+            ia_list=show_active_inactive_databases(False,False)
+            if len(ia_list)==0:
+                return '[yellow]All databases are active!!'
             
-            print("\nDeactivate Databases:")
+        else:
+            print("Deactivate Databases:")
             print("-----------------------")
             ia_list=show_active_inactive_databases(True,True)
-        if len(ia_list)>0:
-            print("\t*. ALL")
-        else:
-            break    
-        print("\tX. Back")
-        choice = input("Enter your choice (1-N): ")
-        is_valid,is_digit=is_choice_valid(choice,1,len(ia_list),["*","X","x"])
-        if choice == '*':
+            if len(ia_list)==0:
+                return '[yellow]All databases are inactive!!'    
+        active_inactive_list=[]
+        for _,i_a in ia_list:
+            active_inactive_list.append(i_a)
+        menu=[{'type': 'list',
+        'name': 'activate_menu',
+        'message': 'Please select: (Use arrow keys)',
+        'choices': active_inactive_list+['All','Back']
+        }]   
+        answers = prompt(menu, style=style)
+        if answers['activate_menu']=='All':
             if activate:
                 activate_databases(None)
             else:
                 deactivate_databases(None)    
-        elif choice in ["X","x"]:
-            break
-        elif is_valid and is_digit:
-            for lll in ia_list:
-                if int(choice)-1 == lll[0]:
-                    if activate:
-                        activate_databases(lll[1])
-                    else:
-                        deactivate_databases(lll[1])
+        elif answers['activate_menu']=='Back':
+            return ''
+        elif answers['activate_menu'] in active_inactive_list:
+            if activate:
+                activate_databases(answers['activate_menu'])
+            else:
+                deactivate_databases(answers['activate_menu'])
         else:
             print("Not a valid choice")
 
-def is_choice_valid(choice:str,minval:int,maxval:int,others:list[str]=None) -> tuple[bool]:
-    """Evaluates menu choice
-
-    Args:
-        choice (str): input choice
-        minval (int): minimum numeric value
-        maxval (int): maximum numeric value
-        others (list[str],Optional): other choice string posibilities as ["*","X","x"]. Default None.
-    Returns:
-        tuple[bool]: (is valid choice, is digit)
-    """
-    try:
-        if others and choice in others:
-            return True,False
-        if choice.isdigit() and int(choice) >= minval and int(choice) <= maxval:
-            return True ,True
-        return False,True
-    except (TypeError,ValueError):
-        return False, False
-
 def menu_handle_databases():
     """Interactive menu handle databases"""
-    os.system('cls' if os.name == 'nt' else 'clear')
+    menu=[{'type': 'list',
+        'name': 'handle_db_menu',
+        'message': 'Please select: (use arrow keys)',
+        'choices': ['Create New Database File', 
+                    'Append Database File', 
+                    'Remove Database File',
+                    'Activate Database File',
+                    'Deactivate Database File',
+                    'Back']
+        }]
+    msg=''
     while True:
+        os.system('cls' if os.name == 'nt' else 'clear')
         print(MENU_HEADER)
         show_databases_listed()
+        if msg!='':
+            print(msg)
         print("---------------------------------")
-        print("Edit Active File Map Databases:")
-        print("\t1. Create New Database File")
-        print("\t2. Append Database File")
-        print("\t3. Remove Database File")
-        print("\t4. Activate Database File")
-        print("\t5. Deactivate Database File")
-        print("\tX. Back")
-        print("---------------------------------")
-        choice = input("Enter your choice (1-N): ")
-        if choice == '1':
-            create_new_database_file()
-        elif choice == '2': 
-            append_database_file()
-        elif choice == '3':         
-            menu_remove_database_file()   
-        elif choice == '4':
-            menu_activate_deactivate_databases(True)
-        elif choice == '5':
-            menu_activate_deactivate_databases(False)
-       
-        elif choice in ["X","x"]:
-            break
+        answers = prompt(menu, style=style)
+        if answers['handle_db_menu']=='Create New Database File':
+            msg=menu_create_new_database_file()
+        elif answers['handle_db_menu']=='Append Database File': 
+            msg=menu_append_database_file()
+        elif answers['handle_db_menu']=='Remove Database File':         
+            msg=menu_remove_database_file()   
+        elif answers['handle_db_menu']=='Activate Database File':
+            msg=menu_activate_deactivate_databases(True)
+        elif answers['handle_db_menu']=='Deactivate Database File':
+            msg=menu_activate_deactivate_databases(False)
+        elif answers['handle_db_menu']=='Back':
+            return ''
 
 def show_databases_listed():
     """prints databases listed
@@ -286,39 +295,58 @@ def remove_database_file(filename):
 def menu_remove_database_file():
     """Removes a database from the file_list
     """
+    if len(file_list)==0:
+        return '[magenta]No databases to remove![\magenta]'
+    answers ={'remove_db_menu':''}
     while len(file_list)>0:
+        menu=[{'type': 'list',
+        'name': 'remove_db_menu',
+        'message': 'Please select: (Use arrow keys)',
+        'choices': file_list+['Select All', 
+                    'Back']
+        },
+        {'type': 'confirm',
+        'name': 'remove_all',
+        'message': 'You want to remove all?',
+        'default': False,
+        'when': lambda answers: answers['remove_db_menu'] == 'Select All'
+        },
+        {'type': 'confirm',
+        'name': 'remove_file',
+        'message': f"You want to remove {answers['remove_db_menu']}?",
+        'default': False,
+        'when': lambda answers: answers['remove_db_menu'] in file_list
+        }
+        ]
+        os.system('cls' if os.name == 'nt' else 'clear')
+        print(MENU_HEADER)
         show_databases_listed()
-        print(f"\t*. Select All")
-        print(f"\tX. Back")
-        
-        choice=input("Enter selection to remove from list: ")
-        if len(file_list)==0:
-            break
-        is_valid,is_digit=is_choice_valid(choice,1,len(file_list),["*","X","x"])
-        if choice in ["*"]:
-            if input("Remove all databases? y/n: ") in ['y','Y','yes','Yes','YES']:
+        print("Remove database from list:")
+        print("---------------------------------")
+        answers = prompt(menu, style=style)
+        if answers['remove_db_menu']=='Select All':
+            if answers['remove_all']:
                 deactivate_databases(None)
                 file_list.clear()
                 password_list.clear()
                 key_list.clear()
                 continue
             
-        elif choice in ["X","x"]:
-            break
-        elif is_valid and is_digit:
-            val=int(choice)
-            f_r=file_list[val-1]
-            if input(f"Remove {f_r} database? y/n: ") in ['y','Y','yes','Yes','YES']:
+        elif answers['remove_db_menu']=='Back':
+            return ''
+        elif answers['remove_db_menu'] in file_list:
+            f_r=answers['remove_db_menu']
+            if answers['remove_file']:
                 deactivate_databases(f_r)
                 remove_database_file(f_r)
         else:
             print("Not a valid choice, try again.")
-
+    return ''
     
-def append_database_file():
+def menu_append_database_file():
     """Adds a database to the file_list
     """
-    dir_available,path_user=get_a_directory(False)
+    dir_available,path_user=menu_get_a_directory(False)
     file_available=False
     file_path=''
     if dir_available:
@@ -326,6 +354,9 @@ def append_database_file():
         if file_available:
             file_path=os.path.join(path_user,file_user)
             open_filemap(file_path)
+            return ''
+        return '[yellow]File Not available!'
+    return ''
 
 def open_filemap(file_path):
     """Opens a file map database
@@ -336,24 +367,44 @@ def open_filemap(file_path):
     keyfile=None
     a_pwd=None
     file_available=False
-    if input(f"Is {file_path} encrypted? y/n: ") in ['y','Y','yes','Yes','YES']:
-        print("-"*5+"Key"+"-"*5)
-        dir_available,path_key=get_a_directory(False)
+    if ask_confirmation(f"Is {file_path} encrypted?"):
+        print("-"*5+"Key Directory"+"-"*5)
+        dir_available,path_key=menu_get_a_directory(False)
         if dir_available:    
             # default_fn=F_M.extract_filename(file_path,False)+'_key.txt'
             file_available,file_key=get_an_existing_file(path_key,".txt")
             if file_available:
                 keyfile=os.path.join(path_key,file_key) 
-    if input(f"Is {file_path} password protected? y/n: ") in ['y','Y','yes','Yes','YES']:
+    if ask_confirmation(f"Is {file_path} password protected?"):
         a_pwd=ask_password()
     if file_available:
         file_list.append(file_path)
         password_list.append(a_pwd)
         key_list.append(keyfile)
-        if input(f"Activate {file_path}? y/n: ") in ['y','Y','yes','Yes','YES']:
+        if ask_confirmation(f"Activate {file_path}?"):
             activate_databases(file_path)
 
-def get_a_directory(allow_create_dir=False):
+def ask_confirmation(message:str,default:bool=False)->bool:
+    """Asks yes or no question
+
+    Args:
+        message (str): question
+        default (bool, optional): default answer. Defaults to False.
+
+    Returns:
+        bool: True if yes.
+    """
+    questions = [
+    {
+        'type': 'confirm',
+        'name': 'question',
+        'message': message,
+        'default': default
+    }]
+    answers = prompt(questions, style=style)
+    return answers['question']
+
+def menu_get_a_directory(allow_create_dir=False):
     """Gets a directory from user
 
     Args:
@@ -362,33 +413,49 @@ def get_a_directory(allow_create_dir=False):
     Returns:
         tuple: dir_available, path_user
     """
-    print("-"*5+"Select Directory"+"-"*5)
-    print(f"Press [cyan]Enter[/cyan] to use File Map path: {F_M.get_app_path()}")
-    show_databases_listed()
-    print(f"Select a digit to use same path as file (1-{len(file_list)})")
-    dir_available=False
-    path_user=input("Or type complete directory path: ")
-    num_active=len(file_list)
-    is_valid,is_digit=is_choice_valid(path_user,1,num_active,None)
-    if not path_user or path_user.strip()=="":
-        path_user=F_M.get_app_path()
-        dir_available=True
-    elif is_valid and is_digit:
-        path_user=F_M.extract_path(file_list[int(path_user)-1])
-        dir_available=True
-    else:
-        if F_M.validate_path(path_user):
-            dir_available=True
-        else:
-            if allow_create_dir:
-                if input("Path {path_user} does not exist create it? y/n: ") in ['y','Y','yes','Yes','YES']:
-                    try:
-                        os.makedirs(path_user)
-                        dir_available=True
-                    except Exception as eee:
-                        print(f'Could not create path directory {path_user}: {eee}')
-                        path_user=F_M.get_app_path()
-    return dir_available, path_user
+    path_list=[F_M.get_app_path()]
+    for fff in file_list:
+        a_path=F_M.extract_path(fff)
+        if a_path not in path_list:
+            path_list.append(a_path) 
+    menu=[{'type': 'list',
+        'name': 'dir_select',
+        'message': 'Please select: (use arrow keys)',
+        'choices': path_list+['Enter Path', 'Back']
+        }]
+    while True:
+        os.system('cls' if os.name == 'nt' else 'clear')
+        print(MENU_HEADER)
+        print("Select Directory:")
+        print("----------")
+        answers = prompt(menu, style=style)
+        if answers['dir_select'] in path_list:
+            return True, answers['dir_select']
+        elif answers['dir_select']=='Enter Path':
+            input_path = AutocompletePathFile('return string [cyan]ENTER[/cyan], Autofill path/file [cyan]TAB[/cyan], Cancel [cyan]ESC[/cyan]\nOr type complete directory path: ',
+                                      F_M.get_app_path(),absolute_path=False,verbose=True).get_input
+            path_user = input_path()
+            if not path_user:
+                continue
+            file_exist, is_file = F_M.validate_path_file(path_user)
+            if file_exist and not is_file:
+                dir_available=True
+            elif file_exist and is_file:
+                path_user=F_M.extract_path(path_user)
+                dir_available=True
+            else:
+                dir_available=False
+                if allow_create_dir:
+                    if ask_confirmation(f"Path {path_user} does not exist create it?") :
+                        try:
+                            os.makedirs(path_user)
+                            dir_available=True
+                        except Exception as eee:
+                            print(f'Could not create path directory {path_user}: {eee}')
+                            dir_available=False
+            return dir_available, path_user
+        elif answers['dir_select']=='Back':
+            return False,''
 
 def get_an_existing_file(path, extension=".db"):
     """Gets a file from user selection of files with extension in path folder.
@@ -400,28 +467,45 @@ def get_an_existing_file(path, extension=".db"):
     Returns:
         _type_: _description_
     """
-    print("-"*5+"Select File"+"-"*5)
     file_available=False
     file_user=None
     database_list=F_M.get_file_list(path,extension)
-    if database_list:
-        for iii, a_file in enumerate(database_list):
-            print(f"\t{iii+1}. {a_file}")
-    
-        choice=input("Select File: ")
-        is_valid,is_digit=is_choice_valid(choice,1,len(database_list),None)
-        if is_valid and is_digit:
-            file_user=database_list[int(choice)-1]
-            file_available=True
-    else:
-        print(f"No {extension} files found on {path}")
-    return file_available,file_user
+    menu=[{'type': 'list',
+        'name': 'file_select',
+        'message': 'Please select: (use arrow keys)',
+        'choices': database_list+['Enter File', 'Back']
+        }]
+    while True:
+        os.system('cls' if os.name == 'nt' else 'clear')
+        print(MENU_HEADER)
+        print("Select File:")
+        print("----------")
+        answers = prompt(menu, style=style)
+        if answers['file_select'] in database_list:
+            return True, answers['file_select']
+        elif answers['file_select']=='Enter File':
+            input_file = AutocompletePathFile('return string [cyan]ENTER[/cyan], Autofill path/file [cyan]TAB[/cyan], Cancel [cyan]ESC[/cyan]\nOr type complete path to file: ',
+                                      F_M.get_app_path(),absolute_path=False,verbose=True).get_input
+            file_user = input_file()
+            if not file_user:
+                continue
+            file_exist, is_file = F_M.validate_path_file(file_user)
+            if file_exist and not is_file:
+                file_available=False
+            elif file_exist and is_file:
+                file_user=F_M.extract_path(file_user)
+                file_available=True
+            else:
+                file_available=False
+            return file_available, file_user
+        elif answers['dir_select']=='Back':
+            return False,''
     
 
-def create_new_database_file():
+def menu_create_new_database_file():
     """Create New Database File
     """
-    dir_available,path_user=get_a_directory(True)
+    dir_available,path_user=menu_get_a_directory(True)
     
     if dir_available:
         file_user=input("Enter File name for new DB: ")
@@ -432,6 +516,9 @@ def create_new_database_file():
     if file_available:
         if not os.path.exists(file_path):
             create_filemap_database(file_path)
+            return ''
+        return f'[yellow]File {file_path} Already Exists!'
+    return '[yellow]File Not available!'
 
 def create_filemap_database(file_path):
     """Creates a new File Map database
@@ -439,7 +526,7 @@ def create_filemap_database(file_path):
     Args:
         file_path (str): Path and filename of new database
     """
-    if input("Encrypt Database? y/n: ") in ['y','Y','yes','Yes','YES']:
+    if ask_confirmation("Encrypt Database?"):
         path=F_M.extract_path(file_path)
         kf=F_M.extract_filename(file_path,False)+'_key.txt'
         keyfile=os.path.join(path,kf)
@@ -447,7 +534,7 @@ def create_filemap_database(file_path):
         print("Warning: If you erase, or loose the file, you will not be able to access the database anymore!")
     else:
         keyfile=None
-    if input("Set Database password? y/n: ") in ['y','Y','yes','Yes','YES']:
+    if ask_confirmation("Set Database password?"):
         a_pwd=''
         while True:
             a_pwd=ask_password("New password for:")
@@ -470,6 +557,7 @@ def create_filemap_database(file_path):
 
 def create_new_map():
     """New map"""
+    
     pass
 
 def delete_map():
@@ -507,117 +595,51 @@ def show_maps():
 
 def menu_mapping_functions():
     """Interactive menu handle databases"""
-    os.system('cls' if os.name == 'nt' else 'clear')
-    while True:
-        print(MENU_HEADER)
-        if len(active_databases)==0:
-            break
-        show_maps()
-        print("---------------------------------")
-        print("Mapping:")
-        print("\t1. Create New Map")
-        print("\t2. Delete Map")
-        # print("\t3. Find File")
-        # print("\t4. Activate Database File")
-        # print("\t5. Deactivate Database File")
-        print("\tX. Back")
-        print("---------------------------------")
-        choice = input("Enter your choice (1-N): ")
-        if choice == '1':
-            create_new_map()
-        elif choice == '2': 
-            delete_map()
-        elif choice in ["X","x"]:
-            break
-
-def main_menu():
-    """Interactive menu main"""
+    menu=[{'type': 'list',
+        'name': 'mapping',
+        'message': 'Please select: (use arrow keys)',
+        'choices': ['Create New Map', 'Delete Map', 'Back']
+        }]
     while True:
         os.system('cls' if os.name == 'nt' else 'clear')
         print(MENU_HEADER)
+        print("Mapping:")
+        print("----------")
+    
+        if len(active_databases)==0:
+            return '[magenta]There are no active databases![\magenta]'
+        show_maps()
+        print("---------------------------------")
+        answers = prompt(menu, style=style)
+        if answers['mapping']=='Create New Map':
+            create_new_map()
+        elif answers['mapping']=='Delete Map': 
+            delete_map()
+        elif answers['mapping']=='Back':
+            return ''
+
+def main_menu():
+    """Interactive menu main"""
+    msg=''
+    menu=[{'type': 'rawlist',
+        'name': 'main_menu',
+        'message': 'Please select:',
+        'choices': ['Handle Databases', 'Mapping', 'Exit']
+        }]
+    while True:
+        os.system('cls' if os.name == 'nt' else 'clear')
+        print(MENU_HEADER)
+        if msg!='':
+            print(msg)
+            msg=''
         print("Main Menu:")
         print("----------")
-        print("\t1. Handle Databases")
-        print("\t2. Mapping")
-        print("\t3. Add File")
-        print("\t4. Add password to file")
-        print("\t5. Add key file to file")
-        print("\t6. Exit")
-        
-        choice = input("Enter your choice (1-6): ")
-        
-        if choice == "1":
-            menu_handle_databases()
-        elif choice == "2":
-            menu_mapping_functions()
-        elif choice == "3":
-            # Clear the screen and display menu 4
-            os.system('cls' if os.name == 'nt' else 'clear')
-            print(MENU_HEADER)
-            print("\nMenu 4:")
-            print("Enter File :")
-            for i, file in enumerate(file_list):
-                print(f"{i+1}. {file}")
-            choice = input("Enter your choice (1-N): ")
-            
-            if choice == "X":
-                # Go back to main menu
-                continue
-            elif choice.isdigit() and int(choice) > 0 and int(choice) <= len(file_list):
-                file = file_list[int(choice)-1]
-                print("Enter name of File to add :")
-                for i, a in enumerate(file_list):
-                    if a == file:
-                        print(f"{i+1}. {a}")
-                        choice = input("This file already exists. Enter another file name (or press X to go back): ")
-                        if choice == "X":
-                            continue
-                else:
-                    # Add the new file
-                    print(f"{file} added successfully.")
-            else:
-                print("Invalid choice. Please try again.")
-        elif choice == "4":
-            # Clear the screen and display menu 5
-            os.system('cls' if os.name == 'nt' else 'clear')
-            print("\nMenu 5:")
-            print("Select File to add password to:")
-            for i, file in enumerate(file_list):
-                print(f"{i+1}. {file}")
-            choice = input("Enter your choice (1-N): ")
-            
-            if choice == "X":
-                # Go back to main menu
-                continue
-            elif choice.isdigit() and int(choice) > 0 and int(choice) <= len(file_list):
-                file = file_list[int(choice)-1]
-                print("Enter password for", file, ":")
-                password = input()
-                # add_passwords[file] = password
-                print(f"Password added successfully.")
-            else:
-                print("Invalid choice. Please try again.")
-        elif choice == "5":
-            # Clear the screen and display menu 6
-            os.system('cls' if os.name == 'nt' else 'clear')
-            print("\nMenu 6:")
-            print("Select File to add key file to:")
-            for i, file in enumerate(file_list):
-                print(f"{i+1}. {file}")
-            choice = input("Enter your choice (1-N): ")
-            
-            if choice == "X":
-                # Go back to main menu
-                continue
-            elif choice.isdigit() and int(choice) > 0 and int(choice) <= len(file_list):
-                file = file_list[int(choice)-1]
-                print("Enter key file for", file, ":")
-                key_file = input()
-                # add_key_files[file] = key_file
-                print(f"Key file added successfully.")
-            else:
-                print("Invalid choice. Please try again.")
-        elif choice == "6":
+        answers = prompt(menu, style=style)
+        if answers['main_menu']=='Handle Databases':
+            msg=menu_handle_databases()
+        elif answers['main_menu']=='Mapping':
+            msg=menu_mapping_functions()
+        elif answers['main_menu']=='Exit':
             # Clear the screen and exit program
             os.system('cls' if os.name == 'nt' else 'clear')
             sys.exit(0)

@@ -5,6 +5,7 @@
 import os
 import re
 import sys
+import glob as gb
 from datetime import datetime
 import shutil
 import psutil
@@ -498,9 +499,30 @@ class FileManipulate:
                 print(f"{path} is a valid directory!")
                 return True
             print(f"{path} is not a directory!")
-        print(f"{path} Does not exists")
+        else:
+            print(f"{path} Does not exists")
         return False
     
+    def get_possible_path_list(self,path,joker='*')->list[str]:
+        """Use glob to find files or directories with patterns
+
+        Args:
+            path (str): path as pattern
+
+        Returns:
+            list: list of patterns found
+        """
+        try:
+            file_exist,is_file = self.validate_path_file(path)
+            if file_exist and not is_file:
+                return gb.glob(os.path.join(path, joker))   
+            elif file_exist and is_file: 
+                return gb.glob(self.extract_path(path,True) + joker)
+            return [path]
+        except Exception as eee:
+            print(f"Error Glob: {eee}")
+            return []
+
     @staticmethod
     def validate_path_file(pathfile: str) -> tuple[bool]:
         """
@@ -512,7 +534,8 @@ class FileManipulate:
         Returns:
             tuple[bool]: (file_exist, is_file)
         """
-
+        if not pathfile:
+            return False,False
         # Check for empty string
         if not pathfile.strip():
             return False,False

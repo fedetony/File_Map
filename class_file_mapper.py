@@ -24,7 +24,8 @@ class FileMapper:
         if key_filepath:
             self.key_filepath=key_filepath
         self.key = None
-        
+        self.is_db_encrypted=False
+        self.db_has_password=False
         self.db, self.is_db_encrypted, self.db_has_password = self.start_db(self.db_path_file,self.key_filepath,self.password)
         self.db_list=[self.db]
         # connect
@@ -59,6 +60,9 @@ class FileMapper:
         """
         key = None
         has_password=False
+        is_encrypted=False
+        has_password=False
+        db=None
         # 
         if os.path.exists(db_path_file): #if db exists
             if os.path.exists(key_filepath):
@@ -577,8 +581,10 @@ class FileMapper:
 
     def close(self):
         """Close db connection"""
-        if self.is_db_encrypted:
-            self.db.encrypt_db()
-        self.db.close_connection()
+        if hasattr(self, 'is_db_encrypted'):
+            if self.is_db_encrypted:
+                self.db.encrypt_db()
+        if hasattr(self, 'db'):
+            self.db.close_connection()
     
 
