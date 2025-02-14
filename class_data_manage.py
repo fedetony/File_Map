@@ -103,7 +103,7 @@ class DataManage():
                 return df_selected
         return pd.DataFrame()
 
-    def get_tabulated_fields(self,fields_to_tab=None,sort_by=None,ascending=True,indexed=False):
+    def get_tabulated_fields(self,fields_to_tab=None,sort_by=None,ascending=True,*args,**kwargs):#indexed=False,header=True):
         """Returns Tabulated string
 
         Args:
@@ -111,12 +111,14 @@ class DataManage():
             sort_by (int, str or list, optional): Sorting if the df is to be sorted. Defaults to None.
             ascending (bool, optional): if sorting, then ascendant. Defaults to True.
             indexed (bool, optional): table indexed
+            header=True
         Returns:
             str: Tabulated data
         """
         df_selected=self.get_selected_df(fields_to_tab,sort_by,ascending)
         if not df_selected.empty:    
-            return df_selected.to_string(index=indexed)
+            #return df_selected.to_string(index=indexed,header=header)
+            return df_selected.to_string(*args,**kwargs)
         return ''
 
 if __name__ == '__main__':
@@ -139,7 +141,9 @@ if __name__ == '__main__':
     fields = ["Id", "Name", "Age", "Gender"]
     dt2=DataManage(data2,fields)   
     print("-"*33)     
-    print(dt2.get_tabulated_fields())
+    print(dt2.get_tabulated_fields(index=True,justify='left'))
     print("-"*33)
+
+    print(dt2.df.to_dict())
 
     

@@ -568,7 +568,7 @@ class FileMapper:
         node_dict={}
         for a_key,value in repeated_dict.items():   
             if a_key==key or not key:
-                print("Here -----> ",a_key,value)
+                # print("Here -----> ",a_key,value)
                 node_list=[]
                 for iii,(index,an_id) in enumerate(value):
                     dbresult=dbresult_list[index]
@@ -579,7 +579,38 @@ class FileMapper:
                         #print(iii,an_id,dbr_key,dbresult.dbr[dbr_key[0]].filename,dbresult.dbr[dbr_key[0]].size,dbresult.dbr[dbr_key[0]].md5)
                 if len(node_list)>0:
                     node_dict.update({a_key:node_list})
-        return node_dict       
+        return node_dict    
+
+    def find_duplicates(self,tablename):
+        repeated_dict=self.get_repeated_files(self.db,tablename)
+        dbresult_list=self.get_dbresult_list([self.db],[tablename])
+        a_key=None #key_list[3]
+        repeated_info_dict=self.repeated_list_info(repeated_dict,a_key,dbresult_list)
+        #print(repeated_info_dict)
+        # repeated_in_same_db=self.repeated_in_same_db(repeated_dict,a_key)
+        # print("Elements in same database,table pair: {}".format(repeated_in_same_db))
+        duplicate_list=[]
+        for a_key,_ in repeated_info_dict.items():
+            for iii,rid_list in enumerate(repeated_info_dict[a_key]):
+                comp_dict={}
+                if iii == 0:
+                    node_1=rid_list[4] #Node object
+                else:
+                    node_2=rid_list[4] #Node object
+                    comp_dict=dbresult_list[0].compare_nodes(node_1,node_2,'==')
+                    item_list=[ 'id', 'md5', 'size', 'filename', 'filepath']
+                    match=    [False, True, True, False, True]
+                    duplicate_file=True
+                    #print("."*33)
+                    for aaa,bbb in zip(item_list,match):
+                        #print(f"{aaa}: {getattr(node_1,aaa)} ==? {getattr(node_2,aaa)} -> {comp_dict[aaa]} <- should be {bbb}")
+                        if bbb != comp_dict[aaa]:
+                            duplicate_file=False
+                            break
+                    if duplicate_file:
+                        duplicate_list.append((node_1.to_dict(),node_2.to_dict()))
+                        # print("@"*5+'---->Duplicate')   
+        return duplicate_list
 
     def __del__(self):
         """On deletion close correctly"""

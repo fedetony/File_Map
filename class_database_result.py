@@ -5,6 +5,17 @@
 class Node:
     def __init__(self, index):
         self.index = index
+    def to_dict(self)->dict:
+        """Convert node to dictionary. Only attributes not starting with '__'
+
+        Returns:
+            dict: Node as dictionary
+        """
+        me_dict={}
+        for key in dir(self):
+            if not key.startswith('__') and not key in ["to_dict"]:
+                me_dict.update({key:getattr(self,key)}) 
+        return me_dict
 
 class DBResult:
     def __init__(self, description: list[tuple]):
@@ -129,3 +140,4 @@ if __name__ == "__main__":
     db_result.set_values(test_data)
     print(db_result.dbr[0].tablename)  # prints table_test_1
     print(db_result.dbr[1].dt_map_modified)  # prints the value '2025-02-05 14:05:38.006100'
+    print(db_result.dbr[0].to_dict())

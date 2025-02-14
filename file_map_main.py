@@ -722,18 +722,124 @@ def show_maps():
                 #field_list=['id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype']
                 field_list=['id','Date Time Created','Date Time Modified','Map Path','Table Name','Mount','Serial','Map Name','Map Type']
                 data_manage=DataManage(table_list,field_list)
-                print(data_manage.get_tabulated_fields([field_list[1],field_list[4],field_list[6],field_list[5],field_list[3]],indexed=True))
+                print(data_manage.get_tabulated_fields(fields_to_tab=[field_list[1],field_list[4],field_list[6],field_list[5],field_list[3]],index=True,justify='left'))
             # for table in table_list:
             #     print(f"\t{jjj+1}. {table}")
             #     jjj=jjj+1
-        
+
+def get_all_maps():
+    """Finds all maps in all loaded databases
+
+    Returns:
+        list: list of (database,map name)
+    """
+    output=[]
+    for database in file_list:
+        maps=[]
+        try:
+            maps=get_maps_in_db(database)
+            for mmm in maps:
+                output.append((database,mmm))
+        except:
+            pass
+    return output
+
+def get_map_info(database,a_map):
+    """returns the map table information
+
+    Args:
+        database (str): database
+        a_map (str): Table name
+
+    Returns:
+        list(tuple): information on reference table
+    """
+    fm=get_file_map(database)
+    return fm.db.get_data_from_table(fm.mapper_reference_table,'*',f"tablename='{a_map}'")
+
+def menu_select_database_map()->tuple:
+    """Looks in all databases listed for all maps.
+
+    Returns:
+        tuple: selecte database,map. None if no selected
+    """
+    db_map_pair_list=get_all_maps()
+    
+    if len(db_map_pair_list)>0:
+        field_list=['id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype']
+        str_db_map=''
+        # d_m1=DataManage(db_map_pair_list,["db",'Map'])
+        # str_db_map=d_m1.get_tabulated_fields(fields_to_tab=None,index=False,justify='left',header=False)
+        end_list=[]
+        for database,a_map in db_map_pair_list:
+            map_info=get_map_info(database,a_map)
+            end_list.append(map_info[0]+(database,))
+        d_m1=DataManage(end_list,field_list+["db"])
+        str_db_map=d_m1.get_tabulated_fields(fields_to_tab=['tablename','mount','mappath',"db"],index=False,justify='left',header=False)
+        str_list=str_db_map.split('\n')
+        map_list=str_list
+        #map_list=[]
+        # for db_map_pair in db_map_pair_list:
+        #     map_list.append(f'Map: {db_map_pair[1]} in DB: {db_map_pair[0]}')
+        menu=[{'type': 'list',
+        'name': 'db_map_select',
+        'message': 'Please select: (use arrow keys)',
+        'choices': map_list+['Back']
+        }]
+        answers = prompt(menu, style=style)
+        if answers['db_map_select'] == 'Back':
+            return None       
+        elif answers['db_map_select'] in map_list:
+            for str_pair,db_map_pair in zip(map_list,db_map_pair_list):
+                if str_pair == answers['db_map_select']:
+                    print(db_map_pair)
+                    return db_map_pair
+    return None
+
+def process_map():
+    os.system('cls' if os.name == 'nt' else 'clear')
+    print(MENU_HEADER)
+    print("Process Map:")
+    print("----------")
+    db_map_pair=menu_select_database_map()
+    if not db_map_pair:
+        return ''
+    menu=[{'type': 'list',
+        'name': 'map_process',
+        'message': 'Please select: (use arrow keys)',
+        'choices': ['Print Tree','Find Duplicates','Back']
+        }]
+    while True:
+        print("----------")
+        answers = prompt(menu, style=style)
+        if answers['map_process'] == 'Back':
+            return ''
+        elif answers['map_process'] == 'Print Tree': 
+            print(db_map_pair)
+        elif answers['map_process'] == 'Find Duplicates': 
+            print(find_duplicates(db_map_pair[0],db_map_pair[1]))
+
+def find_duplicates(database,a_map):
+    fm=get_file_map(database)
+    return fm.find_duplicates(a_map)
+    # repeated_dict=fm.get_repeated_files(fm.db,a_map)
+    # showing=['id','filepath','filename','md5','size']
+    # key_list=list(repeated_dict.keys())
+    # filelist=[]
+    # for a_key in key_list:
+    #     print(a_key)
+    #     fm.re
+    #     filelist.append(fm.repeated_list_show(repeated_dict,a_key,[fm.db],[a_map],showing))
+    #     # d_m1=DataManage(file_list,showing)
+    # return filelist
+
 
 def menu_mapping_functions():
     """Interactive menu handle databases"""
     menu=[{'type': 'list',
         'name': 'mapping',
         'message': 'Please select: (use arrow keys)',
-        'choices': ['Create New Map', 'Delete Map', 'Back']
+        'choices': ['Create New Map', 'Delete Map', 'Process Map','Back']
         }]
     while True:
         os.system('cls' if os.name == 'nt' else 'clear')
@@ -750,6 +856,8 @@ def menu_mapping_functions():
             menu_create_new_map()
         elif answers['mapping']=='Delete Map': 
             delete_map()
+        elif answers['mapping']=='Process Map': 
+            process_map()
         elif answers['mapping']=='Back':
             return ''
 
