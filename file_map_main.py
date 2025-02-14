@@ -16,6 +16,7 @@ from class_file_manipulate import FileManipulate
 from class_device_monitor import DeviceMonitor
 from class_file_mapper import FileMapper
 from class_autocomplete_input import AutocompletePathFile
+from class_data_manage import DataManage
 
 
 FILE_MAP_LOGO=""">>=========================================<<
@@ -404,6 +405,27 @@ def ask_confirmation(message:str,default:bool=False)->bool:
     answers = prompt(questions, style=style)
     return answers['question']
 
+def menu_enter_path():
+    """Asks selection of a directory and returns if the selected path/input is an available directory and the path user input.
+
+    Returns:
+        tuple[bool,str]: dir_available, path_user
+    """
+    input_path = AutocompletePathFile('return string [cyan]ENTER[/cyan], Autofill path/file [cyan]TAB[/cyan], Cancel [cyan]ESC[/cyan]\nOr type complete directory path: ',
+                                      F_M.get_app_path(),absolute_path=False,verbose=True).get_input
+    path_user = input_path()
+    if not path_user.endswith(os.sep):
+        path_user=path_user+os.sep
+    file_exist, is_file = F_M.validate_path_file(path_user)
+    if file_exist and not is_file:
+        dir_available=True
+    elif file_exist and is_file:
+        path_user=F_M.extract_path(path_user)
+        dir_available=True
+    else:
+        dir_available=False 
+    return dir_available, path_user
+
 def menu_get_a_directory(allow_create_dir=False):
     """Gets a directory from user
 
@@ -555,14 +577,121 @@ def create_filemap_database(file_path):
     password_list.append(a_pwd)
     key_list.append(keyfile)
 
-def create_new_map():
+def menu_select_database(active):
+    """Select a database"""
+    ia_list=show_active_inactive_databases(active,False)
+    active_inactive_list=[]
+    selected_db=''
+    for _,i_a in ia_list:
+        active_inactive_list.append(i_a)
+    if len(active_inactive_list)==0:
+        return f"[yellow]No {'active' if active else 'inactive'} database to select!!"
+    elif len(active_inactive_list)>1:
+        menu=[{'type': 'list',
+        'name': 'db_select',
+        'message': 'Please select: (use arrow keys)',
+        'choices': active_inactive_list+['Back']
+        }]
+        answers = prompt(menu, style=style)
+        if answers['db_select'] in active_inactive_list:
+            return answers['db_select']
+        elif answers['db_select']=='Back':
+            return ''
+    else:
+        selected_db=active_inactive_list[0]  
+    return selected_db
+
+
+def validate_new_map(new_table_name,database):
+    """Check if New table name is Correct"""
+    fm=get_file_map(database)
+    tables=fm.db.tables_in_db()
+    if new_table_name in tables:
+        return False
+    return True
+
+class MapValidator(Validator):
+    def validate(self, document):
+        for a_db in active_databases:
+            if not validate_new_map(document.text,a_db['file']):
+                raise ValidationError(
+                message=f'Map "{document.text}" already exists. Please enter a non existing map name',
+                cursor_position=len(document.text))  # Move cursor to end
+
+def menu_create_new_map():
     """New map"""
-    
-    pass
+    os.system('cls' if os.name == 'nt' else 'clear')
+    print(MENU_HEADER)
+    print("Create new Map:")
+    print("----------")
+    answers={'table_name':''}
+    selected_db=menu_select_database(True)
+    if selected_db and selected_db != '':
+        menu=[{
+        'type': 'input',
+        'name': 'table_name',
+        'message': 'Enter table name',
+        'validate': MapValidator
+        },
+        ]   
+        answers = prompt(menu, style=style)
+        if answers['table_name'] not in ['',None]:
+            tablename=answers['table_name']
+            # path_to_map="D:\Downloads"
+            dir_available, path_to_map = menu_enter_path()
+            if dir_available and path_to_map:
+                fm=get_file_map(selected_db) 
+                fm.db.create_connection()
+                fm.map_a_path_to_db(tablename,path_to_map,True)
+
+def get_maps_in_db(database):
+    """Gets maps in database
+
+    Args:
+        database (str): database
+
+    Returns:
+        list: list of map's (table names)
+    """
+    fm=get_file_map(database)
+    tables=fm.db.tables_in_db()
+    maps=[]
+    for ttt in tables:
+        if isinstance(ttt,tuple):
+            if len(ttt)>0:
+                if ttt[0] not in [fm.mapper_reference_table,'sqlite_sequence']:
+                    maps.append(ttt[0])
+    return maps
 
 def delete_map():
     """Kill map"""
-    pass
+    os.system('cls' if os.name == 'nt' else 'clear')
+    print(MENU_HEADER)
+    print("Delete Map:")
+    print("----------")
+    answers={'table_name':''}
+    selected_db=menu_select_database(True)
+    if selected_db and selected_db != '':
+        while True:
+            map_list=get_maps_in_db(selected_db)
+            if len(map_list)==0:
+                return '[yellow] No maps to delete!'
+            menu=[{'type': 'list',
+            'name': 'map_delete',
+            'message': 'Please select: (use arrow keys)',
+            'choices': map_list+['Back']
+            }]
+            answers = prompt(menu, style=style)
+            if answers['map_delete'] == 'Back':
+                return ''
+            if answers['map_delete'] not in ['',None]:
+                tablename=answers['map_delete']
+                # path_to_map="D:\Downloads"
+                fm=get_file_map(selected_db) 
+                fm.db.create_connection()
+                count=fm.db.get_number_or_rows_in_table(tablename)
+                if ask_confirmation(f"Sure to delete Map [magenta]{tablename}[\magenta] with [magenta]{count}[\magenta] elements?"):
+                    fm.delete_map(tablename)
 
 def get_file_map(dbfile) -> FileMapper:
     """Returns the File Map object for database
@@ -580,6 +709,8 @@ def get_file_map(dbfile) -> FileMapper:
 
 
 def show_maps():
+    """Prints Map information
+    """
     for iii,a_db in enumerate(active_databases):
         fm=a_db['mapdb']
         if isinstance(fm,FileMapper):
@@ -587,10 +718,14 @@ def show_maps():
             table_list=fm.db.get_data_from_table(fm.mapper_reference_table,'*')
             jjj=0
             if len(table_list)>0:
-                print('\t(id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype)')
-            for table in table_list:
-                print(f"\t{jjj+1}. {table}")
-                jjj=jjj+1
+                # print('\t(id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype)')
+                #field_list=['id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype']
+                field_list=['id','Date Time Created','Date Time Modified','Map Path','Table Name','Mount','Serial','Map Name','Map Type']
+                data_manage=DataManage(table_list,field_list)
+                print(data_manage.get_tabulated_fields([field_list[1],field_list[4],field_list[6],field_list[5],field_list[3]],indexed=True))
+            # for table in table_list:
+            #     print(f"\t{jjj+1}. {table}")
+            #     jjj=jjj+1
         
 
 def menu_mapping_functions():
@@ -612,7 +747,7 @@ def menu_mapping_functions():
         print("---------------------------------")
         answers = prompt(menu, style=style)
         if answers['mapping']=='Create New Map':
-            create_new_map()
+            menu_create_new_map()
         elif answers['mapping']=='Delete Map': 
             delete_map()
         elif answers['mapping']=='Back':

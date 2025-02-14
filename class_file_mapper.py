@@ -178,7 +178,7 @@ class FileMapper:
             return '/'+path.replace(mount,'')    
         return path.replace(mount,'')
 
-    def find_mount_serial_of_path(self,path):
+    def find_mount_serial_of_path(self,path:str):
         """Returns the mount point and serial for a path on an active device.
 
         Args:
@@ -192,9 +192,18 @@ class FileMapper:
         serial=''
         if isinstance(self.active_devices,list):
             for md in self.active_devices:
-                if md[0] in path:
+                if path.startswith(md[0]):
                     mount=md[0]
                     serial=md[1]
+                    break
+                if path.startswith(md[0].lower()):
+                    mount=md[0].lower()
+                    serial=md[1]
+                    break
+                if path.startswith(md[0].upper()):
+                    mount=md[0].upper()
+                    serial=md[1]
+                    break
             return mount, serial
 
     def add_table_to_mapper_index(self,table_name,path_to_map):
