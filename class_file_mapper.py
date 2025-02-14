@@ -595,6 +595,7 @@ class FileMapper:
                 comp_dict={}
                 if iii == 0:
                     node_1=rid_list[4] #Node object
+                    duplicate_node=None
                 else:
                     node_2=rid_list[4] #Node object
                     comp_dict=dbresult_list[0].compare_nodes(node_1,node_2,'==')
@@ -608,7 +609,12 @@ class FileMapper:
                             duplicate_file=False
                             break
                     if duplicate_file:
-                        duplicate_list.append((node_1.to_dict(),node_2.to_dict()))
+                        if iii==1:
+                            duplicate_node=(node_1.to_dict(),node_2.to_dict())
+                        else:
+                            duplicate_node=duplicate_node+(node_2.to_dict(),)
+                if duplicate_node:    
+                    duplicate_list.append(duplicate_node)
                         # print("@"*5+'---->Duplicate')   
         return duplicate_list
 

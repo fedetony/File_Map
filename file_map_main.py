@@ -41,7 +41,7 @@ __version__="v.1.1.333 beta"
 
 from pprint import pprint
 from PyInquirer import style_from_dict, Token, prompt
-from PyInquirer import Validator, ValidationError
+from PyInquirer import Validator, ValidationError, Separator
 
 
 style = style_from_dict({
@@ -817,8 +817,34 @@ def process_map():
         elif answers['map_process'] == 'Print Tree': 
             print(db_map_pair)
         elif answers['map_process'] == 'Find Duplicates': 
-            print(find_duplicates(db_map_pair[0],db_map_pair[1]))
+            duplicte_list=find_duplicates(db_map_pair[0],db_map_pair[1])
+            menu_duplicate_select(duplicte_list)
 
+
+def menu_duplicate_select(duplicte_list):
+    choice_list=[]
+    for dup_tup in duplicte_list:
+        for iii,dupli_dict in enumerate(dup_tup):
+            if iii==0:
+                choice_list.append(Separator(f"{dupli_dict['md5']} in {dupli_dict['filepath']}"))
+                choice_list.append({
+                'name': f"{dupli_dict['filename']}",
+                'checked': True,
+                })
+            else:    
+                choice_list.append({
+                'name': f"{dupli_dict['filename']}",
+                'checked': False,
+                })
+    menu = [{
+        'type': 'checkbox',
+        'message': 'Select files',
+        'name': 'file_selection',
+        'choices': choice_list
+        }]
+    answers = prompt(menu, style=style)
+    print(answers)
+        
 def find_duplicates(database,a_map):
     fm=get_file_map(database)
     return fm.find_duplicates(a_map)
