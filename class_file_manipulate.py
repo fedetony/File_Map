@@ -418,6 +418,81 @@ class FileManipulate:
             fpath = fpath.replace(os.sep + fn, "")
         return fpath
     
+    def get_file_structure_from_active_path(self,src_path:str,item_name:str=None,file_structure:dict=None,full_path:bool=True,fcn_call=None):
+        """Gets a dictionary with a structure 
+        {'item_name': [{'dir1': ['file1', ..., 'fileN']}, 
+                    {'dir2': [{'dir3': ['file4']},'file1']}, 
+                    ...
+                    'file5', 'file6',... 'fileN']}
+        Directories are dictionaries with content in a list. 
+        A file is added as string, or tuple with properties
+
+        Args:
+            src_path (str): source path
+            item_name (str, optional): Leave None to use src_path. Defaults to None.
+            file_structure (dict, optional): Leave None or pass a dictionary to add the paths. Defaults to None.
+            full_path (bool, optional): True directory names include full path. Defaults to True.
+            fcn_call (function, optional): Calls function fcn_call(full_filePath). Defaults to None.
+
+        Returns:
+            _type_: _description_
+        """
+        # Check if the source and destination paths exist
+        if not os.path.exists(src_path):
+            return file_structure
+        first_loop=False
+        if not file_structure and not item_name:
+            first_loop=True
+            file_structure={}
+        elif not file_structure and item_name:
+            file_structure={}    
+        
+        path_list=[]
+        for item in os.listdir(src_path):
+                src_item = os.path.join(src_path, item)
+                # If the current item is a file
+                if os.path.isfile(src_item):
+                    if fcn_call:
+                        path_list.append(fcn_call(src_item))
+                    else:
+                        path_list.append(item)
+                    
+                # If the current item is a directory
+                elif os.path.isdir(src_item):
+                    if full_path:
+                        mod_item=item
+                    else:    
+                        extract=self.extract_parent_path(item,True) 
+                        mod_item=item.replace(extract,"")
+                    inner_structure=self.get_file_structure_from_active_path(src_item,mod_item,{},full_path,fcn_call)    
+                    path_list.append(inner_structure)
+        if first_loop:
+            file_structure.update({src_path:path_list})
+        elif item_name and not first_loop:
+            file_structure.update({item_name:path_list})         
+        return file_structure
+
+    @staticmethod
+    def extract_parent_path(filename: str, with_separator: bool = True) -> str:
+        """Extracts parent path of a path+filename string
+
+        Args:
+            filename (str): path+filename
+            with_separator (bool, optional): return path including the separator. Defaults to True.
+
+        Returns:
+            str: string with path
+        """
+        if filename.endswith((os.sep,'\\','/')):
+             filename=filename[:len(filename)-1]
+        fn = os.path.basename(filename)  # returns just the name
+        fpath = os.path.abspath(filename)
+        if with_separator:
+            fpath = fpath.replace(fn, "")
+        else:
+            fpath = fpath.replace(os.sep + fn, "")
+        return fpath    
+    
     @staticmethod
     def remove_empty_folders(folder_path):
         """removes empty folders in a given path
