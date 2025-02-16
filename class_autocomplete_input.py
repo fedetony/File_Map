@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
 import os
+import sys
 import glob as gb
-import pyperclip 
 from class_file_manipulate import FileManipulate
 from rich import print
 f_m=FileManipulate() 
@@ -46,23 +46,6 @@ class _GetchWindows:
 
 getch = _Getch()
 
-# Backspace (delete previous character): \x08 or b'\x08'
-# Tab (move to next tab stop): \t or b'\t'
-# Enter (submit form, end line): \n or b'\n'
-# Escape (exit command mode): \x1b[27m or b'\x1b[27m'
-# Page up: \x03 or b'\x03'
-# Page down: \x04 or b'\x04'
-# Up arrow (move cursor up one line): \x05 or b'\x05'
-# Down arrow (move cursor down one line): \x06 or b'\x06'
-# Left arrow (move cursor left one character): \x07 or b'\x07'
-# Right arrow (move cursor right one character): \x08 or b'\x08'
-# Home key (move to beginning of line): \x09 or b'\x09'
-# End key (move to end of line): \x10 or b'\x10'
-# Control+C (interrupt program, send EOF signal): \x03 or b'\x03'
-# Control+D (send EOF signal without interrupting program): \x04 or b'\x04'
-# Control+L (clear screen): \x1b[2J or b'\x1b[2J'
-# Control+Z (suspend program, send SIGSTOP signal): \x1b[33m or b'\x1b[33m'
-
 class AutocompletePathFile:
     def __init__(self, prompt,base_path=APP_PATH,absolute_path=True,verbose=True):
         self.prompt = prompt
@@ -72,6 +55,7 @@ class AutocompletePathFile:
         self.base_path=base_path
         self.absolute_path=absolute_path
         self.verbose=verbose
+        self.options=''
         print(self.prompt)
         
     def _get_possible_path_list(self, path)->list[str]:
@@ -157,6 +141,7 @@ class AutocompletePathFile:
         list_auto=self._get_possible_path_list(a_path_file)
         #print(f"List----->>>>{list_auto}")
         #print(f"base Path----->>>>{self.base_path} -> {a_path_file}")
+        self.options=''
         if len(list_auto)==1:
             end_path=list_auto[0]
             if not self.absolute_path and os.path.exists(os.path.join(self.base_path,end_path)):
@@ -180,83 +165,207 @@ class AutocompletePathFile:
             else:
                 end_path=a_path_file+fill_add
             if self.verbose:
-                print(f"Options: {end_path}+{comp_list}")
+                self.options=f"Options: {end_path}+{comp_list}"
+                print(self.options)
+            else:
+                self.options=f"+{comp_list}"
             return end_path
         return a_path_file
+    
+    def handle_key(self,last_key,key)->str:
+        """Maps a key to a string for special characters ater getch
+            Some characters map with a sequence.
+        Args:
+            last_key (char): last value
+            key (char): ASCII value
+
+        Returns:
+            str: key pressed string
+        """
+        if not key:
+            return '' 
+        if not last_key:
+            last_key=' '
+        if ord(key) == 13: # enter
+            return 'enter'
+        
+        elif ord(last_key) == 79 and ord(key) == 80: # F1
+            return 'F1'
+        elif ord(last_key) == 79 and ord(key) == 81: # F2
+            return 'F2'
+        elif ord(last_key) == 79 and ord(key) == 82: # F3
+            return 'F3'
+        elif ord(last_key) == 79 and ord(key) == 83: 
+            return 'F4'
+        # elif ord(last_key) == 53 and ord(key) == 126: 
+        #     return 'F5'
+        elif ord(last_key) == 55 and ord(key) == 126: 
+            return 'F6'
+        elif ord(last_key) == 56 and ord(key) == 126: 
+            return 'F7'
+        elif ord(last_key) == 57 and ord(key) == 126: 
+            return 'F8'
+        elif ord(last_key) == 48 and ord(key) == 126: 
+            return 'F9'
+        elif ord(last_key) == 91 and ord(key) == 65: 
+            return 'arrow'+'up'
+        elif ord(last_key) == 91 and ord(key) == 66: 
+            return 'arrow'+'down'
+        elif ord(last_key) == 91 and ord(key) == 67: 
+            return 'arrow'+'right'
+        elif ord(last_key) == 91 and ord(key) == 68: 
+            return 'arrow'+'left'
+        elif ord(last_key) == 53 and ord(key) == 65:
+            return 'cntr+'+'arrow'+'up'
+        elif ord(last_key) == 53 and ord(key) == 66:
+            return 'cntr+'+'arrow'+'down'
+        elif ord(last_key) == 53 and ord(key) == 67:
+            return 'cntr+'+'arrow'+'right'
+        elif ord(last_key) == 5391 and ord(key) == 68:
+            return 'cntr+'+'arrow'+'left'
+        elif ord(last_key) == 53 and ord(key) == 126:
+            return 'page'+'up'
+        elif ord(last_key) == 54 and ord(key) == 126:
+            return 'page'+'down'
+        elif ord(last_key) == 51 and ord(key) == 126:
+            return 'delete'
+        elif ord(last_key) == 91 and ord(key) == 70:
+            return 'end'
+        elif ord(last_key) == 91 and ord(key) == 72:
+            return 'home'
+        elif ord(last_key) == 50 and ord(key) == 126:
+            return 'insert'
+        elif ord(key) == 127:
+            return 'backspace'
+        elif ord(key) == 27: # esc
+            return 'esc'
+        elif ord(key) == 9: # tab
+            return 'tab'
+        elif ord(key) in range(1,27):
+            return 'cntr+'+chr(96+ord(key))
+        elif ord(key) in range(32,127): # printable characters
+            return key
+        else:
+            try:
+                return chr(ord(key))
+            except:
+                return ''
+
+    def is_special_character(self,last_key,key)->bool:
+        """Check if is a pecial character
+
+        Args:
+            last_key (char): last value
+            key (char): ASCII value
+
+        Returns:
+            bool: _description_
+        """
+        key_handle=self.handle_key(last_key,key)
+        if key_handle:
+            if len(key_handle)>1: # words with more than 1 character
+                return True
+        return False
+
+        
 
     def get_input(self):
-        last_char=None
+        last_char=' '
         pos=0
         lenght=0
+        lenoptions=0
         while True:
             char = getch()
-            os.system('cls' if os.name == 'nt' else 'clear')
+            if self.verbose:
+                os.system('cls' if os.name == 'nt' else 'clear')
+            else:
+                if lenoptions>0:
+                    for _ in range(1,lenoptions):
+                        sys.stdout.write("\b ")
+                        sys.stdout.flush()
+                        sys.stdout.write("\b")
+                    # sys.stdout.write("\b"*lenoptions)
+                    # sys.stdout.flush()
+                    # sys.stdout.write(" "*lenoptions)
+                    # sys.stdout.flush()
+                    sys.stdout.write("\r")
+                    sys.stdout.flush()
+                    sys.stdout.write(self.line_user_input)
+                    sys.stdout.flush()
+                    lenoptions=0
+            #print('Char: ',chr(ord(char)),' ord:',ord(char), ' last->ord:',ord(last_char),self.handle_key(last_char,char))
+            key_handle=self.handle_key(last_char,char)
             if self.verbose:
                 print(self.prompt)
-            if char in [b'\r', b'\n']: #enter
+            if  key_handle=='enter': #enter char in [b'\r', b'\n', '\r', '\n'] or
+                if not self.verbose:
+                    sys.stdout.write("\r")
+                    sys.stdout.flush()
                 return self.line_autocompleted
-            if char == b'\t': #tab
+            if  key_handle=='tab': #tab char in [ b'\t','\t'] or
+                inlen=len(self.line_user_input)
                 self.line_user_input=self.autocomplete_path(self.line_user_input)
+                if not self.verbose:
+                    sys.stdout.write("\b"*inlen+self.line_user_input)
+                    sys.stdout.flush()
+                    lenoptions=len(self.options)
+                    if lenoptions>0:
+                        sys.stdout.write(self.options)
+                        sys.stdout.flush()
+                    
                 char = None 
-            elif char == b'\x1b': # esc
+            elif  key_handle=='esc': # esc char in [ b'\x1b','\x1b'] or
+                print(key_handle)
                 return None
-            elif char == b'\x03': # cntr + c
+            elif key_handle=='cntr+c': # cntr + c char in [ b'\x03','\x03'] or 
+                print(key_handle)
                 pass
-            elif char == b'\x18': # cntr + v
+            elif  key_handle=='cntr+v': # cntr + v char in [ b'\x18','\x18'] or
                 # paste clipboard
-                pyperclip.paste()
                 pass
-            elif char == b'\x1a': # cntr + z
-                pass
-            elif char == b'\x1a': # cntr + z
-                pass    
-            elif last_char == b'\x00':
-                if char == b'I': # page up
-                    print("PageUP")
-                    pass
-                elif char == b'Q': # page Down
-                    print("PageDown")
-                    pass
-                elif char == b'H': #arrow up
-                    pass
-                elif char == b'P': #arrow down
-                    pass
-                elif char == b'M': #arrow right
-                    pass
-                elif char == b'K': #arrow left
-                    pass
-                elif char == b'S': #Delete
-                    pass
-                elif char == b's': #cntr + arrow left
-                    pass
-                elif char == b't': #cntr + arrow right
-                    pass
-                elif char == b'G': #Home
-                    pass
-                elif char == b'O': #End
-                    pass
-                elif char == b'>': #F2
-                    pass
-                else:
-                    pass
-            elif char == b'\x08': #Back Space
+            elif key_handle=='backspace': #Back Space char in [ b'\x08','\x08'] or 
                 lenght=len(self.line_user_input)
                 self.line_user_input=self.line_user_input[:lenght-1]
                 lenght=len(self.line_user_input)
+                if not self.verbose:
+                    sys.stdout.write("\b ")
+                    sys.stdout.flush()
+                    sys.stdout.write("\b")
             else: 
                 pos=pos+1
-                if char and char not in [b'\x00',b'\x01',b'\x02',b'\x03',b'\x08',b'\x05',b'\x06',b'\x07',b'\x08']:
+                if char and not self.is_special_character(last_char,char):
                     try:
                         self.line_user_input=self.line_user_input+'{}'.format(char.decode())
+                        if not self.verbose:
+                            sys.stdout.write('{}'.format(char.decode()))
                     except:
+                        self.line_user_input=self.line_user_input+'{}'.format(char)
+                        if not self.verbose:
+                            sys.stdout.write('{}'.format(char))
                         pass
-
-            print(self.line_user_input)        
+                    if not self.verbose:
+                        sys.stdout.flush()
+            if self.verbose:        
+                print(self.line_user_input)        
             self.line_autocompleted=self.line_user_input    
             last_char=char
             
             
 if __name__ == "__main__":
-    input_path = AutocompletePathFile('return string (ENTER), Autofill path/file (TAB), Cancel (ESC) Paste (CTRL+V)\nPlease type path: ',APP_PATH,False,True).get_input
+    AC=AutocompletePathFile('return string (ENTER), Autofill path/file (TAB), Cancel (ESC) Paste (CTRL+V)\nPlease type path: ',APP_PATH,False,verbose=False)
+    input_path = AC.get_input
     my_path = input_path()
-    print("entered", my_path)
+    print("User input:", my_path)
+    def test_handle():
+        last_char=' '
+        while True:
+            print("Map keys: press enter to exit")
+            char = getch()
+            os.system('cls' if os.name == 'nt' else 'clear')
+            key_handle=AC.handle_key(last_char,char)
+            print('Char: ',chr(ord(char)),' last->ord:',ord(last_char),' ord:',ord(char), 'keyhandle=',key_handle)
+            print(key_handle)
+            if char in [b'\r', b'\n', '\r', '\n'] or key_handle=='enter': #enter
+                return
+            last_char=char
+    test_handle()

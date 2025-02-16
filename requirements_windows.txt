@@ -1,9 +1,9 @@
 cryptography==44.0.1
-numpy==1.24.2
 pandas==1.5.3
 psutil==6.1.0
 PyInquirer==1.0.3
-prompt_toolkit==1.0.14
+PyInquirer==1.0.3
 pyperclip==1.9.0
 rich==13.9.4
 tweepy==4.15.0
+WMI==1.5.1
