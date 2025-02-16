@@ -186,70 +186,145 @@ class AutocompletePathFile:
             return '' 
         if not last_key:
             last_key=' '
-        if ord(key) == 13: # enter
-            return 'enter'
-        
-        elif ord(last_key) == 79 and ord(key) == 80: # F1
-            return 'F1'
-        elif ord(last_key) == 79 and ord(key) == 81: # F2
-            return 'F2'
-        elif ord(last_key) == 79 and ord(key) == 82: # F3
-            return 'F3'
-        elif ord(last_key) == 79 and ord(key) == 83: 
-            return 'F4'
-        # elif ord(last_key) == 53 and ord(key) == 126: 
-        #     return 'F5'
-        elif ord(last_key) == 55 and ord(key) == 126: 
-            return 'F6'
-        elif ord(last_key) == 56 and ord(key) == 126: 
-            return 'F7'
-        elif ord(last_key) == 57 and ord(key) == 126: 
-            return 'F8'
-        elif ord(last_key) == 48 and ord(key) == 126: 
-            return 'F9'
-        elif ord(last_key) == 91 and ord(key) == 65: 
-            return 'arrow'+'up'
-        elif ord(last_key) == 91 and ord(key) == 66: 
-            return 'arrow'+'down'
-        elif ord(last_key) == 91 and ord(key) == 67: 
-            return 'arrow'+'right'
-        elif ord(last_key) == 91 and ord(key) == 68: 
-            return 'arrow'+'left'
-        elif ord(last_key) == 53 and ord(key) == 65:
-            return 'cntr+'+'arrow'+'up'
-        elif ord(last_key) == 53 and ord(key) == 66:
-            return 'cntr+'+'arrow'+'down'
-        elif ord(last_key) == 53 and ord(key) == 67:
-            return 'cntr+'+'arrow'+'right'
-        elif ord(last_key) == 5391 and ord(key) == 68:
-            return 'cntr+'+'arrow'+'left'
-        elif ord(last_key) == 53 and ord(key) == 126:
-            return 'page'+'up'
-        elif ord(last_key) == 54 and ord(key) == 126:
-            return 'page'+'down'
-        elif ord(last_key) == 51 and ord(key) == 126:
-            return 'delete'
-        elif ord(last_key) == 91 and ord(key) == 70:
-            return 'end'
-        elif ord(last_key) == 91 and ord(key) == 72:
-            return 'home'
-        elif ord(last_key) == 50 and ord(key) == 126:
-            return 'insert'
-        elif ord(key) == 127:
-            return 'backspace'
-        elif ord(key) == 27: # esc
-            return 'esc'
-        elif ord(key) == 9: # tab
-            return 'tab'
-        elif ord(key) in range(1,27):
-            return 'cntr+'+chr(96+ord(key))
-        elif ord(key) in range(32,127): # printable characters
-            return key
+        if os.name == 'nt':
+            if ord(key) == 13: # enter
+                return 'enter'    
+            elif ord(last_key) == 0 and ord(key) == 59: # F1
+                return 'F1'
+            elif ord(last_key) == 0 and ord(key) == 60: # F2
+                return 'F2'
+            elif ord(last_key) == 0 and ord(key) == 61: # F3
+                return 'F3'
+            elif ord(last_key) == 0 and ord(key) == 62: 
+                return 'F4'
+            elif ord(last_key) == 0 and ord(key) == 63: 
+                return 'F5'
+            elif ord(last_key) == 0 and ord(key) == 64: 
+                return 'F6'
+            elif ord(last_key) == 0 and ord(key) == 65: 
+                return 'F7'
+            elif ord(last_key) == 0 and ord(key) == 66: 
+                return 'F8'
+            elif ord(last_key) == 0 and ord(key) == 67: 
+                return 'F9'
+            elif ord(last_key) == 0 and ord(key) == 68: 
+                return 'F10'
+            elif ord(last_key) == 224 and ord(key) == 133: 
+                return 'F11'
+            elif ord(last_key) == 224 and ord(key) == 134: 
+                return 'F12'
+            
+            elif ord(last_key) == 224 and ord(key) == 72: 
+                return 'arrow'+'up'
+            elif ord(last_key) == 224 and ord(key) == 80: 
+                return 'arrow'+'down'
+            elif ord(last_key) == 224 and ord(key) == 77: 
+                return 'arrow'+'right'
+            elif ord(last_key) == 224 and ord(key) == 75: 
+                return 'arrow'+'left'
+            elif ord(last_key) == 224 and ord(key) == 141:
+                return 'cntr+'+'arrow'+'up'
+            elif ord(last_key) == 224 and ord(key) == 145:
+                return 'cntr+'+'arrow'+'down'
+            elif ord(last_key) == 224 and ord(key) == 116:
+                return 'cntr+'+'arrow'+'right'
+            elif ord(last_key) == 224 and ord(key) == 115:
+                return 'cntr+'+'arrow'+'left'
+            elif ord(last_key) == 224 and ord(key) == 73:
+                return 'page'+'up'
+            elif ord(last_key) == 224 and ord(key) == 81:
+                return 'page'+'down'
+            elif ord(last_key) == 224 and ord(key) == 83:
+                return 'delete'
+            elif ord(last_key) == 224 and ord(key) == 79:
+                return 'end'
+            elif ord(last_key) == 224 and ord(key) == 71:
+                return 'home'
+            # elif ord(last_key) == 224 and ord(key) == 126:
+            #     return 'insert'
+            elif ord(key) == 8:
+                return 'backspace'
+            elif ord(key) == 27: # esc
+                return 'esc'
+            elif ord(key) == 9: # tab
+                return 'tab'
+            elif ord(key) in range(1,27):
+                return 'cntr+'+chr(96+ord(key))
+            elif ord(key) in range(32,127): # printable characters
+                return key.decode()
+            else:
+                try:
+                    char=chr(ord(key))
+                    return char.decode()
+                    # return chr(ord(key))
+                except:
+                    return key
+                    
         else:
-            try:
-                return chr(ord(key))
-            except:
-                return ''
+            if ord(key) == 13: # enter
+                return 'enter'
+            
+            elif ord(last_key) == 79 and ord(key) == 80: # F1
+                return 'F1'
+            elif ord(last_key) == 79 and ord(key) == 81: # F2
+                return 'F2'
+            elif ord(last_key) == 79 and ord(key) == 82: # F3
+                return 'F3'
+            elif ord(last_key) == 79 and ord(key) == 83: 
+                return 'F4'
+            # elif ord(last_key) == 53 and ord(key) == 126: 
+            #     return 'F5'
+            elif ord(last_key) == 55 and ord(key) == 126: 
+                return 'F6'
+            elif ord(last_key) == 56 and ord(key) == 126: 
+                return 'F7'
+            elif ord(last_key) == 57 and ord(key) == 126: 
+                return 'F8'
+            elif ord(last_key) == 48 and ord(key) == 126: 
+                return 'F9'
+            elif ord(last_key) == 91 and ord(key) == 65: 
+                return 'arrow'+'up'
+            elif ord(last_key) == 91 and ord(key) == 66: 
+                return 'arrow'+'down'
+            elif ord(last_key) == 91 and ord(key) == 67: 
+                return 'arrow'+'right'
+            elif ord(last_key) == 91 and ord(key) == 68: 
+                return 'arrow'+'left'
+            elif ord(last_key) == 53 and ord(key) == 65:
+                return 'cntr+'+'arrow'+'up'
+            elif ord(last_key) == 53 and ord(key) == 66:
+                return 'cntr+'+'arrow'+'down'
+            elif ord(last_key) == 53 and ord(key) == 67:
+                return 'cntr+'+'arrow'+'right'
+            elif ord(last_key) == 53 and ord(key) == 68:
+                return 'cntr+'+'arrow'+'left'
+            elif ord(last_key) == 53 and ord(key) == 126:
+                return 'page'+'up'
+            elif ord(last_key) == 54 and ord(key) == 126:
+                return 'page'+'down'
+            elif ord(last_key) == 51 and ord(key) == 126:
+                return 'delete'
+            elif ord(last_key) == 91 and ord(key) == 70:
+                return 'end'
+            elif ord(last_key) == 91 and ord(key) == 72:
+                return 'home'
+            # elif ord(last_key) == 50 and ord(key) == 126:
+            #     return 'insert'
+            elif ord(key) == 127:
+                return 'backspace'
+            elif ord(key) == 27: # esc
+                return 'esc'
+            elif ord(key) == 9: # tab
+                return 'tab'
+            elif ord(key) in range(1,27):
+                return 'cntr+'+chr(96+ord(key))
+            elif ord(key) in range(32,127): # printable characters
+                return key
+            else:
+                try:
+                    return chr(ord(key))
+                except:
+                    return ''
 
     def is_special_character(self,last_key,key)->bool:
         """Check if is a pecial character
@@ -261,6 +336,10 @@ class AutocompletePathFile:
         Returns:
             bool: _description_
         """
+        if os.name=='nt' and ord(key) in [0,224,13,8,27,9]+list(range(1,27)):
+            return True
+        # if not os.name=='nt' and ord(last_key) not in [79,54,55,56,57,48,91] and ord(key) in [79,54,55,56,57,48,91]+list(range(1,27)):
+        #     return True
         key_handle=self.handle_key(last_key,key)
         if key_handle:
             if len(key_handle)>1: # words with more than 1 character
@@ -364,7 +443,7 @@ if __name__ == "__main__":
             os.system('cls' if os.name == 'nt' else 'clear')
             key_handle=AC.handle_key(last_char,char)
             print('Char: ',chr(ord(char)),' last->ord:',ord(last_char),' ord:',ord(char), 'keyhandle=',key_handle)
-            print(key_handle)
+            print(key_handle," Special :",AC.is_special_character(last_char,char))
             if char in [b'\r', b'\n', '\r', '\n'] or key_handle=='enter': #enter
                 return
             last_char=char
