@@ -1,4 +1,9 @@
-
+#!/usr/bin/env python  # shebang for Unix-based systems
+#!pythonw        # shebang for Windows systems
+########################
+# F.garcia
+# creation: 15.02.2025
+########################
 
 class TreeNode:
     def __init__(self, name):
@@ -111,11 +116,21 @@ class TreeViewer:
         self.main_node=self._get_nodes(self.file_struct)
         self._set_treenode_levels(self.main_node)
     
-    def get_node_by_name(self,name):
+    def get_nodes_by_attribute(self,attribute:str,value)->list[TreeNode]:
+        """Returns a list of nodes which have node.attribute=value
+
+        Args:
+            attribute (str): node attibute
+            value (any): value to find
+
+        Returns:
+            list: list of TreeNode
+        """
         the_node=[]
         for node in self.all_nodes:
-            if node.name == name:
-                the_node.append(node)
+            if hasattr(node,attribute):
+                if getattr(node,attribute)==value:
+                    the_node.append(node)
         return the_node
     
     def call_style(self, node:TreeNode,level):

@@ -256,7 +256,14 @@ class FileMapper:
         # # check
         # if db.get_number_or_rows_in_table(self.mapper_reference_table):
         #     raise ValueError("No data was added to index")    
-            
+    def map_to_file_structure(self,table_name):
+        pass
+
+
+    def file_structure_to_map(self,table_name):
+        # this may not have sense since lacks information
+        pass    
+
     def map_a_path_to_db(self,table_name,path_to_map,log_print=True):
         """Maps a path in a device into a table in the database.
 
