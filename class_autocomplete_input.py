@@ -1,4 +1,13 @@
 # -*- coding: utf-8 -*-
+from PyInquirer import style_from_dict, Token, prompt
+
+style = style_from_dict({
+    Token.QuestionMark: '#E91E63 bold',
+    Token.Selected: '#673AB7 bold',
+    Token.Instruction: '',  # default
+    Token.Answer: '#2196f3 bold',
+    Token.Question: '',
+})
 
 import os
 import sys
@@ -47,7 +56,7 @@ class _GetchWindows:
 getch = _Getch()
 
 class AutocompletePathFile:
-    def __init__(self, prompt,base_path=APP_PATH,absolute_path=True,verbose=True):
+    def __init__(self, prompt,base_path=APP_PATH,absolute_path=True,verbose=True,inquire=True):
         self.prompt = prompt
         self.line_user_input=''
         self.line_autocompleted=""
@@ -56,6 +65,7 @@ class AutocompletePathFile:
         self.absolute_path=absolute_path
         self.verbose=verbose
         self.options=''
+        self.inquire=inquire
         print(self.prompt)
         
     def _get_possible_path_list(self, path)->list[str]:
@@ -128,7 +138,66 @@ class AutocompletePathFile:
             # print(f"options: {comp_list}")
         return fill_add,comp_list
 
+    def do_inquire(self,a_path_file,list_auto):
+        """Use PyInquire to get the path
 
+        Args:
+            a_path_file (str): file for path
+            list_auto (list): list of options to autofill
+
+        Returns:
+            str: Autofilled until exit.
+        """
+        comp_list=[]
+        while True:
+            fill_add2,_=self.get_commontxt_optionlist(list_auto)
+            for path in list_auto:
+                comp_list.append(path.replace(fill_add2,''))
+            fill_add,comp_list=self.get_commontxt_optionlist(comp_list)
+            # print(a_path_file,'-->>',fill_add,"=?????=",fill_add2)  
+            if fill_add == '':
+                end_path=fill_add2
+            else:
+                end_path=a_path_file+fill_add
+            choices=[]
+            ini_letters=[]
+            opt_txt=[]
+            for ccc in comp_list:
+                if ccc[:1] not in ini_letters:
+                    ini_letters.append(ccc[:1])
+            for ini_l in ini_letters:
+                the_name=''
+                for ccc in comp_list:
+                    if ccc[:1] == ini_l:
+                        if the_name =='':
+                            the_name=ccc
+                        else:    
+                            the_name=the_name+','+ccc
+                opt_txt.append(the_name)
+            for ini_l,ntxt in zip(ini_letters,opt_txt):
+
+                choices.append({    'key': f'{ini_l}',
+                                    'name': f'{ntxt}',
+                                    'value': f'{ini_l}',
+                                })
+            choices.append({        'key': ':',
+                                    'name': 'Exit',
+                                    'value': ':',
+                                })
+            questions = [   {'type': 'expand',
+                            'name': 'letter',
+                            'message': f'{end_path}',
+                            'default': 'h',
+                            'choices': choices}]    
+            answers = prompt(questions, style=style)
+
+            if answers['letter']==':':
+                return end_path
+            end_path=end_path+answers['letter']
+            list_auto=self._get_possible_path_list(a_path_file+end_path)
+            if len(list_auto)<=1 :
+                return end_path
+    
     def autocomplete_path(self,a_path_file):
         """Autocompletes the paths. If only one possibility, will autocomplete. If many possibilities, will find
 
@@ -154,6 +223,8 @@ class AutocompletePathFile:
                 end_path=f_m.fix_path_separators(end_path)   
             return end_path
         elif len(list_auto)>1:
+            if self.inquire:
+                return self.do_inquire(a_path_file,list_auto)
             comp_list=[]
             fill_add2,_=self.get_commontxt_optionlist(list_auto)
             for path in list_auto:
@@ -349,6 +420,11 @@ class AutocompletePathFile:
         
 
     def get_input(self):
+        """Get user input.
+
+        Returns:
+            str: User input
+        """
         last_char=' '
         pos=0
         lenght=0
@@ -363,10 +439,6 @@ class AutocompletePathFile:
                         sys.stdout.write("\b ")
                         sys.stdout.flush()
                         sys.stdout.write("\b")
-                    # sys.stdout.write("\b"*lenoptions)
-                    # sys.stdout.flush()
-                    # sys.stdout.write(" "*lenoptions)
-                    # sys.stdout.flush()
                     sys.stdout.write("\r")
                     sys.stdout.flush()
                     sys.stdout.write(self.line_user_input)
