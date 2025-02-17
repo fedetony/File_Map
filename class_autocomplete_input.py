@@ -1,13 +1,5 @@
 # -*- coding: utf-8 -*-
-from PyInquirer import style_from_dict, Token, prompt
-
-style = style_from_dict({
-    Token.QuestionMark: '#E91E63 bold',
-    Token.Selected: '#673AB7 bold',
-    Token.Instruction: '',  # default
-    Token.Answer: '#2196f3 bold',
-    Token.Question: '',
-})
+import inquirer
 
 import os
 import sys
@@ -56,7 +48,7 @@ class _GetchWindows:
 getch = _Getch()
 
 class AutocompletePathFile:
-    def __init__(self, prompt,base_path=APP_PATH,absolute_path=True,verbose=True,inquire=True):
+    def __init__(self, prompt,base_path=APP_PATH,absolute_path=True,verbose=True,inquire=False):
         self.prompt = prompt
         self.line_user_input=''
         self.line_autocompleted=""
@@ -66,7 +58,10 @@ class AutocompletePathFile:
         self.verbose=verbose
         self.options=''
         self.inquire=inquire
-        print(self.prompt)
+        self.limit_for_inquire=-11 # limit the list length.. else is not nice
+        self.limit_for_not_verbose=20
+        if self.prompt:
+            print(self.prompt)
         
     def _get_possible_path_list(self, path)->list[str]:
         """Use glob to find similar paths with patterns
@@ -138,7 +133,7 @@ class AutocompletePathFile:
             # print(f"options: {comp_list}")
         return fill_add,comp_list
 
-    def do_inquire(self,a_path_file,list_auto):
+    def do_inquire(self,a_path_file,list_auto,limit_count=4):
         """Use PyInquire to get the path
 
         Args:
@@ -160,43 +155,52 @@ class AutocompletePathFile:
             else:
                 end_path=a_path_file+fill_add
             choices=[]
-            ini_letters=[]
+            ini_letters=self.get_initial_letters(comp_list)
             opt_txt=[]
-            for ccc in comp_list:
-                if ccc[:1] not in ini_letters:
-                    ini_letters.append(ccc[:1])
+            opt_count=[]
             for ini_l in ini_letters:
                 the_name=''
+                count=0
                 for ccc in comp_list:
                     if ccc[:1] == ini_l:
                         if the_name =='':
                             the_name=ccc
-                        else:    
-                            the_name=the_name+','+ccc
+                        else:   
+                            if count <limit_count: 
+                                the_name=the_name+', '+ccc
+                            elif count == limit_count:
+                                the_name=the_name+', ...' 
+                        count=count+1    
+                opt_count.append(count)
                 opt_txt.append(the_name)
-            for ini_l,ntxt in zip(ini_letters,opt_txt):
+            choices.append(("-> Exit",':'))
+            for (ini_l,ntxt,count) in zip(ini_letters,opt_txt,opt_count):
+                choices.append((f"{ini_l}({count}): {ntxt}",f"{ini_l}"))
 
-                choices.append({    'key': f'{ini_l}',
-                                    'name': f'{ntxt}',
-                                    'value': f'{ini_l}',
-                                })
-            choices.append({        'key': ':',
-                                    'name': 'Exit',
-                                    'value': ':',
-                                })
-            questions = [   {'type': 'expand',
-                            'name': 'letter',
-                            'message': f'{end_path}',
-                            'default': 'h',
-                            'choices': choices}]    
-            answers = prompt(questions, style=style)
-
+            questions = [
+                        inquirer.List(
+                            "letter",
+                            message=f"Options for {end_path}",
+                            choices=choices,
+                            carousel=False,
+                        )]
+            # os.system('cls' if os.name == 'nt' else 'clear')
+            answers = inquirer.prompt(questions)
             if answers['letter']==':':
                 return end_path
-            end_path=end_path+answers['letter']
-            list_auto=self._get_possible_path_list(a_path_file+end_path)
-            if len(list_auto)<=1 :
-                return end_path
+            for (ini_l,ntxt,count) in zip(ini_letters,opt_txt,opt_count):
+                if answers['letter']==ini_l and count != 1:
+                    end_path=end_path+answers['letter']
+                    return end_path
+                    print("Here---->",a_path_file,end_path)
+                    list_auto=self._get_possible_path_list(end_path)
+                    break
+                elif answers['letter']==ini_l and count == 1:
+                    end_path=end_path+ntxt
+                    return end_path
+            
+            
+            
     
     def autocomplete_path(self,a_path_file):
         """Autocompletes the paths. If only one possibility, will autocomplete. If many possibilities, will find
@@ -223,7 +227,7 @@ class AutocompletePathFile:
                 end_path=f_m.fix_path_separators(end_path)   
             return end_path
         elif len(list_auto)>1:
-            if self.inquire:
+            if self.inquire and len(list_auto)<self.limit_for_inquire or self.inquire and self.limit_for_inquire<0:
                 return self.do_inquire(a_path_file,list_auto)
             comp_list=[]
             fill_add2,_=self.get_commontxt_optionlist(list_auto)
@@ -232,17 +236,42 @@ class AutocompletePathFile:
             fill_add,comp_list=self.get_commontxt_optionlist(comp_list)
             # print(a_path_file,'-->>',fill_add,"=?????=",fill_add2)  
             if fill_add == '':
-                end_path=fill_add2
+                if len(fill_add2)<len(a_path_file):
+                    end_path=a_path_file
+                else:
+                    end_path=fill_add2
             else:
                 end_path=a_path_file+fill_add
             if self.verbose:
-                self.options=f"Options: {end_path}+{comp_list}"
-                print(self.options)
+                self.options=f"[{len(comp_list)}] Options: {end_path}+{comp_list}"
+                self.options=self.cut_string_to_size(self.options,333)
+                
             else:
-                self.options=f"+{comp_list}"
+                if len(comp_list)<self.limit_for_not_verbose:
+                    self.options=f"[{len(comp_list)}options]+{comp_list}"#-->{fill_add}<-{fill_add2} got {a_path_file}"
+                else:
+                    self.options=f"[{len(comp_list)} options starting with {self.get_initial_letters(comp_list)}]"#-->{fill_add}<-{fill_add2} got {a_path_file}"
+                self.options=self.cut_string_to_size(self.options,333)
             return end_path
         return a_path_file
     
+    @staticmethod
+    def get_initial_letters(comp_list):
+        ini_letters=[]    
+        for ccc in comp_list:
+            if ccc[:1] not in ini_letters:
+                ini_letters.append(ccc[:1])
+        return ini_letters
+
+    @staticmethod
+    def cut_string_to_size(txt:str,size:int)->str:
+        if len(txt)>size:
+            aaa=int(size/2)-3
+            bbb=int(size/2)-1
+            sss=txt[:aaa]+' ... '+txt[-bbb:]
+            return sss
+        return txt
+
     def handle_key(self,last_key,key)->str:
         """Maps a key to a string for special characters ater getch
             Some characters map with a sequence.
@@ -463,10 +492,11 @@ class AutocompletePathFile:
                     if lenoptions>0:
                         sys.stdout.write(self.options)
                         sys.stdout.flush()
-                    
+                last_char=' '    
                 char = None 
             elif  key_handle=='esc': # esc char in [ b'\x1b','\x1b'] or
                 print(key_handle)
+                last_char=' '
                 return None
             elif key_handle=='cntr+c': # cntr + c char in [ b'\x03','\x03'] or 
                 print(key_handle)
@@ -482,6 +512,7 @@ class AutocompletePathFile:
                     sys.stdout.write("\b ")
                     sys.stdout.flush()
                     sys.stdout.write("\b")
+                last_char=' '
             else: 
                 pos=pos+1
                 if char and not self.is_special_character(last_char,char):

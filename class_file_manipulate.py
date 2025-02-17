@@ -379,6 +379,33 @@ class FileManipulate:
             int: value in bits
         """
         return os.path.getsize(file_path)
+    
+    @staticmethod
+    def get_size_str_formatted(file_size):
+        """
+        Returns the size of a file in bytes, MB, GB, TB, etc.
+        
+        Parameters:
+            file_path (str): The path to the file
+        
+        Returns:
+            str: A string representing the file size with units (B, KB, MB, GB, TB)
+        """
+        if not file_size:
+            return None
+        # import math
+        if not isinstance(file_size, (int, float)) or file_size < 0:
+            raise ValueError("Invalid input")
+        # Define a list of unit names and their corresponding sizes in bytes
+        units = ["bytes", "kB", "MB", "GB", "TB"]
+        sizes = [1, 1024, 1048576, 1073741824, 1099511627776]
+        for iii in range(len(units) - 1, -1, -1):
+            if file_size >= sizes[iii]:
+                # Calculate the size with this unit
+                size_with_unit = f"{file_size / sizes[iii]:.2f} {units[iii]}"
+                return size_with_unit
+        # If no suitable unit is found, display the original value
+        return f"{file_size:.2f} bytes"
 
     @staticmethod
     def extract_filename(filename: str, with_extension: bool = True) -> str:

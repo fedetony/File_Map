@@ -14,13 +14,22 @@ class TreeNode:
         self.level=None
         self.parent = None 
         self.id=None
+        self.info=None
+        self.size=None
 
 class TreeViewer:
-    def __init__(self, file_struct,filename_index=0,str_style=0):
+    def __init__(self, file_struct,indexes_dict:dict=None,str_style=0):
         self.file_struct = file_struct
         self.all_nodes=[]
+        self.filtered_nodes=[]
         self.count=0
-        self.filename_index=filename_index
+        self.filename_index=0
+        self.size_index=None
+        if indexes_dict:
+            if 'name' in indexes_dict.keys():
+                self.filename_index=indexes_dict['name']
+            if 'size' in indexes_dict.keys():
+                self.size_index=indexes_dict['size']    
         self.main_node=None
         self.str_style=str_style
         self._define_struct()
@@ -61,7 +70,7 @@ class TreeViewer:
             return True
         return False
     
-    def get_file_name(self,file_tup:tuple)->str:
+    def get_file_name_in_tuple(self,file_tup:tuple)->str:
         """Returns string when Filestructure has tuple with information
             uses filename_index to get position of filename in tuple
         Args:
@@ -74,6 +83,20 @@ class TreeViewer:
             self.count=self.count+1
             return 'file_'+str(self.count)
         return str(file_tup[self.filename_index])
+    
+    def get_file_size_in_tuple(self,file_tup:tuple)->str:
+        """Returns string when Filestructure has tuple with information
+            uses size_index to get position of filename in tuple
+        Args:
+            file_tup (tuple): tuple with file information
+
+        Returns:
+            int: file size in tuple
+        """
+
+        if len(file_tup)==0 or not self.size_index:
+            return None
+        return file_tup[self.size_index]
 
     def _get_nodes(self,fs)->TreeNode:
         """Recursive Node formation from file structure
@@ -100,11 +123,15 @@ class TreeViewer:
                     node_list.append(node)
                 elif self._is_file(a_file):
                     if isinstance(a_file,tuple):
-                        a_f=self.get_file_name(a_file)
+                        a_f=self.get_file_name_in_tuple(a_file)
+                        a_size=self.get_file_size_in_tuple(a_file)
                     else:
                         a_f=str(a_file)
                     node = TreeNode(a_f)
                     node.i_am='file'
+                    node.info=a_file # add all info to the node
+                    if a_size:
+                        node.size=a_size
                     node_list.append(node)
                     self.all_nodes.append(node)
             return node_list
@@ -115,6 +142,7 @@ class TreeViewer:
         """
         self.main_node=self._get_nodes(self.file_struct)
         self._set_treenode_levels(self.main_node)
+        self._set_treenode_sizes(self.main_node)
     
     def get_nodes_by_attribute(self,attribute:str,value)->list[TreeNode]:
         """Returns a list of nodes which have node.attribute=value
@@ -170,27 +198,39 @@ class TreeViewer:
         
         if node is None:
             return ''
+        if level==0 and not node.parent: 
+            self.filtered_nodes=[]
         # set the style
         prefix = self.call_style(node,level)  
 
         if a_filter not in ['dir','expand']:
             str_out=str_out+prefix + node.name +'\n'
+            self.filtered_nodes.append(node)
             for child in node.children:
                 str_out=self.treenode_to_string(child, str_out, level + 1,a_filter)
+                
         elif a_filter == 'dir':
             if node.i_am=='dir':    
                 str_out=str_out+prefix + node.name +'\n'
+                self.filtered_nodes.append(node)
                 for child in node.children:
                     str_out=self.treenode_to_string(child, str_out, level + 1,a_filter)
+                    
         elif a_filter == 'expand':
             if node.i_am=='dir' and node.expand:    
                 str_out=str_out+prefix + node.name +'\n'
+                self.filtered_nodes.append(node)
                 for child in node.children:
                     str_out=self.treenode_to_string(child, str_out, level + 1,a_filter)
+            elif node.i_am=='dir' and not node.expand:    
+                str_out=str_out+prefix + node.name +'\n'
+                self.filtered_nodes.append(node)
             elif node.i_am=='file':
                 str_out=str_out+prefix + node.name +'\n'
+                self.filtered_nodes.append(node)
                 for child in node.children:
                     str_out=self.treenode_to_string(child, str_out, level + 1,a_filter)
+                    
         return str_out
     
     def _set_treenode_levels(self, node:TreeNode, level=0):
@@ -200,14 +240,35 @@ class TreeViewer:
             node (TreeNode): main node
             level (int, optional): initial level value. Defaults to 0.
         """
-        node.level=level
-        if not node.id:
-            node.id=self.count
-            self.count=self.count+1
-        for child in node.children:
-            child.parent=node
-            self._set_treenode_levels(child, level + 1)
-        
+        if node:
+            node.level=level
+            if not node.id:
+                node.id=self.count
+                self.count=self.count+1
+            for child in node.children:
+                child.parent=node
+                self._set_treenode_levels(child, level + 1)
+    
+    def _set_treenode_sizes(self, node:TreeNode, level=0):
+        """Sets the level and parent in each node
+
+        Args:
+            node (TreeNode): main node
+            level (int, optional): initial level value. Defaults to 0.
+        """
+        if node and self.size_index:
+            if node.i_am=='dir':
+                size=0    
+                for child in node.children:
+                    size=size+self._set_treenode_sizes(child, level + 1)
+                node.size=size #sets size of directory as sum of directories and files inside
+                return size
+            if node.i_am=='file':
+                if node.size:
+                    return node.size 
+        return 0
+            
+            
 # Example usage
 if __name__ == "__main__":
     from class_file_manipulate import FileManipulate
