@@ -15,6 +15,42 @@ F_M=FileManipulate()
 APP_PATH=f_m.get_app_path()
 A_C=AutocompletePathFile(None,APP_PATH,False,False,False)
 
+def my_style(node:TreeNode,level)->str:
+    """Normal style"""
+    if level==0:
+        prefix = '|' * (level - 1) 
+    else:   
+        if node.i_am=='file': 
+            prefix = '|'+'  ' * (level - 1) + '├── '
+        else:
+            prefix = '|'+'  ' * (level - 1) + '└── '
+    return prefix
+
+def my_style_expand(node:TreeNode,level):
+    """Style with expansion"""
+    prefix=my_style(node,level)
+    if node.i_am=='dir': 
+        if node.expand:
+            prefix=prefix.replace(prefix[-2:],'< ')
+        else:
+            prefix=prefix.replace(prefix[-2:],'> ')
+    return prefix
+
+def my_style_size(node:TreeNode,level):
+    """Style with sizes"""
+    prefix=my_style(node,level)
+    size_str=str(F_M.get_size_str_formatted(node.size,11,False))
+    prefix=f'{size_str}\t'+ prefix
+    return prefix
+
+def my_style_expand_size(node:TreeNode,level):
+    """Style with sizes"""
+    prefix=my_style_expand(node,level)
+    size_str=str(F_M.get_size_str_formatted(node.size,11,False))
+    prefix=f'{size_str}\t'+ prefix
+    return prefix
+    
+
 class FileExplorer:
     """File explorer"""
     def __init__(self,base_path:str=None,path_options:list=None,file_structure=None):
@@ -112,19 +148,7 @@ class FileExplorer:
         elif self.file_structure and not self.is_base_valid:
             return True
         return False
-    
-    @staticmethod
-    def my_style(node:TreeNode,level):
-        if level==0:
-            prefix = '|' * (level - 1) 
-        else:   
-            if node.i_am=='file': 
-                prefix = '|'+'  ' * (level - 1) + '├── '
-            else:
-                prefix = '|'+'  ' * (level - 1) + '└── '
-            # prefix=f'{F_M.get_size_str_formatted(node.size)}'+ prefix
-        return prefix
-    
+
     def get_tree_view_string(self,a_filter=None,style=None):
         """Gets a tree viewer string with the file structure
 
@@ -150,10 +174,19 @@ class FileExplorer:
     
     def reset_t_v(self):
         """Resets treeviewer"""
+        #self.t_v.call_style=self.t_v.original_call_style
         self.t_v=None
     
-    def browse_folders(self)->TreeNode:
-        tree=self.get_tree_view_string('expand')
+    def browse_tree(self,a_filter,style=my_style)->int:
+        """Show treestring in inquire format
+
+        Args:
+            a_filter (str): filter for tree viewer
+
+        Returns:
+            int: node id in the tree
+        """
+        tree=self.get_tree_view_string(a_filter,style)
         suggestions = tree.split('\n')
         # remove last enter
         if len(suggestions)>0:
@@ -170,18 +203,42 @@ class FileExplorer:
         #print(answers)
         node=self.t_v.filtered_nodes[int(answers['path'])]
         return node.id
-        if node.i_am=='dir':
-            print('Selected',node.name,node.expand)
-            node.expand = not node.expand
-            self.browse_folders()
-        else:
-            return node
+    
+    def browse_files(self,style=my_style_expand)->TreeNode:
+        """Browser for files with expandable folders
+
+        Returns:
+            TreeNode: Selected file node
+        """
+        self.reset_t_v() # to change to new style
+        os.system('cls' if os.name == 'nt' else 'clear')
+        nodeid=self.browse_tree('expand',style)
+        selected_node=self.t_v.get_nodes_by_attribute('id',nodeid)[0]
+        #print(selected_node.id,selected_node.name,F_M.get_size_str_formatted(selected_node.size),selected_node.expand)
+        while selected_node.i_am=='dir':
+            os.system('cls' if os.name == 'nt' else 'clear')
+            if selected_node.expand==True:
+                setattr(selected_node,'expand',False)
+            else:
+                setattr(selected_node,'expand',True)
+            nodeid=self.browse_tree('expand',style)
+            selected_node=self.t_v.get_nodes_by_attribute('id',nodeid)[0]
+            #print(selected_node.id,selected_node.name,F_M.get_size_str_formatted(selected_node.size),selected_node.expand)
+        return selected_node
+    
+    def browse_folders(self,style=my_style)->TreeNode:
+        """Browses through folders (Does not show files)
+
+        Returns:
+            TreeNode: Selected folder node
+        """
+        self.reset_t_v()
+        os.system('cls' if os.name == 'nt' else 'clear')
+        nodeid=self.browse_tree('dir',style)
+        selected_node=self.t_v.get_nodes_by_attribute('id',nodeid)[0]
+        #print(selected_node.id,selected_node.name,F_M.get_size_str_formatted(selected_node.size),selected_node.expand)
+        return selected_node
         
-
-
-
-
-
 
 # Example usage
 if __name__ == "__main__":
@@ -191,34 +248,18 @@ if __name__ == "__main__":
     # print(F_E.file_structure)
     # tree=F_E.get_tree_view_string('dir')
     # print(tree)
-     
-    nodeid=F_E.browse_folders()
-    selecte_node=F_E.t_v.get_nodes_by_attribute('id',nodeid)[0]
-    print(selecte_node.id,selecte_node.name,F_M.get_size_str_formatted(selecte_node.size),selecte_node.expand)
-    while selecte_node.i_am=='dir':
-        if selecte_node.expand==True:
-            setattr(selecte_node,'expand',False)
-        else:
-            setattr(selecte_node,'expand',True)
-        nodeid=F_E.browse_folders()
-        selecte_node=F_E.t_v.get_nodes_by_attribute('id',nodeid)[0]
-        print(selecte_node.id,selecte_node.name,F_M.get_size_str_formatted(selecte_node.size),selecte_node.expand)
+    # selected_node=F_E.browse_folders()
+    # print('Finally selected:',selected_node.id,selected_node.name,F_M.get_size_str_formatted(selected_node.size),selected_node.expand)
+    selected_node=F_E.browse_files()
+    print('Finally selected:',selected_node.id,selected_node.name,F_M.get_size_str_formatted(selected_node.size),selected_node.expand)
 
-    # suggestions = tree.split('\n')
-    # # remove last enter
-    # if len(suggestions)>0:
-    #     suggestions.pop(len(suggestions)-1)
-    # ch=[(f"{suggestions[iii]}",f"{iii}") for iii in range(len(suggestions))]
-    # questions = [inquirer.List(
-    #             "path",
-    #             message="Browse",
-    #             choices=ch,
-    #             carousel=False,
-    #             )]
-
-    # answers = inquirer.prompt(questions)
-    # print(answers)
-    # print(F_E.t_v.filtered_nodes[int(answers['path'])].name)
+    selected_node=F_E.browse_folders()
+    print('Finally selected:',selected_node.id,selected_node.name,F_M.get_size_str_formatted(selected_node.size),selected_node.expand)
+    
+    selected_node=F_E.browse_folders(my_style_size)
+    print('Finally selected:',selected_node.id,selected_node.name,F_M.get_size_str_formatted(selected_node.size),selected_node.expand)
+    print(selected_node.to_dict())
+    
 
 
     # # Test tab autocomplete

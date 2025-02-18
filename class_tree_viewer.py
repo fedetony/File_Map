@@ -16,6 +16,28 @@ class TreeNode:
         self.id=None
         self.info=None
         self.size=None
+    
+    def to_dict(self)->dict:
+        """Convert node to dictionary. Only attributes not starting with '__'
+
+        Returns:
+            dict: Node as dictionary
+        """
+        me_dict={}
+        for key in dir(self):
+            if not key.startswith('__') and not key in ["to_dict"]:
+                att=getattr(self,key)
+                if  key not in ['parent','children']:
+                    me_dict.update({key:att}) 
+                else:
+                    if key == 'parent':
+                        me_dict.update({key:getattr(att,'id')})
+                    elif key == 'children':
+                        att_list=[]
+                        for child in att:
+                           att_list.append(getattr(child,'id')) 
+                        me_dict.update({key:att_list})
+        return me_dict
 
 class TreeViewer:
     def __init__(self, file_struct,indexes_dict:dict=None,str_style=0):
@@ -161,7 +183,12 @@ class TreeViewer:
                     the_node.append(node)
         return the_node
     
-    def call_style(self, node:TreeNode,level):
+    def call_style(self,node:TreeNode,level):
+        """Function to be overwritten"""
+        self._call_style(node,level)
+
+    def _call_style(self, node:TreeNode,level):
+        """Inner style"""
         if self.str_style==0:
             if level==0:
                 prefix = '  ' * (level - 1) 
@@ -182,7 +209,15 @@ class TreeViewer:
             prefix=''
         return prefix
 
-    
+    def expand_all_treenodes(self,expand=True):
+        """Expands or contract all nodes.
+
+        Args:
+            expand (bool, optional): Expand if True otherwise contract. Defaults to True.
+        """
+        for node in self.all_nodes:
+            node.expand=expand
+
     def treenode_to_string(self, node:TreeNode, str_out='', level=0, a_filter=None)->str:
         """Generates a string with a Tree structure.
 
@@ -197,6 +232,8 @@ class TreeViewer:
         """
         
         if node is None:
+            return ''
+        if not node.name:
             return ''
         if level==0 and not node.parent: 
             self.filtered_nodes=[]
@@ -218,12 +255,12 @@ class TreeViewer:
                     
         elif a_filter == 'expand':
             if node.i_am=='dir' and node.expand:    
-                str_out=str_out+prefix + node.name +'\n'
+                str_out=str_out+prefix + node.name +'\n'#' <─\n'
                 self.filtered_nodes.append(node)
                 for child in node.children:
                     str_out=self.treenode_to_string(child, str_out, level + 1,a_filter)
             elif node.i_am=='dir' and not node.expand:    
-                str_out=str_out+prefix + node.name +'\n'
+                str_out=str_out+prefix + node.name +'\n'#' ─>\n'
                 self.filtered_nodes.append(node)
             elif node.i_am=='file':
                 str_out=str_out+prefix + node.name +'\n'

@@ -381,7 +381,18 @@ class FileManipulate:
         return os.path.getsize(file_path)
     
     @staticmethod
-    def get_size_str_formatted(file_size):
+    def get_string_justified(a_str,is_left,size):
+        """Returns a string of size adding spaces to the left or right. If str size is bigger, returns the string"""
+        l_str=len(a_str)
+        if l_str>=size:
+            return a_str
+        elif is_left and l_str<size:
+            return a_str+''.join(' ' for _ in range(size-l_str+1))	
+        elif not is_left and l_str<size:
+            return ''.join(' ' for _ in range(size-l_str+1))+a_str
+
+    
+    def get_size_str_formatted(self,file_size,o_size=11,is_left_justified=False):
         """
         Returns the size of a file in bytes, MB, GB, TB, etc.
         
@@ -389,23 +400,23 @@ class FileManipulate:
             file_path (str): The path to the file
         
         Returns:
-            str: A string representing the file size with units (B, KB, MB, GB, TB)
+            str: A string representing the file size with units (By, KB, MB, GB, TB)
         """
         if not file_size:
-            return None
+            return self.get_string_justified(str(None),is_left_justified,o_size)
         # import math
         if not isinstance(file_size, (int, float)) or file_size < 0:
             raise ValueError("Invalid input")
         # Define a list of unit names and their corresponding sizes in bytes
-        units = ["bytes", "kB", "MB", "GB", "TB"]
+        units = ["By", "kB", "MB", "GB", "TB"]
         sizes = [1, 1024, 1048576, 1073741824, 1099511627776]
         for iii in range(len(units) - 1, -1, -1):
             if file_size >= sizes[iii]:
                 # Calculate the size with this unit
                 size_with_unit = f"{file_size / sizes[iii]:.2f} {units[iii]}"
-                return size_with_unit
+                return self.get_string_justified(size_with_unit,is_left_justified,o_size)
         # If no suitable unit is found, display the original value
-        return f"{file_size:.2f} bytes"
+        return self.get_string_justified(f"{file_size:.2f} By",is_left_justified,o_size)
 
     @staticmethod
     def extract_filename(filename: str, with_extension: bool = True) -> str:
