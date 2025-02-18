@@ -31,11 +31,17 @@ class TreeNode:
                     me_dict.update({key:att}) 
                 else:
                     if key == 'parent':
-                        me_dict.update({key:getattr(att,'id')})
+                        if isinstance(att,TreeNode):
+                            me_dict.update({key:getattr(att,'id')})
+                        else:
+                            me_dict.update({key:None})
                     elif key == 'children':
                         att_list=[]
                         for child in att:
-                           att_list.append(getattr(child,'id')) 
+                            if isinstance(child,TreeNode):
+                                att_list.append(getattr(child,'id')) 
+                            else:
+                                att_list.append(None)
                         me_dict.update({key:att_list})
         return me_dict
 
@@ -157,6 +163,7 @@ class TreeViewer:
                     node_list.append(node)
                     self.all_nodes.append(node)
             return node_list
+        raise ValueError(f'{type(fs)} is not a valid type for file structure!')
         return None
 
     def _define_struct(self):
@@ -230,40 +237,41 @@ class TreeViewer:
         Returns:
             str: File tree string 
         """
-        
+        if not str_out:
+            str_out=''
         if node is None:
-            return ''
+            return str_out
         if not node.name:
-            return ''
+            return str_out
         if level==0 and not node.parent: 
             self.filtered_nodes=[]
         # set the style
         prefix = self.call_style(node,level)  
 
         if a_filter not in ['dir','expand']:
-            str_out=str_out+prefix + node.name +'\n'
+            str_out=str_out+prefix + str(node.name) +'\n'
             self.filtered_nodes.append(node)
             for child in node.children:
                 str_out=self.treenode_to_string(child, str_out, level + 1,a_filter)
                 
         elif a_filter == 'dir':
             if node.i_am=='dir':    
-                str_out=str_out+prefix + node.name +'\n'
+                str_out=str_out+prefix + str(node.name) +'\n'
                 self.filtered_nodes.append(node)
                 for child in node.children:
                     str_out=self.treenode_to_string(child, str_out, level + 1,a_filter)
                     
         elif a_filter == 'expand':
             if node.i_am=='dir' and node.expand:    
-                str_out=str_out+prefix + node.name +'\n'#' <─\n'
+                str_out=str_out+prefix + str(node.name) +'\n'#' <─\n'
                 self.filtered_nodes.append(node)
                 for child in node.children:
-                    str_out=self.treenode_to_string(child, str_out, level + 1,a_filter)
+                    str_out=str(self.treenode_to_string(child, str_out, level + 1,a_filter))
             elif node.i_am=='dir' and not node.expand:    
-                str_out=str_out+prefix + node.name +'\n'#' ─>\n'
+                str_out=str_out+prefix + str(node.name) +'\n'#' ─>\n'
                 self.filtered_nodes.append(node)
             elif node.i_am=='file':
-                str_out=str_out+prefix + node.name +'\n'
+                str_out=str_out+prefix + str(node.name) +'\n'
                 self.filtered_nodes.append(node)
                 for child in node.children:
                     str_out=self.treenode_to_string(child, str_out, level + 1,a_filter)
@@ -314,7 +322,11 @@ if __name__ == "__main__":
         return (F_M.extract_filename(src_item),F_M.get_file_size(src_item))
         return ('f',F_M.get_file_size(src_item))
     fs=F_M.get_file_structure_from_active_path('D:\\temp','test',{},full_path=False,fcn_call=get_file_info)
-    T_V=TreeViewer(fs)
+    T_V=TreeViewer(fs,indexes_dict={'name':0,'size':1})
+    print(T_V.count)
+    print(T_V._is_dir(fs))
+    print(T_V.main_node.to_dict())
+    T_V.call_style=T_V._call_style #need to set an style before calling
     tree=T_V.treenode_to_string(T_V.main_node,a_filter='dir')
     print(tree)
     print('*'*50)
@@ -329,4 +341,9 @@ if __name__ == "__main__":
     
     T_V.call_style=my_style
     tree=T_V.treenode_to_string(T_V.main_node,a_filter=None)
+    print(tree)
+
+    T_V.str_style=1
+    T_V.call_style=T_V._call_style #need to set an style before calling
+    tree=T_V.treenode_to_string(T_V.main_node,a_filter='dir')
     print(tree)
