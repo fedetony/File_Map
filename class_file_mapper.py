@@ -10,7 +10,7 @@ from class_sqlite_database import SQLiteDatabase
 from class_file_manipulate import FileManipulate
 from class_device_monitor import DeviceMonitor
 from class_database_result import DBResult
-
+from rich.progress import Progress
 
 class FileMapper:
     def __init__(self,db_filepath,key_filepath,password):
@@ -589,6 +589,16 @@ class FileMapper:
         return node_dict    
 
     def find_duplicates(self,tablename):
+        """Returs a list of tuple with the dictionaries of file information of each repeated file.
+        Duplicates are the files in the same folder,with different file names but with the same md5 sum.
+
+        Args:
+            tablename (str): table in database
+
+        Returns:
+            list: list of tuples, each dictionary in the tuple contains the duplicate files
+            [({Dupfileinfo1},{Dupfileinfo2}..{DupfileinfoN}), ...({DupfileinfoX1},{DupfileinfoX2}..{DupfileinfoXN})]
+        """
         repeated_dict=self.get_repeated_files(self.db,tablename)
         dbresult_list=self.get_dbresult_list([self.db],[tablename])
         a_key=None #key_list[3]

@@ -4,12 +4,10 @@ from __future__ import print_function, unicode_literals
 
 import os
 import sys
-import re
 import argparse
 import getpass
 from datetime import datetime
 from rich import print
-import hashlib
 
 from class_sqlite_database import SQLiteDatabase
 from class_file_manipulate import FileManipulate
@@ -17,6 +15,7 @@ from class_device_monitor import DeviceMonitor
 from class_file_mapper import FileMapper
 from class_autocomplete_input import AutocompletePathFile
 from class_data_manage import DataManage
+from class_file_explorer import FileExplorer
 
 
 FILE_MAP_LOGO=""">>=========================================<<
@@ -37,20 +36,7 @@ MENU_HEADER=""">>================FILE MAP=================<<
 __version__="v.1.1.333 beta"
 
 
-
-
-from pprint import pprint
-from PyInquirer import style_from_dict, Token, prompt
-from PyInquirer import Validator, ValidationError, Separator
-
-
-style = style_from_dict({
-    Token.QuestionMark: '#E91E63 bold',
-    Token.Selected: '#673AB7 bold',
-    Token.Instruction: '',  # default
-    Token.Answer: '#2196f3 bold',
-    Token.Question: '',
-})
+import inquirer
 
 F_M=FileManipulate()
 
@@ -169,12 +155,14 @@ def menu_activate_deactivate_databases(activate):
         active_inactive_list=[]
         for _,i_a in ia_list:
             active_inactive_list.append(i_a)
-        menu=[{'type': 'list',
-        'name': 'activate_menu',
-        'message': 'Please select: (Use arrow keys)',
-        'choices': active_inactive_list+['All','Back']
-        }]   
-        answers = prompt(menu, style=style)
+        ch=active_inactive_list+['All','Back']
+        menu = [inquirer.List(
+            'activate_menu',
+            message="Please select",
+            choices=ch,
+            carousel=False,
+            )]
+        answers = inquirer.prompt(menu)
         if answers['activate_menu']=='All':
             if activate:
                 activate_databases(None)
@@ -192,17 +180,20 @@ def menu_activate_deactivate_databases(activate):
 
 def menu_handle_databases():
     """Interactive menu handle databases"""
-    menu=[{'type': 'list',
-        'name': 'handle_db_menu',
-        'message': 'Please select: (use arrow keys)',
-        'choices': ['Create New Database File', 
-                    'Append Database File', 
-                    'Remove Database File',
-                    'Activate Database File',
-                    'Deactivate Database File',
-                    'Back']
-        }]
     msg=''
+    ch=['Create New Database File', 
+        'Append Database File', 
+        'Remove Database File',
+        'Activate Database File',
+        'Deactivate Database File',
+        'Back']
+    in_name='handle_db_menu'
+    menu = [inquirer.List(
+        in_name,
+        message="Please select",
+        choices=ch,
+        carousel=False,
+        )]
     while True:
         os.system('cls' if os.name == 'nt' else 'clear')
         print(MENU_HEADER)
@@ -210,7 +201,7 @@ def menu_handle_databases():
         if msg!='':
             print(msg)
         print("---------------------------------")
-        answers = prompt(menu, style=style)
+        answers = inquirer.prompt(menu)
         if answers['handle_db_menu']=='Create New Database File':
             msg=menu_create_new_database_file()
         elif answers['handle_db_menu']=='Append Database File': 
@@ -297,34 +288,35 @@ def menu_remove_database_file():
     """Removes a database from the file_list
     """
     if len(file_list)==0:
-        return '[magenta]No databases to remove![\magenta]'
+        return '[magenta]No databases to remove!'
     answers ={'remove_db_menu':''}
+    
     while len(file_list)>0:
-        menu=[{'type': 'list',
-        'name': 'remove_db_menu',
-        'message': 'Please select: (Use arrow keys)',
-        'choices': file_list+['Select All', 
-                    'Back']
-        },
-        {'type': 'confirm',
-        'name': 'remove_all',
-        'message': 'You want to remove all?',
-        'default': False,
-        'when': lambda answers: answers['remove_db_menu'] == 'Select All'
-        },
-        {'type': 'confirm',
-        'name': 'remove_file',
-        'message': f"You want to remove {answers['remove_db_menu']}?",
-        'default': False,
-        'when': lambda answers: answers['remove_db_menu'] in file_list
-        }
-        ]
+        
+        menu = [inquirer.List(
+            'remove_db_menu',
+            message="Please select",
+            choices=file_list+['Select All', 
+                    'Back'],
+            carousel=False,
+            ),
+            inquirer.Confirm(
+            'remove_all',
+            message="You want to remove all?",
+            ignore=lambda answers: answers['remove_db_menu'] != 'Select All'
+            ),
+            inquirer.Confirm(
+            'remove_file',
+            message=lambda answers: f"You want to remove {answers['remove_db_menu']}?",
+            ignore=lambda answers: answers['remove_db_menu'] in ['Select All','Back']
+            ),
+            ]
         os.system('cls' if os.name == 'nt' else 'clear')
         print(MENU_HEADER)
         show_databases_listed()
         print("Remove database from list:")
         print("---------------------------------")
-        answers = prompt(menu, style=style)
+        answers = inquirer.prompt(menu)
         if answers['remove_db_menu']=='Select All':
             if answers['remove_all']:
                 deactivate_databases(None)
@@ -376,6 +368,8 @@ def open_filemap(file_path):
             file_available,file_key=get_an_existing_file(path_key,".txt")
             if file_available:
                 keyfile=os.path.join(path_key,file_key) 
+    else:
+        file_available=True
     if ask_confirmation(f"Is {file_path} password protected?"):
         a_pwd=ask_password()
     if file_available:
@@ -396,13 +390,12 @@ def ask_confirmation(message:str,default:bool=False)->bool:
         bool: True if yes.
     """
     questions = [
-    {
-        'type': 'confirm',
-        'name': 'question',
-        'message': message,
-        'default': default
-    }]
-    answers = prompt(questions, style=style)
+    inquirer.Confirm(
+        "question",
+        message=message,
+        default=default
+    )]
+    answers = inquirer.prompt(questions)
     return answers['question']
 
 def menu_enter_path():
@@ -440,17 +433,24 @@ def menu_get_a_directory(allow_create_dir=False):
         a_path=F_M.extract_path(fff)
         if a_path not in path_list:
             path_list.append(a_path) 
-    menu=[{'type': 'list',
-        'name': 'dir_select',
-        'message': 'Please select: (use arrow keys)',
-        'choices': path_list+['Enter Path', 'Back']
-        }]
+    ch=path_list+['Enter Path', 'Back']
+    menu = [inquirer.List(
+        'dir_select',
+        message="Please select",
+        choices=ch,
+        carousel=False,
+        )]
+    # menu=[{'type': 'list',
+    #     'name': 'dir_select',
+    #     'message': 'Please select: (use arrow keys)',
+    #     'choices': path_list+['Enter Path', 'Back']
+    #     }]
     while True:
         os.system('cls' if os.name == 'nt' else 'clear')
         print(MENU_HEADER)
         print("Select Directory:")
         print("----------")
-        answers = prompt(menu, style=style)
+        answers = inquirer.prompt(menu)
         if answers['dir_select'] in path_list:
             return True, answers['dir_select']
         elif answers['dir_select']=='Enter Path':
@@ -492,17 +492,21 @@ def get_an_existing_file(path, extension=".db"):
     file_available=False
     file_user=None
     database_list=F_M.get_file_list(path,extension)
-    menu=[{'type': 'list',
-        'name': 'file_select',
-        'message': 'Please select: (use arrow keys)',
-        'choices': database_list+['Enter File', 'Back']
-        }]
+    ch=database_list+['Enter File', 'Back']
+    menu = [inquirer.List(
+        'file_select',
+        message="Please select",
+        choices=ch,
+        carousel=False,
+        )]
+    
     while True:
         os.system('cls' if os.name == 'nt' else 'clear')
         print(MENU_HEADER)
         print("Select File:")
         print("----------")
-        answers = prompt(menu, style=style)
+        
+        answers = inquirer.prompt(menu)
         if answers['file_select'] in database_list:
             return True, answers['file_select']
         elif answers['file_select']=='Enter File':
@@ -587,12 +591,14 @@ def menu_select_database(active):
     if len(active_inactive_list)==0:
         return f"[yellow]No {'active' if active else 'inactive'} database to select!!"
     elif len(active_inactive_list)>1:
-        menu=[{'type': 'list',
-        'name': 'db_select',
-        'message': 'Please select: (use arrow keys)',
-        'choices': active_inactive_list+['Back']
-        }]
-        answers = prompt(menu, style=style)
+        ch=active_inactive_list+['Back']
+        menu = [inquirer.List(
+            'db_select',
+            message="Please select",
+            choices=ch,
+            carousel=False,
+            )]
+        answers = inquirer.prompt(menu)
         if answers['db_select'] in active_inactive_list:
             return answers['db_select']
         elif answers['db_select']=='Back':
@@ -610,13 +616,13 @@ def validate_new_map(new_table_name,database):
         return False
     return True
 
-class MapValidator(Validator):
-    def validate(self, document):
-        for a_db in active_databases:
-            if not validate_new_map(document.text,a_db['file']):
-                raise ValidationError(
-                message=f'Map "{document.text}" already exists. Please enter a non existing map name',
-                cursor_position=len(document.text))  # Move cursor to end
+def map_validation(answers, current):
+    """Validates map
+    """
+    for a_db in active_databases:
+        if not validate_new_map(current,a_db['file']):
+            raise inquirer.errors.ValidationError("", reason=f'Map "{current}" already exists. Please enter a non existing map name')
+    return True
 
 def menu_create_new_map():
     """New map"""
@@ -627,15 +633,13 @@ def menu_create_new_map():
     answers={'table_name':''}
     selected_db=menu_select_database(True)
     if selected_db and selected_db != '':
-        menu=[{
-        'type': 'input',
-        'name': 'table_name',
-        'message': 'Enter table name',
-        'validate': MapValidator
-        },
-        ]   
-        answers = prompt(menu, style=style)
-        if answers['table_name'] not in ['',None]:
+        menu = [inquirer.Text(
+        'table_name',
+        message="(Leave blank to exit) Type the new table Name: ",
+        validate=map_validation,
+        )]
+        answers = inquirer.prompt(menu)
+        if str(answers['table_name']).strip() not in ['',None]:
             tablename=answers['table_name']
             # path_to_map="D:\Downloads"
             dir_available, path_to_map = menu_enter_path()
@@ -676,12 +680,14 @@ def delete_map():
             map_list=get_maps_in_db(selected_db)
             if len(map_list)==0:
                 return '[yellow] No maps to delete!'
-            menu=[{'type': 'list',
-            'name': 'map_delete',
-            'message': 'Please select: (use arrow keys)',
-            'choices': map_list+['Back']
-            }]
-            answers = prompt(menu, style=style)
+            ch=map_list+['Back']
+            menu = [inquirer.List(
+                'map_delete',
+                message="Please select",
+                choices=ch,
+                carousel=False,
+                )]
+            answers = inquirer.prompt(menu)
             if answers['map_delete'] == 'Back':
                 return ''
             if answers['map_delete'] not in ['',None]:
@@ -781,12 +787,14 @@ def menu_select_database_map()->tuple:
         #map_list=[]
         # for db_map_pair in db_map_pair_list:
         #     map_list.append(f'Map: {db_map_pair[1]} in DB: {db_map_pair[0]}')
-        menu=[{'type': 'list',
-        'name': 'db_map_select',
-        'message': 'Please select: (use arrow keys)',
-        'choices': map_list+['Back']
-        }]
-        answers = prompt(menu, style=style)
+        ch=map_list+['Back']
+        menu = [inquirer.List(
+            'db_map_select',
+            message="Please select",
+            choices=ch,
+            carousel=False,
+            )]
+        answers = inquirer.prompt(menu)
         if answers['db_map_select'] == 'Back':
             return None       
         elif answers['db_map_select'] in map_list:
@@ -796,7 +804,7 @@ def menu_select_database_map()->tuple:
                     return db_map_pair
     return None
 
-def process_map():
+def menu_process_map():
     os.system('cls' if os.name == 'nt' else 'clear')
     print(MENU_HEADER)
     print("Process Map:")
@@ -804,48 +812,200 @@ def process_map():
     db_map_pair=menu_select_database_map()
     if not db_map_pair:
         return ''
-    menu=[{'type': 'list',
-        'name': 'map_process',
-        'message': 'Please select: (use arrow keys)',
-        'choices': ['Print Tree','Find Duplicates','Back']
-        }]
+    
+    choices_hints = {
+    "Print Tree": "Tree",
+    "Find Duplicates": "Duplicates are files with the same md5 sum, in the same folder but with different names.",
+    "Back": "Go back"}
+    ch=list(choices_hints.keys())
+    menu = [inquirer.List(
+        'map_process',
+        message="Please select",
+        choices=ch,
+        carousel=False,
+        hints=choices_hints,
+        )]
     while True:
         print("----------")
-        answers = prompt(menu, style=style)
+        answers = inquirer.prompt(menu)
         if answers['map_process'] == 'Back':
             return ''
         elif answers['map_process'] == 'Print Tree': 
-            print(db_map_pair)
+            print('Tree') #db_map_pair)
         elif answers['map_process'] == 'Find Duplicates': 
-            duplicte_list=find_duplicates(db_map_pair[0],db_map_pair[1])
-            menu_duplicate_select(duplicte_list)
+            duplicte_list=find_duplicates_in_database(db_map_pair[0],db_map_pair[1])
+            menu_duplicates_actions(duplicte_list,db_map_pair)
+
+def menu_duplicates_actions(duplicte_list,db_map_pair):
+    """Menu for duplicate actions
+    """
+    # os.system('cls' if os.name == 'nt' else 'clear')
+    # print(MENU_HEADER)
+    print("Duplictes in Map actions:")
+    print("----------")
+    choices_hints = {
+    "Browse Duplicate Files": "",
+    "Remove Duplicates": "Duplicates are files with the same md5 sum, in the same folder but with different names.",
+    "Back": "Go back"}
+    ch=list(choices_hints.keys())
+    menu = [inquirer.List(
+        'map_actions',
+        message="Please select",
+        choices=ch,
+        carousel=False,
+        hints=choices_hints,
+        )]
+    answers = inquirer.prompt(menu)
+    if answers['map_actions'] == 'Back':
+        return ''
+    elif answers['map_actions'] == 'Browse Duplicate Files': 
+        selected_items=menu_duplicate_select(duplicte_list,'none')
+        print('Tree') 
+    elif answers['map_actions'] == 'Remove Duplicates': 
+        
+        selected_items=menu_duplicate_select(duplicte_list)
+        if isinstance(selected_items,list):
+            if len(selected_items)>0:
+                return menu_duplicate_removal_confirmation(selected_items,duplicte_list,db_map_pair)
+            else:
+                return '[magenta]No duplicates Selected'
+        else:
+            return ''
+
+def menu_duplicate_removal_confirmation(selected_items,duplicte_list,db_map_pair):
+    rem_keep_dict=get_remove_keep_dict(selected_items,duplicte_list)
+    item=0
+    while len(rem_keep_dict)>0:
+        choices_hints = {
+        "Remove 1 by 1": "No going back",
+        "Skip": "Skip removal",
+        "Remove All":"Prompt only when no files to keep!",
+        "Cancel": "Cancel"}
+        ch=list(choices_hints.keys())
+        menu = [inquirer.List(
+            'remove_type',
+            message="Please select",
+            choices=ch,
+            carousel=False,
+            hints=choices_hints,
+            )]
+        answers = inquirer.prompt(menu)
+        if answers['remove_type'] == 'Cancel':
+            return '[yellow]Removal Cancelled'
+        elif answers['remove_type'] == 'Remove 1 by 1': 
+            selected_items=menu_duplicate_select(duplicte_list,'none')
+            print('Tree') 
+        elif answers['remove_type'] == 'Remove All': 
+            for md5,rem_keep in rem_keep_dict.items():
+                rem=True
+                if len(rem_keep['keep'])==0:
+                    print('Marked for removal:...')
+                    rem= ask_confirmation(f'You aint keeping a copy of any of {len(rem_keep['all'])} files?')
+                if rem:
+                    for an_id in rem_keep['remove']:
+                        dupli_dict=get_dict_from_id_in_duplicate(an_id,duplicte_list)
+                        remove_file_from_mount_and_map(dupli_dict,db_map_pair)                    
 
 
-def menu_duplicate_select(duplicte_list):
-    choice_list=[]
+def remove_file_from_mount_and_map(dupli_dict,db_map_pair):    
+    # check mount exist
+    fm=get_file_map(db_map_pair[0])
+    mount, mount_active, mappath_exists=fm.check_if_map_device_active(fm.db,db_map_pair[1],False)
+    print("Check result:", mount, mount_active, mappath_exists)
+    # get file name and path 
+    if mount_active and mappath_exists:
+        filepath=os.path.join(mount,dupli_dict['filepath'],dupli_dict['filename'])
+        print(filepath)
+    else:
+        return 'Cant find {}'
+    # try to remove file
+    was_removed=False
+    if os.path.exists(filepath):
+        was_removed=F_M.delete_file(filepath)
+    #if was removed -> remove from db,map
+    if was_removed:
+        fm.db.delete_data_from_table(db_map_pair[1],f'id={dupli_dict['id']}')
+
+def get_dict_from_id_in_duplicate(an_id:int,duplicte_list):
+     for dup_tup in duplicte_list:
+        for dupli_dict in dup_tup:
+            if an_id == dupli_dict['id']:
+                return dupli_dict
+
+
+def get_remove_keep_dict(selected_items,duplicte_list):
+    """Makes a dictionary with the remove and keep files from selection
+    {'md5sum': {'all': [id1,... idN], 'remove': [id1], 'keep': [id2]}}
+    """
+    rem_keep_dict={}
+    for dup_tup in duplicte_list:
+        remove=[]
+        keep=[]
+        all_ids=[]
+        # add all to keep
+        for dupli_dict in dup_tup:
+            all_ids.append(dupli_dict['id'])
+        the_md5=dup_tup[0]['md5']
+        for s_item in selected_items:
+            if int(s_item) in all_ids: 
+                if int(s_item) in all_ids:
+                    remove.append(int(s_item))
+        for kkk in all_ids:
+            if kkk not in remove:
+                keep.append(kkk) 
+        rem_keep_dict.update({the_md5:{'all':all_ids,'remove':remove,'keep':keep}})
+    return rem_keep_dict    
+    
+    
+
+def menu_duplicate_select(duplicte_list,mark='exlast'):
+    """Menu to select duplicate files:
+
+    Args:
+        duplicte_list (list): list of tuples containing (mapid, dict)
+        mark (str, optional): _description_. Defaults to 'exlast'.
+    """
+    choice_hints={}
+    default_list=[]
     for dup_tup in duplicte_list:
         for iii,dupli_dict in enumerate(dup_tup):
-            if iii==0:
-                choice_list.append(Separator(f"{dupli_dict['md5']} in {dupli_dict['filepath']}"))
-                choice_list.append({
-                'name': f"{dupli_dict['filename']}",
-                'checked': True,
-                })
-            else:    
-                choice_list.append({
-                'name': f"{dupli_dict['filename']}",
-                'checked': False,
-                })
-    menu = [{
-        'type': 'checkbox',
-        'message': 'Select files',
-        'name': 'file_selection',
-        'choices': choice_list
-        }]
-    answers = prompt(menu, style=style)
-    print(answers)
+            choice_hints.update({(f"{dupli_dict['filename']}", f"{dupli_dict['id']}"): f"{dupli_dict['md5']} in {dupli_dict['filepath']}"})
+            if iii==len(dup_tup)-1 and mark=='last': # last one
+                default_list.append(f"{dupli_dict['id']}")
+            elif iii!=len(dup_tup)-1 and mark=='exlast': # except last one
+                default_list.append(f"{dupli_dict['id']}")
+            elif iii==0 and mark=='first': # last one
+                default_list.append(f"{dupli_dict['id']}")  
+            elif iii!=0 and mark=='exfirst': # last one
+                default_list.append(f"{dupli_dict['id']}")  
+
+    if len(choice_hints)>0:      
+        menu = [
+        inquirer.Checkbox(
+            "file_selection",
+            message="Select files",
+            choices=choice_hints.keys(),
+            default=default_list,
+            hints=choice_hints
+        )]
+        answers = inquirer.prompt(menu)
+        return answers['file_selection']
+    else:
+        print('[green] There are no duplicates :)')
+        return None
         
-def find_duplicates(database,a_map):
+def find_duplicates_in_database(database,a_map):
+    """Returs a list of tuple with the dictionaries of file information of each repeated file.
+        Duplicates are the files in the same folder,with different file names but with the same md5 sum.
+
+        Args:
+            database (str): database
+            tablename (str): table in database
+
+        Returns:
+            list: list of tuples, each dictionary in the tuple contains the duplicate files
+            [({Dupfileinfo1},{Dupfileinfo2}..{DupfileinfoN}), ...({DupfileinfoX1},{DupfileinfoX2}..{DupfileinfoXN})]
+    """
     fm=get_file_map(database)
     return fm.find_duplicates(a_map)
     # repeated_dict=fm.get_repeated_files(fm.db,a_map)
@@ -862,11 +1022,16 @@ def find_duplicates(database,a_map):
 
 def menu_mapping_functions():
     """Interactive menu handle databases"""
-    menu=[{'type': 'list',
-        'name': 'mapping',
-        'message': 'Please select: (use arrow keys)',
-        'choices': ['Create New Map', 'Delete Map', 'Process Map','Back']
-        }]
+    msg=''
+    ch=['Create New Map', 'Delete Map', 'Process Map','Back']
+    in_name='mapping'
+    menu = [inquirer.List(
+        in_name,
+        message="Please select",
+        choices=ch,
+        carousel=False,
+        )]
+    
     while True:
         os.system('cls' if os.name == 'nt' else 'clear')
         print(MENU_HEADER)
@@ -877,24 +1042,26 @@ def menu_mapping_functions():
             return '[magenta]There are no active databases![\magenta]'
         show_maps()
         print("---------------------------------")
-        answers = prompt(menu, style=style)
+        answers = inquirer.prompt(menu)
         if answers['mapping']=='Create New Map':
             menu_create_new_map()
         elif answers['mapping']=='Delete Map': 
             delete_map()
         elif answers['mapping']=='Process Map': 
-            process_map()
+            menu_process_map()
         elif answers['mapping']=='Back':
             return ''
 
 def main_menu():
     """Interactive menu main"""
     msg=''
-    menu=[{'type': 'rawlist',
-        'name': 'main_menu',
-        'message': 'Please select:',
-        'choices': ['Handle Databases', 'Mapping', 'Exit']
-        }]
+    ch=['Handle Databases', 'Mapping', 'Exit']
+    menu = [inquirer.List(
+        "main_menu",
+        message="Please select",
+        choices=ch,
+        carousel=False,
+        )]
     while True:
         os.system('cls' if os.name == 'nt' else 'clear')
         print(MENU_HEADER)
@@ -903,7 +1070,7 @@ def main_menu():
             msg=''
         print("Main Menu:")
         print("----------")
-        answers = prompt(menu, style=style)
+        answers = inquirer.prompt(menu)
         if answers['main_menu']=='Handle Databases':
             msg=menu_handle_databases()
         elif answers['main_menu']=='Mapping':

@@ -9,6 +9,8 @@ import glob as gb
 from datetime import datetime
 import shutil
 import psutil
+import json
+from rich.progress import Progress
 
 ALLOWED_CHARS = 'áéíóúüöäÜÖÄÁÉÍÓÚçÇabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_ -'
 
@@ -391,7 +393,72 @@ class FileManipulate:
         elif not is_left and l_str<size:
             return ''.join(' ' for _ in range(size-l_str+1))+a_str
 
+    def save_dict_to_json(self,filename,info_dict):
+        """Saves a json file returns if file was saved
+
+        Args:
+            a_filename (str, optional): file name with path.
+        """
+        #filename = os.path.join(path, fn)
+        try:
+            # python dictionary with key value pairs
+            # create json object from dictionary
+            js = json.dumps(info_dict, default=vars)
+            # open file for writing, "w"
+
+            with open(filename, "w", encoding="utf-8") as fff:
+                # write json object to file
+                fff.write(js)
+                # close file
+                fff.close()
+            return True
+        except (PermissionError, FileExistsError, FileNotFoundError) as e:
+                    print("Json File :%s was not saved", filename)
+                    print(e)
+        return False
     
+    def load_dict_to_json(self, a_filename: str ):
+        """Opens a json file and returns a dictionary
+
+        Args:
+            a_filename (str, optional): file name with path.
+        """
+        if a_filename is not None:
+            try:
+                if not os.path.exists(a_filename):
+                    raise FileNotFoundError
+                with open(a_filename, encoding="utf-8") as fff:
+                    data = fff.read()
+                # reconstructing the data as a dictionary
+                fff.close()
+                js_data = json.loads(data)
+                return js_data
+            except (PermissionError, FileExistsError, FileNotFoundError) as e:
+                print("Json File: %s can not be opened", a_filename)
+                print(e)
+        return None
+    
+    def repair_list_tuple_in_file_structure(self,file_structure:dict)->dict:
+        """ When file struct is imported from json files, load changes tuples into lists, this 
+        routine turns back to tuples the lists. 
+
+        Args:
+            file_structure (dict): file structure to repair list to tuple
+        Returns:
+            dict: Corrected file structure
+        """
+        fs=file_structure #.copy()
+        for key,value in fs.items():
+            if isinstance(value,list):
+                for pos,item in enumerate(value):
+                    if isinstance(item,list):
+                       file_structure[key][pos]=tuple(item) 
+                    elif isinstance(item,tuple):
+                        pass
+                    elif isinstance(item,dict):
+                        file_structure[key][pos]=self.repair_list_tuple_in_file_structure(item)
+        return file_structure
+
     def get_size_str_formatted(self,file_size,o_size=11,is_left_justified=False):
         """
         Returns the size of a file in bytes, MB, GB, TB, etc.
@@ -456,7 +523,7 @@ class FileManipulate:
             fpath = fpath.replace(os.sep + fn, "")
         return fpath
     
-    def get_file_structure_from_active_path(self,src_path:str,item_name:str=None,file_structure:dict=None,full_path:bool=True,fcn_call=None):
+    def get_file_structure_from_active_path(self,src_path:str,item_name:str=None,file_structure:dict=None,full_path:bool=True,fcn_call=None,show_progress=False):
         """Gets a dictionary with a structure 
         {'item_name': [{'dir1': ['file1', ..., 'fileN']}, 
                     {'dir2': [{'dir3': ['file4']},'file1']}, 
@@ -484,9 +551,30 @@ class FileManipulate:
             file_structure={}
         elif not file_structure and item_name:
             file_structure={}    
-        
+        # Search inner structure    
         path_list=[]
+        
+        num_items=0
         for item in os.listdir(src_path):
+            num_items=num_items+1
+        val=0
+        task1 = None
+        # if show_progress:
+        #     progress=Progress()
+        # else:
+        #     progress=None
+        for item in os.listdir(src_path):
+            # if val==0 and first_loop and show_progress:
+            #     print('entered-->',src_path)
+
+            #     task1 = progress.add_task(f"[green]{src_path}", total=num_items) 
+            try:    
+                # if show_progress:
+                #     # progress bar update
+                #     if not progress.finished :
+                #         print('updating-->',val)
+                #         progress.update(task1, advance=1)
+                #         val=val+1
                 src_item = os.path.join(src_path, item)
                 # If the current item is a file
                 if os.path.isfile(src_item):
@@ -494,16 +582,28 @@ class FileManipulate:
                         path_list.append(fcn_call(src_item))
                     else:
                         path_list.append(item)
-                    
+            except PermissionError as error:
+                print('File:',error)
+                # path_list.append({})     
+            try:  
                 # If the current item is a directory
-                elif os.path.isdir(src_item):
+                if os.path.isdir(src_item):
+                    print(src_item)
                     if full_path:
                         mod_item=item
                     else:    
                         extract=self.extract_parent_path(item,True) 
                         mod_item=item.replace(extract,"")
-                    inner_structure=self.get_file_structure_from_active_path(src_item,mod_item,{},full_path,fcn_call)    
+                    inner_structure=self.get_file_structure_from_active_path(src_item,mod_item,{},full_path,fcn_call, show_progress=False)    
                     path_list.append(inner_structure)
+            except PermissionError as error:
+                print('Directory:',error)
+                  
+        # # end progressbar if not finished all
+        # if val<num_items and show_progress:
+        #     while not progress.finished:
+        #         print('updating not finished-->',val)
+        #         progress.update(task1, advance=1)
         if first_loop:
             file_structure.update({src_path:path_list})
         elif item_name and not first_loop:
