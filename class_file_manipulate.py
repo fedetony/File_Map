@@ -17,7 +17,96 @@ ALLOWED_CHARS = 'áéíóúüöäÜÖÄÁÉÍÓÚçÇabcdefghijklmnopqrstuvwxyzA
 class FileManipulate:
     def __init__(self):
         self.file = None
-     
+
+    @staticmethod
+    def path_to_file_structure_dict(path:str,file_tup):
+        """Converts a path string in filepath of a map into a file structure dictionary
+
+        Args:
+            path (str): _description_
+            file_tup (any): file contents
+            
+        Returns:
+            dict: Example: path='/path1/path2/path3'
+                        file_tup='file.txt'
+            returns             
+            {'path1': [{'path2': [{'path3': ['file.txt']}]}]}
+        """
+        path_split=os.path.split(path)
+        while len(path_split)==2 and path_split[1]!='':
+            f_s={path_split[1]:[file_tup]}
+            file_tup=f_s
+            path_split=os.path.split(path_split[0])
+        return file_tup
+
+    def merge_file_structure_lists(self,list1:list,list2:list)->list:
+        """Merges two file structure lists. will not check for repeated items, will just add them.
+        If dictionaries in contents, will merge the dictionaries. 
+        Args:
+            list1 (list): list
+            list2 (list): second list
+
+        Returns:
+            list: merged list
+        """
+        num_dicts1=0
+        merged_list=[]
+        dict_list=[]
+        for item1 in list1:
+            if isinstance(item1, dict):
+                num_dicts1=num_dicts1+1
+                dict_list.append(item1)
+            else:
+                merged_list.append(item1)
+        num_dicts2=0
+        for item2 in list2:
+            if isinstance(item2, dict):
+                num_dicts2=num_dicts2+1
+                dict_list.append(item2)
+            else:
+                merged_list.append(item2)
+        if len(dict_list)==0:
+            return merged_list
+        elif len(dict_list)==1:
+            return dict_list+merged_list
+        else:
+            while len(dict_list)>0:
+                dict1=dict_list.pop(0)
+                has_merged=False
+                for iii,dict2 in enumerate(dict_list):
+                    m_d=self.merge_file_structure_dicts(dict1,dict2) # returs a list
+                    if len(m_d)==1:
+                        has_merged=True
+                        break
+                if has_merged:
+                    dict_list.pop(iii)
+                    merged_list=m_d+merged_list
+                else:
+                    merged_list=[dict1]+merged_list #self.merge_file_structure_lists(m_d,merged_list)
+        return merged_list
+
+    def merge_file_structure_dicts(self,dict1:dict, dict2:dict)->list:
+        """Merges two dictionaries when keys are shared.
+
+        Args:
+            dict1 (dict): file structure dictionary
+            dict2 (dict): second file structure dictionary
+
+        Returns:
+            list: list containing one merged dictionary or 2 different dictionaries.
+        """
+        merged_dict = {}
+        a_set=set(list(dict1.keys()) + list(dict2.keys()))
+        if len(a_set)==2:
+            return [dict1,dict2]
+        if len(a_set)==1:
+            merged_list=[]
+            for key in a_set:
+                merged_list=merged_list+self.merge_file_structure_lists(dict1[key],dict2[key])
+                merged_dict.update({key:merged_list})
+            return [merged_dict]   
+        return []
+
     def split_filepath_and_mountpoint(self,path):
         """Separates the mountpoint from the path. Works only if device is mounted.
 

@@ -15,7 +15,7 @@ from class_device_monitor import DeviceMonitor
 from class_file_mapper import FileMapper
 from class_autocomplete_input import AutocompletePathFile
 from class_data_manage import DataManage
-from class_file_explorer import FileExplorer
+from class_file_explorer import *
 
 
 FILE_MAP_LOGO=""">>=========================================<<
@@ -832,6 +832,13 @@ def menu_process_map():
             return ''
         elif answers['map_process'] == 'Print Tree': 
             print('Tree') #db_map_pair)
+            fs=None
+            fs=map_to_file_structure(db_map_pair[0],db_map_pair[1],where=None,fields_to_tab=None,sort_by=None,ascending=True)
+            if len(fs)>0:
+                f_e=FileExplorer(None,None,fs)
+                _=f_e.browse_files(my_style_expand_size)
+            else: 
+                return 'No items in Map'
         elif answers['map_process'] == 'Find Duplicates': 
             duplicte_list=find_duplicates_in_database(db_map_pair[0],db_map_pair[1])
             menu_duplicates_actions(duplicte_list,db_map_pair)
@@ -873,58 +880,60 @@ def menu_duplicates_actions(duplicte_list,db_map_pair):
             return ''
 
 def menu_duplicate_removal_confirmation(selected_items,duplicte_list,db_map_pair):
-    rem_keep_dict=get_remove_keep_dict(selected_items,duplicte_list)
-    item=0
-    while len(rem_keep_dict)>0:
-        choices_hints = {
-        "Remove 1 by 1": "No going back",
-        "Skip": "Skip removal",
-        "Remove All":"Prompt only when no files to keep!",
-        "Cancel": "Cancel"}
-        ch=list(choices_hints.keys())
-        menu = [inquirer.List(
-            'remove_type',
-            message="Please select",
-            choices=ch,
-            carousel=False,
-            hints=choices_hints,
-            )]
-        answers = inquirer.prompt(menu)
-        if answers['remove_type'] == 'Cancel':
-            return '[yellow]Removal Cancelled'
-        elif answers['remove_type'] == 'Remove 1 by 1': 
-            selected_items=menu_duplicate_select(duplicte_list,'none')
-            print('Tree') 
-        elif answers['remove_type'] == 'Remove All': 
-            for md5,rem_keep in rem_keep_dict.items():
-                rem=True
-                if len(rem_keep['keep'])==0:
-                    print('Marked for removal:...')
-                    rem= ask_confirmation(f'You aint keeping a copy of any of {len(rem_keep['all'])} files?')
-                if rem:
-                    for an_id in rem_keep['remove']:
-                        dupli_dict=get_dict_from_id_in_duplicate(an_id,duplicte_list)
-                        remove_file_from_mount_and_map(dupli_dict,db_map_pair)                    
+    pass
+    # rem_keep_dict=get_remove_keep_dict(selected_items,duplicte_list)
+    # item=0
+    # while len(rem_keep_dict)>0:
+    #     choices_hints = {
+    #     "Remove 1 by 1": "No going back",
+    #     "Skip": "Skip removal",
+    #     "Remove All":"Prompt only when no files to keep!",
+    #     "Cancel": "Cancel"}
+    #     ch=list(choices_hints.keys())
+    #     menu = [inquirer.List(
+    #         'remove_type',
+    #         message="Please select",
+    #         choices=ch,
+    #         carousel=False,
+    #         hints=choices_hints,
+    #         )]
+    #     answers = inquirer.prompt(menu)
+    #     if answers['remove_type'] == 'Cancel':
+    #         return '[yellow]Removal Cancelled'
+    #     elif answers['remove_type'] == 'Remove 1 by 1': 
+    #         selected_items=menu_duplicate_select(duplicte_list,'none')
+    #         print('Tree') 
+    #     elif answers['remove_type'] == 'Remove All': 
+    #         for md5,rem_keep in rem_keep_dict.items():
+    #             rem=True
+    #             if len(rem_keep['keep'])==0:
+    #                 print('Marked for removal:...')
+    #                 rem= ask_confirmation(f'You aint keeping a copy of any of {len(rem_keep['all'])} files?')
+    #             if rem:
+    #                 for an_id in rem_keep['remove']:
+    #                     dupli_dict=get_dict_from_id_in_duplicate(an_id,duplicte_list)
+    #                     remove_file_from_mount_and_map(dupli_dict,db_map_pair)                    
 
 
 def remove_file_from_mount_and_map(dupli_dict,db_map_pair):    
-    # check mount exist
-    fm=get_file_map(db_map_pair[0])
-    mount, mount_active, mappath_exists=fm.check_if_map_device_active(fm.db,db_map_pair[1],False)
-    print("Check result:", mount, mount_active, mappath_exists)
-    # get file name and path 
-    if mount_active and mappath_exists:
-        filepath=os.path.join(mount,dupli_dict['filepath'],dupli_dict['filename'])
-        print(filepath)
-    else:
-        return 'Cant find {}'
-    # try to remove file
-    was_removed=False
-    if os.path.exists(filepath):
-        was_removed=F_M.delete_file(filepath)
-    #if was removed -> remove from db,map
-    if was_removed:
-        fm.db.delete_data_from_table(db_map_pair[1],f'id={dupli_dict['id']}')
+    pass
+    # # check mount exist
+    # fm=get_file_map(db_map_pair[0])
+    # mount, mount_active, mappath_exists=fm.check_if_map_device_active(fm.db,db_map_pair[1],False)
+    # print("Check result:", mount, mount_active, mappath_exists)
+    # # get file name and path 
+    # if mount_active and mappath_exists:
+    #     filepath=os.path.join(mount,dupli_dict['filepath'],dupli_dict['filename'])
+    #     print(filepath)
+    # else:
+    #     return 'Cant find {}'
+    # # try to remove file
+    # was_removed=False
+    # if os.path.exists(filepath):
+    #     was_removed=F_M.delete_file(filepath)
+    # #if was removed -> remove from db,map
+    # if was_removed:
+    #     fm.db.delete_data_from_table(db_map_pair[1],f'id={dupli_dict['id']}')
 
 def get_dict_from_id_in_duplicate(an_id:int,duplicte_list):
      for dup_tup in duplicte_list:
@@ -932,6 +941,60 @@ def get_dict_from_id_in_duplicate(an_id:int,duplicte_list):
             if an_id == dupli_dict['id']:
                 return dupli_dict
 
+
+def map_to_file_structure(database,a_map,where=None,fields_to_tab:list[str]=None,sort_by:list=None,ascending:bool=True)->dict:
+    """Generates a file structure from map information
+
+    Args:
+        database (str): database
+        a_map (str): table in database
+        where (_type_, optional): sql filter for the database search. Defaults to None.
+        fields_to_tab (list[str], optional): Additional information to 'filename' and 'size' from map into file tuple. Defaults to None.
+        sort_by (list, optional): Dataframe sorting. Defaults to None.
+        ascending (bool, optional): AScending descending order for sorting. Defaults to True.
+
+    Returns:
+        dict: _description_
+    """
+    if a_map in get_maps_in_db(database):
+        fm=get_file_map(database)
+        # field list in map
+        # id=0	dt_data_created'=1	'dt_data_modified'=2	'filepath'=3	'filename'=4	'md5'=5	'size'=6	'dt_file_created'=7	'dt_file_accessed'=8	'dt_file_modified'=9
+        field_list=fm.db.get_column_list_of_table(a_map)
+        # Map info
+        # id=0	'dt_map_created'=1	'dt_map_modified'=2	'mappath'=3	'tablename'=4	'mount'=5	'serial'=6	'mapname'=7	'maptype'=8
+        map_info=get_map_info(database,a_map)
+        if len(map_info)==0:
+            return {}
+        mappath=map_info[0][3]
+        data=fm.db.get_data_from_table(a_map,'*',where)   
+        d_m1=DataManage(data,field_list)
+        default=['filename','size']
+        fields2tab=[]
+        if isinstance(fields_to_tab,list):   
+            for field in fields_to_tab:
+                if field not in default and field in field_list:
+                    fields2tab.append(field) 
+        df=d_m1.get_selected_df(fields_to_tab=fields2tab,sort_by=sort_by,ascending=ascending)
+        df=d_m1.get_selected_df(fields_to_tab=field_list,sort_by=sort_by,ascending=ascending)
+        map_list=[]
+        for iii,(filepath, filename, size) in enumerate(zip(df['filepath'], df['filename'], df['size'])):
+            #print(f"{filepath} - {filename}, Size: {size}")
+            file_tuple=(filename,size)
+            #Add more info to the tuple
+            for field in fields2tab:
+                file_tuple=file_tuple+(df[field][iii],)
+            if iii==0:
+                dict1=F_M.path_to_file_structure_dict(filepath,file_tuple)
+                map_list=[dict1]
+            elif iii==1:
+                dict2=F_M.path_to_file_structure_dict(filepath,file_tuple)
+                map_list=F_M.merge_file_structure_dicts(dict1,dict2) 
+            else:
+                dict3=F_M.path_to_file_structure_dict(filepath,file_tuple)
+                map_list=F_M.merge_file_structure_lists(map_list,[dict3])    
+        file_struct={mappath:map_list}
+        return file_struct
 
 def get_remove_keep_dict(selected_items,duplicte_list):
     """Makes a dictionary with the remove and keep files from selection

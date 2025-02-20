@@ -212,7 +212,7 @@ class SQLiteDatabase:
             list: all column names
         """
         db_cols=[]
-        description=self.db.describe_table_in_db(table)
+        description=self.describe_table_in_db(table)
         for ddd in description:
             db_cols.append(ddd[1])
         return db_cols
