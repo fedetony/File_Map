@@ -405,7 +405,7 @@ def menu_enter_path():
         tuple[bool,str]: dir_available, path_user
     """
     input_path = AutocompletePathFile('return string [cyan]ENTER[/cyan], Autofill path/file [cyan]TAB[/cyan], Cancel [cyan]ESC[/cyan]\nOr type complete directory path: ',
-                                      F_M.get_app_path(),absolute_path=False,verbose=True).get_input
+                                      F_M.get_app_path(),absolute_path=False,verbose=True,inquire=False).get_input
     path_user = input_path()
     if not path_user.endswith(os.sep):
         path_user=path_user+os.sep
@@ -532,7 +532,7 @@ def menu_create_new_database_file():
     """Create New Database File
     """
     dir_available,path_user=menu_get_a_directory(True)
-    
+    file_available=False
     if dir_available:
         file_user=input("Enter File name for new DB: ")
         file_user=F_M.clean_filename(file_user)
@@ -635,7 +635,7 @@ def menu_create_new_map():
     if selected_db and selected_db != '':
         menu = [inquirer.Text(
         'table_name',
-        message="(Leave blank to exit) Type the new table Name: ",
+        message="(Leave blank to exit) Type the new table Name",
         validate=map_validation,
         )]
         answers = inquirer.prompt(menu)
@@ -659,12 +659,17 @@ def get_maps_in_db(database):
     """
     fm=get_file_map(database)
     tables=fm.db.tables_in_db()
+    referenced_tables=fm.get_referenced_attribute('tablename')
+    # print(referenced_tables)
     maps=[]
     for ttt in tables:
         if isinstance(ttt,tuple):
             if len(ttt)>0:
                 if ttt[0] not in [fm.mapper_reference_table,'sqlite_sequence']:
                     maps.append(ttt[0])
+    for ref_map in referenced_tables:
+        if ref_map not in maps:
+            maps.append(ref_map)
     return maps
 
 def delete_map():
@@ -696,7 +701,7 @@ def delete_map():
                 fm=get_file_map(selected_db) 
                 fm.db.create_connection()
                 count=fm.db.get_number_or_rows_in_table(tablename)
-                if ask_confirmation(f"Sure to delete Map [magenta]{tablename}[\magenta] with [magenta]{count}[\magenta] elements?"):
+                if ask_confirmation(f"Sure to delete Map {tablename} with {count} elements?"):
                     fm.delete_map(tablename)
 
 def get_file_map(dbfile) -> FileMapper:
@@ -763,6 +768,49 @@ def get_map_info(database,a_map):
     fm=get_file_map(database)
     return fm.db.get_data_from_table(fm.mapper_reference_table,'*',f"tablename='{a_map}'")
 
+def menu_select_multiple_database_map()->list[tuple]:
+    """Looks in all databases listed for all maps.
+
+    Returns:
+        list[tuple]: list of selected (database,map) tuples. [] if none selected
+    """
+    db_map_pair_list=get_all_maps()
+    selected_db_map_pair_list=[]
+    if len(db_map_pair_list)>0:
+        field_list=['id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype']
+        str_db_map=''
+        # d_m1=DataManage(db_map_pair_list,["db",'Map'])
+        # str_db_map=d_m1.get_tabulated_fields(fields_to_tab=None,index=False,justify='left',header=False)
+        end_list=[]
+        for database,a_map in db_map_pair_list:
+            map_info=get_map_info(database,a_map)
+            end_list.append(map_info[0]+(database,))
+        d_m1=DataManage(end_list,field_list+["db"])
+        d_m1.df
+        str_db_map=d_m1.get_tabulated_fields(fields_to_tab=['tablename','mount','mappath'],index=False,justify='left',header=False)
+        str_list=str_db_map.split('\n')
+        map_list=str_list
+        choice_hints={}
+        default_list=[]
+        for txt_ta_m_map,db in zip(str_list,d_m1.df['db']):
+            choice_hints.update({(f"{txt_ta_m_map}", f"{txt_ta_m_map}"): f"Map in database: {db}"})
+        menu = [inquirer.Checkbox(
+            'db_map_select',
+            message="Select Maps",
+            choices=choice_hints.keys(),
+            default=default_list,
+            hints=choice_hints,
+            )]
+        answers = inquirer.prompt(menu)
+        print('got->',answers,'compare to:',map_list)
+        for answ_txt in answers['db_map_select']: 
+            if answ_txt in map_list:
+                for str_pair,db_map_pair in zip(map_list,db_map_pair_list):
+                    if str_pair == answ_txt:
+                        selected_db_map_pair_list.append(db_map_pair)
+        return selected_db_map_pair_list
+    return selected_db_map_pair_list
+
 def menu_select_database_map()->tuple:
     """Looks in all databases listed for all maps.
 
@@ -805,6 +853,7 @@ def menu_select_database_map()->tuple:
     return None
 
 def menu_process_map():
+    """Menu for processing a map"""
     os.system('cls' if os.name == 'nt' else 'clear')
     print(MENU_HEADER)
     print("Process Map:")
@@ -843,6 +892,31 @@ def menu_process_map():
             duplicte_list=find_duplicates_in_database(db_map_pair[0],db_map_pair[1])
             menu_duplicates_actions(duplicte_list,db_map_pair)
 
+def menu_search_in_maps():
+    #"Find in Map": "Input a word to be searched alon the files",
+    selected_db_map_pair_list=menu_select_multiple_database_map()
+    print('selected_db_map_pair_list-->',selected_db_map_pair_list)
+    menu = [inquirer.Text(
+        'search_text',
+        message="(Leave blank to exit) Type the text to search the maps",
+        )]
+    answers = inquirer.prompt(menu)
+    ans_txt=str(answers['search_text']).strip()
+    print(ans_txt)
+    if ans_txt not in ['',None]:
+        fs_list=[]
+        for db_map_pair in selected_db_map_pair_list:
+            where=f"filename LIKE '%{ans_txt}%'"
+            fs=map_to_file_structure(db_map_pair[0],db_map_pair[1],where=where,fields_to_tab=None,sort_by=None,ascending=True)
+            print('here',len(fs))
+            if len(fs)>0:
+                fs_list.append(fs.copy())
+                del fs
+        if len(fs_list)==0:
+            fs_list=[(f'Nothing Found for {ans_txt}',0)]
+        f_e=FileExplorer(None,None,{f'{ans_txt} search':fs_list})
+        _=f_e.browse_files(my_style_expand_size)        
+            
 def menu_duplicates_actions(duplicte_list,db_map_pair):
     """Menu for duplicate actions
     """
@@ -967,8 +1041,12 @@ def map_to_file_structure(database,a_map,where=None,fields_to_tab:list[str]=None
         if len(map_info)==0:
             return {}
         mappath=map_info[0][3]
-        data=fm.db.get_data_from_table(a_map,'*',where)   
-        d_m1=DataManage(data,field_list)
+        data=fm.db.get_data_from_table(a_map,'*',where)  
+        try:
+            d_m1=DataManage(data,field_list)
+        except ValueError:
+            # No data
+            return {}
         default=['filename','size']
         fields2tab=[]
         if isinstance(fields_to_tab,list):   
@@ -1086,7 +1164,7 @@ def find_duplicates_in_database(database,a_map):
 def menu_mapping_functions():
     """Interactive menu handle databases"""
     msg=''
-    ch=['Create New Map', 'Delete Map', 'Process Map','Back']
+    ch=['Create New Map', 'Delete Map', 'Process Map','Search in Maps','Back']
     in_name='mapping'
     menu = [inquirer.List(
         in_name,
@@ -1112,6 +1190,8 @@ def menu_mapping_functions():
             delete_map()
         elif answers['mapping']=='Process Map': 
             menu_process_map()
+        elif answers['mapping']=='Search in Maps': 
+            menu_search_in_maps()
         elif answers['mapping']=='Back':
             return ''
 

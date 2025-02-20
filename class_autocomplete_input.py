@@ -492,6 +492,8 @@ class AutocompletePathFile:
                     if lenoptions>0:
                         sys.stdout.write(self.options)
                         sys.stdout.flush()
+                else:
+                    print(self.options)
                 last_char=' '    
                 char = None 
             elif  key_handle=='esc': # esc char in [ b'\x1b','\x1b'] or
@@ -534,7 +536,7 @@ class AutocompletePathFile:
             
             
 if __name__ == "__main__":
-    AC=AutocompletePathFile('return string (ENTER), Autofill path/file (TAB), Cancel (ESC) Paste (CTRL+V)\nPlease type path: ',APP_PATH,False,verbose=False)
+    AC=AutocompletePathFile('return string (ENTER), Autofill path/file (TAB), Cancel (ESC) Paste (CTRL+V)\nPlease type path: ',APP_PATH,False,verbose=True)
     input_path = AC.get_input
     my_path = input_path()
     print("User input:", my_path)

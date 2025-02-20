@@ -256,9 +256,7 @@ class FileMapper:
         # # check
         # if db.get_number_or_rows_in_table(self.mapper_reference_table):
         #     raise ValueError("No data was added to index")    
-    def map_to_file_structure(self,table_name):
-        pass
-
+    
 
     def file_structure_to_map(self,table_name):
         # this may not have sense since lacks information
@@ -321,7 +319,7 @@ class FileMapper:
                 print(db.get_number_or_rows_in_table(table_name))
         except Exception as eee:
             print(f"Error: {eee}")
-            db.close_connection()
+            # db.close_connection()
 
     def get_repeated_files(self,db: SQLiteDatabase,table_name) -> dict[list]:
         """Gets repeated files in map
@@ -380,7 +378,7 @@ class FileMapper:
                 iii=iii+1
         except Exception as e:
             print(f"Error: {e}")
-            db.close_connection()
+            # db.close_connection()
         return repeated
 
     @staticmethod
@@ -425,6 +423,24 @@ class FileMapper:
             id_list=self.db.get_data_from_table(self.mapper_reference_table,'id',f"tablename='{table_name}'")
             if len(id_list)>0:
                 self.db.edit_value_in_table(self.mapper_reference_table,id_list[0],'mapname',name)
+
+    def get_referenced_attribute(self,attr):
+        """Returns the column of mapper_reference_table as list for the attribute
+            
+        Args:
+            attr (str): 'id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype'
+        Returns:
+            list: column in db with attribute    
+        """
+        tablename_list=[]
+        if self.db.table_exists(self.mapper_reference_table):
+            db_result=DBResult(self.db.describe_table_in_db(self.mapper_reference_table))
+            db_result.set_values(self.db.get_data_from_table(self.mapper_reference_table,'*'))
+            # 'id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype'
+            for dbr in db_result.dbr:
+                #print(getattr(dbr,attr))
+                tablename_list.append(getattr(dbr,attr))
+        return tablename_list
 
     def delete_map(self,table_name):
         """Removes a map from index and its referenced table from db.
