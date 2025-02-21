@@ -454,7 +454,8 @@ class FileMapper:
             # md5 calculate
             if the_size > 349175808 and log_print: #333*1024*1024=349175808
                 str_size=f_m.get_size_str_formatted(the_size)
-                print(f"Calculating md5 for {file}...{str_size}")
+                t_est=self.time_seconds_to_hhmmss(self.estimate_mapping_time_sec(7557.12,0.117,the_size))
+                print(f"Calculating md5 for {file}...{str_size} Estimating: {t_est}")
             the_md5=self.calculate_md5(joined_file)
             dt_data_modified=datetime.now()
             # get file dates

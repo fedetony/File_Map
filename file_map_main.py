@@ -1037,9 +1037,10 @@ def map_to_file_structure(database,a_map,where=None,fields_to_tab:list[str]=None
     if a_map in get_maps_in_db(database):
         fm=get_file_map(database)
         table_size=fm.db.get_number_or_rows_in_table(a_map)
-        if table_size > 1000:
-            print(f'[red]Map {a_map} has {table_size} items, is too big to load into memory!')
-            return {}
+        if table_size > 10000:
+            print(f'[red]Map {a_map} has {table_size} items, is too big to load into a single file structure!')
+            if not ask_confirmation("You want to continue?"):
+                return {}
         return fm.map_to_file_structure(a_map,where,fields_to_tab,sort_by,ascending)
     return {}
 
