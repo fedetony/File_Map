@@ -467,9 +467,12 @@ class FileManipulate:
             file_path (str): path and filename
 
         Returns:
-            int: value in bits
+            int: value in bits, -1 if error
         """
-        return os.path.getsize(file_path)
+        size=os.path.getsize(file_path)
+        if size:
+            return size
+        return -1
     
     @staticmethod
     def get_string_justified(a_str,is_left,size):
@@ -561,8 +564,10 @@ class FileManipulate:
         if not file_size:
             return self.get_string_justified(str(None),is_left_justified,o_size)
         # import math
-        if not isinstance(file_size, (int, float)) or file_size < 0:
+        if not isinstance(file_size, (int, float)):
             raise ValueError("Invalid input")
+        if file_size < 0:
+            return f'{file_size} ER'
         # Define a list of unit names and their corresponding sizes in bytes
         units = ["By", "kB", "MB", "GB", "TB"]
         sizes = [1, 1024, 1048576, 1073741824, 1099511627776]

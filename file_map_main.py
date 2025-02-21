@@ -611,10 +611,7 @@ def menu_select_database(active):
 def validate_new_map(new_table_name,database):
     """Check if New table name is Correct"""
     fm=get_file_map(database)
-    tables=fm.db.tables_in_db()
-    if new_table_name in tables:
-        return False
-    return True
+    return fm.validate_new_map_name(new_table_name)
 
 def map_validation(answers, current):
     """Validates map
@@ -732,8 +729,15 @@ def show_maps():
                 # print('\t(id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype)')
                 #field_list=['id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype']
                 field_list=['id','Date Time Created','Date Time Modified','Map Path','Table Name','Mount','Serial','Map Name','Map Type']
+                
                 data_manage=DataManage(table_list,field_list)
-                print(data_manage.get_tabulated_fields(fields_to_tab=[field_list[1],field_list[4],field_list[6],field_list[5],field_list[3]],index=True,justify='left'))
+                # Add Number of Rows
+                table_size=[]
+                for table in data_manage.df['Table Name']:
+                    table_size.append(fm.db.get_number_or_rows_in_table(table))
+                data_manage.df.loc[:, 'Items'] = table_size
+
+                print(data_manage.get_tabulated_fields(fields_to_tab=[field_list[1],field_list[4],field_list[6],field_list[5],field_list[3],'Items'],index=True,justify='left'))
             # for table in table_list:
             #     print(f"\t{jjj+1}. {table}")
             #     jjj=jjj+1
@@ -1028,51 +1032,16 @@ def map_to_file_structure(database,a_map,where=None,fields_to_tab:list[str]=None
         ascending (bool, optional): AScending descending order for sorting. Defaults to True.
 
     Returns:
-        dict: _description_
+        dict: file structure
     """
     if a_map in get_maps_in_db(database):
         fm=get_file_map(database)
-        # field list in map
-        # id=0	dt_data_created'=1	'dt_data_modified'=2	'filepath'=3	'filename'=4	'md5'=5	'size'=6	'dt_file_created'=7	'dt_file_accessed'=8	'dt_file_modified'=9
-        field_list=fm.db.get_column_list_of_table(a_map)
-        # Map info
-        # id=0	'dt_map_created'=1	'dt_map_modified'=2	'mappath'=3	'tablename'=4	'mount'=5	'serial'=6	'mapname'=7	'maptype'=8
-        map_info=get_map_info(database,a_map)
-        if len(map_info)==0:
+        table_size=fm.db.get_number_or_rows_in_table(a_map)
+        if table_size > 1000:
+            print(f'[red]Map {a_map} has {table_size} items, is too big to load into memory!')
             return {}
-        mappath=map_info[0][3]
-        data=fm.db.get_data_from_table(a_map,'*',where)  
-        try:
-            d_m1=DataManage(data,field_list)
-        except ValueError:
-            # No data
-            return {}
-        default=['filename','size']
-        fields2tab=[]
-        if isinstance(fields_to_tab,list):   
-            for field in fields_to_tab:
-                if field not in default and field in field_list:
-                    fields2tab.append(field) 
-        df=d_m1.get_selected_df(fields_to_tab=fields2tab,sort_by=sort_by,ascending=ascending)
-        df=d_m1.get_selected_df(fields_to_tab=field_list,sort_by=sort_by,ascending=ascending)
-        map_list=[]
-        for iii,(filepath, filename, size) in enumerate(zip(df['filepath'], df['filename'], df['size'])):
-            #print(f"{filepath} - {filename}, Size: {size}")
-            file_tuple=(filename,size)
-            #Add more info to the tuple
-            for field in fields2tab:
-                file_tuple=file_tuple+(df[field][iii],)
-            if iii==0:
-                dict1=F_M.path_to_file_structure_dict(filepath,file_tuple)
-                map_list=[dict1]
-            elif iii==1:
-                dict2=F_M.path_to_file_structure_dict(filepath,file_tuple)
-                map_list=F_M.merge_file_structure_dicts(dict1,dict2) 
-            else:
-                dict3=F_M.path_to_file_structure_dict(filepath,file_tuple)
-                map_list=F_M.merge_file_structure_lists(map_list,[dict3])    
-        file_struct={mappath:map_list}
-        return file_struct
+        return fm.map_to_file_structure(a_map,where,fields_to_tab,sort_by,ascending)
+    return {}
 
 def get_remove_keep_dict(selected_items,duplicte_list):
     """Makes a dictionary with the remove and keep files from selection

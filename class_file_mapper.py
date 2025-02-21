@@ -10,6 +10,9 @@ from class_sqlite_database import SQLiteDatabase
 from class_file_manipulate import FileManipulate
 from class_device_monitor import DeviceMonitor
 from class_database_result import DBResult
+from class_data_manage import DataManage 
+from class_autocomplete_input import getch
+from rich import print
 from rich.progress import Progress
 
 class FileMapper:
@@ -257,22 +260,79 @@ class FileMapper:
         # if db.get_number_or_rows_in_table(self.mapper_reference_table):
         #     raise ValueError("No data was added to index")    
     
+    def map_to_file_structure(self,a_map,where=None,fields_to_tab:list[str]=None,sort_by:list=None,ascending:bool=True)->dict:
+        """Generates a file structure from map information
+
+        Args:
+            database (str): database
+            a_map (str): table in database
+            where (_type_, optional): sql filter for the database search. Defaults to None.
+            fields_to_tab (list[str], optional): Additional information to 'filename' and 'size' from map into file tuple. Defaults to None.
+            sort_by (list, optional): Dataframe sorting. Defaults to None.
+            ascending (bool, optional): AScending descending order for sorting. Defaults to True.
+
+        Returns:
+            dict: filestruct of map
+        """
+        # field list in map
+        # id=0	dt_data_created'=1	'dt_data_modified'=2	'filepath'=3	'filename'=4	'md5'=5	'size'=6	'dt_file_created'=7	'dt_file_accessed'=8	'dt_file_modified'=9
+        field_list=self.db.get_column_list_of_table(a_map)
+        # Map info
+        # id=0	'dt_map_created'=1	'dt_map_modified'=2	'mappath'=3	'tablename'=4	'mount'=5	'serial'=6	'mapname'=7	'maptype'=8
+        map_info=self.db.get_data_from_table(self.mapper_reference_table,'*',f"tablename='{a_map}'")
+        if len(map_info)==0:
+            return {}
+        mappath=map_info[0][3]
+        data=self.db.get_data_from_table(a_map,'*',where)  
+        try:
+            d_m1=DataManage(data,field_list)
+        except ValueError:
+            # No data
+            return {}
+        default=['filename','size']
+        fields2tab=[]
+        if isinstance(fields_to_tab,list):   
+            for field in fields_to_tab:
+                if field not in default and field in field_list:
+                    fields2tab.append(field) 
+        df=d_m1.get_selected_df(fields_to_tab=fields2tab,sort_by=sort_by,ascending=ascending)
+        df=d_m1.get_selected_df(fields_to_tab=field_list,sort_by=sort_by,ascending=ascending)
+        map_list=[]
+        fi_ma=FileManipulate()
+        for iii,(filepath, filename, size) in enumerate(zip(df['filepath'], df['filename'], df['size'])):
+            #print(f"{filepath} - {filename}, Size: {size}")
+            file_tuple=(filename,size)
+            #Add more info to the tuple
+            for field in fields2tab:
+                file_tuple=file_tuple+(df[field][iii],)
+            if iii==0:
+                dict1=fi_ma.path_to_file_structure_dict(filepath,file_tuple)
+                map_list=[dict1]
+            elif iii==1:
+                dict2=fi_ma.path_to_file_structure_dict(filepath,file_tuple)
+                map_list=fi_ma.merge_file_structure_dicts(dict1,dict2) 
+            else:
+                dict3=fi_ma.path_to_file_structure_dict(filepath,file_tuple)
+                map_list=fi_ma.merge_file_structure_lists(map_list,[dict3])    
+        file_struct={mappath:map_list}
+        return file_struct
+
 
     def file_structure_to_map(self,table_name):
         # this may not have sense since lacks information
         pass    
 
     def map_a_path_to_db(self,table_name,path_to_map,log_print=True):
-        """Maps a path in a device into a table in the database.
+            """Maps a path in a device into a table in the database.
 
-        Args:
-            db (SQLiteDatabase): database
-            table_name (_type_): table to map the path
-            path_to_map (_type_): path to map on the device
-            log_print (bool, optional): print logs. Defaults to True.
-        """
-        db=self.db
-        try:
+            Args:
+                db (SQLiteDatabase): database
+                table_name (_type_): table to map the path
+                path_to_map (_type_): path to map on the device
+                log_print (bool, optional): print logs. Defaults to True.
+            """
+            db=self.db
+        # try:
             self.add_table_to_mapper_index(table_name,path_to_map)
             db.create_table(table_name,[('dt_data_created', 'DATETIME DEFAULT CURRENT_TIMESTAMP', True),
                                         ('dt_data_modified', 'DATETIME', True),
@@ -288,38 +348,96 @@ class FileMapper:
             iii=0
             files_processed=0
             mount, _ =self.find_mount_serial_of_path(path_to_map)
-            for dirpath, dirnames, filenames in os.walk(path_to_map):
-                dirpath_nm=self.remove_mount_from_path(mount,dirpath)
-                if files_processed==0:
-                    last_dirpath=dirpath_nm
-                
+            start_datetime=datetime.now()
+            for dirpath, _, filenames in os.walk(path_to_map):
+                # Get the data for each file
                 for file in filenames:
-                    dt_data_created=datetime.now()
-                    joined_file=os.path.join(dirpath,file)
-                    the_md5=self.calculate_md5(joined_file)
-                    the_size=FileManipulate.get_file_size(joined_file)
-                    dt_data_modified=datetime.now()
-                    dt_file_a=FileManipulate.get_accessed_date(joined_file)
-                    dt_file_c=FileManipulate.get_created_date(joined_file)
-                    dt_file_m=FileManipulate.get_modified_date(joined_file)
-                    if log_print:
-                        print(f"{files_processed} {dirpath}{os.sep}{file} [{the_md5}]\t{the_size / (1024 * 1024):.2f} MB")
-                    data.append((dt_data_created,dt_data_modified,dirpath_nm,file,the_md5,the_size,dt_file_c,dt_file_a,dt_file_m))
+                    line_data_tup=self.get_mapping_info_data_from_file(mount,dirpath,file,log_print,files_processed)
+                    data.append(line_data_tup)
                     iii=iii+1
-                    if iii>10:
+                    if iii>=10:
                         if log_print:
-                            print("+"*10)
+                            delta = (datetime.now() - start_datetime)
+                            print("+"*10+f" Time elapsed: {str(delta).split(".")[0]}"+"+"*10)
                         db.insert_data_to_table(table_name,data)
                         data=[]
                         iii=0
                     files_processed=files_processed+1
             db.insert_data_to_table(table_name,data)
             #db.print_all_rows(table_name)
+            
             if log_print:
-                print(db.get_number_or_rows_in_table(table_name))
-        except Exception as eee:
-            print(f"Error: {eee}")
-            # db.close_connection()
+                # time_elapsed = (datetime.now() - start_datetime).total_seconds()
+                delta = (datetime.now() - start_datetime)
+                print("+"*33)        
+                print(f'[green]Successfully Mapped {db.get_number_or_rows_in_table(table_name)} files in {str(delta).split(".")[0]}')
+                print("+"*33,"\nPress any Key to continue\n","+"*33)
+                getch()
+        # except Exception as eee:
+        #     print(f"[red]Error Mapping: {eee}")
+        #     print(type(eee),line_data_tup)
+        #     print("@"*100,"\nPress any Key to continue\n","@"*100)        
+        #     getch()
+        #     # db.close_connection()
+
+    def get_mapping_info_data_from_file(self,mount:str,dirpath:str,file:str,log_print:bool=False,count_print='')->tuple:
+        """gets tuple with map table info from inputs 
+
+        Args:
+            mount (str): the mount
+            dirpath (str): the path (no mount)
+            file (str): the file
+            log_print (bool, optional): If you want to print. Defaults to False.
+            count_print (int | str, optional): If you want to print the count. Defaults to ''.
+
+        Returns:
+            tuple: (dt_data_created,dt_data_modified,dirpath_nm,file,the_md5,the_size,dt_file_c,dt_file_a,dt_file_m)
+        """
+        dt_data_created,dt_data_modified,dirpath_nm,the_md5,dt_file_c,dt_file_a,dt_file_m=[None]*7
+        the_size=-1
+        f_m=FileManipulate()
+        try:
+            dirpath_nm=self.remove_mount_from_path(mount,dirpath)
+            dt_data_created=datetime.now()
+            # when joining, calculating or sizing fails hava a datetime (required in db)
+            dt_data_modified=dt_data_created
+            # join
+            joined_file=os.path.join(dirpath,file)
+            #size
+            the_size=f_m.get_file_size(joined_file)
+            # md5 calculate
+            if the_size > 349175808 and log_print: #333*1024*1024=349175808
+                str_size=f_m.get_size_str_formatted(the_size)
+                print(f"Calculating md5 for {file}...{str_size}")
+            the_md5=self.calculate_md5(joined_file)
+            dt_data_modified=datetime.now()
+            # get file dates
+            dt_file_a=f_m.get_accessed_date(joined_file)
+            dt_file_c=f_m.get_created_date(joined_file)
+            dt_file_m=f_m.get_modified_date(joined_file)
+            if log_print:
+                str_size=f_m.get_size_str_formatted(the_size,11)
+                # use () not [] because rich looks for commands inside []
+                str_just=f_m.get_string_justified(f"{count_print} ({str_size})",False,11+3+4)
+                time_elapsed = (dt_data_modified - dt_data_created).total_seconds()
+                print(f"{str_just} ({the_md5}) \t{dirpath+os.sep+file} ... ({time_elapsed:.3f}s)")
+        except (FileExistsError,PermissionError,FileNotFoundError,NotADirectoryError,TypeError) as eee:
+            print(f"{mount}{dirpath}{file} Error: {eee}")
+            if not the_md5:
+                the_md5='::UNKNOWN::'
+            if not the_size:
+                the_size=-1
+            if not dt_file_c:
+                dt_file_c=dt_data_created
+            if not dt_file_a:
+                dt_file_a=dt_data_created
+            if not dt_file_m:
+                dt_file_m=dt_data_created
+            print("@"*100,"\nPress any Key to continue\n","@"*100)        
+            getch()
+            return (dt_data_created,dt_data_modified,dirpath_nm,file,the_md5,the_size,dt_file_c,dt_file_a,dt_file_m)
+        
+        return (dt_data_created,dt_data_modified,dirpath_nm,file,the_md5,the_size,dt_file_c,dt_file_a,dt_file_m)
 
     def get_repeated_files(self,db: SQLiteDatabase,table_name) -> dict[list]:
         """Gets repeated files in map
@@ -380,6 +498,32 @@ class FileMapper:
             print(f"Error: {e}")
             # db.close_connection()
         return repeated
+    
+    def validate_new_map_name(self,new_table_name:str):
+        """Check if New table name is Correct"""
+        tables=self.db.tables_in_db()
+        if new_table_name in tables:
+            return False
+        return True
+    
+    def rename_map(self,table_name:str,new_table_name:str)->bool:
+        if table_name==new_table_name or table_name=='' or new_table_name=='':
+            return False
+        tables=self.db.tables_in_db()
+        if table_name in tables and self.validate_new_map_name(new_table_name):
+            db_result=DBResult(self.db.describe_table_in_db(self.mapper_reference_table))
+            db_result.set_values(self.db.get_data_from_table(self.mapper_reference_table,'*',f"tablename='{table_name}'"))
+            if len(db_result.dbr)>0:
+                # 'id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype'
+                an_id=getattr(db_result.dbr[0],'id')
+            else:
+                return False
+            print(f"Editing table {table_name}")
+            self.db.edit_value_in_table(self.mapper_reference_table,an_id,'dt_map_modified',datetime.now())
+            self.db.edit_value_in_table(self.mapper_reference_table,an_id,'tablename',new_table_name)
+            # Rename table
+            self.db.send_sql_command(f'ALTER TABLE {table_name} RENAME TO {new_table_name}')
+
 
     @staticmethod
     def repeated_list_show(repeated_dict:dict,key,db_list: list[SQLiteDatabase],table_name_list: list,db_cols:list=['id','filepath','filename','md5']):
