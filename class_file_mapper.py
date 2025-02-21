@@ -323,16 +323,16 @@ class FileMapper:
         pass    
 
     def map_a_path_to_db(self,table_name,path_to_map,log_print=True):
-            """Maps a path in a device into a table in the database.
+        """Maps a path in a device into a table in the database.
 
-            Args:
-                db (SQLiteDatabase): database
-                table_name (_type_): table to map the path
-                path_to_map (_type_): path to map on the device
-                log_print (bool, optional): print logs. Defaults to True.
-            """
-            db=self.db
-        # try:
+        Args:
+            db (SQLiteDatabase): database
+            table_name (_type_): table to map the path
+            path_to_map (_type_): path to map on the device
+            log_print (bool, optional): print logs. Defaults to True.
+        """
+        db=self.db
+        try:
             self.add_table_to_mapper_index(table_name,path_to_map)
             db.create_table(table_name,[('dt_data_created', 'DATETIME DEFAULT CURRENT_TIMESTAMP', True),
                                         ('dt_data_modified', 'DATETIME', True),
@@ -352,7 +352,7 @@ class FileMapper:
             for dirpath, _, filenames in os.walk(path_to_map):
                 # Get the data for each file
                 for file in filenames:
-                    line_data_tup=self.get_mapping_info_data_from_file(mount,dirpath,file,log_print,files_processed)
+                    line_data_tup=self.get_mapping_info_data_from_file(mount,dirpath,file,log_print,f'{files_processed}. ')
                     data.append(line_data_tup)
                     iii=iii+1
                     if iii>=10:
@@ -373,13 +373,59 @@ class FileMapper:
                 print(f'[green]Successfully Mapped {db.get_number_or_rows_in_table(table_name)} files in {str(delta).split(".")[0]}')
                 print("+"*33,"\nPress any Key to continue\n","+"*33)
                 getch()
-        # except Exception as eee:
-        #     print(f"[red]Error Mapping: {eee}")
-        #     print(type(eee),line_data_tup)
-        #     print("@"*100,"\nPress any Key to continue\n","@"*100)        
-        #     getch()
-        #     # db.close_connection()
+        except Exception as eee:
+            print(f"[red]Error Mapping: {eee}")
+            print(type(eee),line_data_tup)
+            print("@"*100,"\nPress any Key to continue\n","@"*100)        
+            getch()
+            # db.close_connection()
 
+    @staticmethod
+    def time_seconds_to_hhmmss(time_seconds:float)->str:
+        """Returns time in HH:MM:SS format
+        """
+        hours, remainder = divmod(time_seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        return f'{hours:.0f}:{minutes:.0f}:{seconds:.0f}'
+
+    @staticmethod
+    def estimate_mapping_time_sec(size_sample,time_sample_sec, size_to_calculate,units_sample='bytes',units_calc='bytes')->float:
+        """Estimates the time for a different size , by using a sample time proportion.
+
+        Args:
+            size_sample (int): sample size
+            time_sample_sec (float): time to process (seconds?)
+            size_to_calculate (int): size to calculate
+            units_sample (str, optional): units of sample size. Defaults to 'bytes'.
+            units_calc (str, optional): units of calc size. Defaults to 'bytes'.
+
+        Returns:
+            float: time in sample time unit
+        """
+        us=units_sample.lower()
+        uc=units_calc.lower()
+        if us not in ['bytes','by','kb','mb','tb','gb']:
+           us='bytes'
+        if uc not in ['bytes','by','kb','mb','tb','gb']:
+            uc='bytes' 
+        if size_sample<=0:
+            return 0
+        if us==uc:
+            return  int(size_to_calculate)/int(size_sample)*time_sample_sec
+        def to_bytes(us,size_sample):
+            if us in ['bytes','by']:
+                bytes_sample=int(size_sample)
+            elif us == 'kb':
+                bytes_sample=int(size_sample)*1024
+            elif us == 'mb':
+                bytes_sample=int(size_sample)*1024**2
+            elif us == 'gb':
+                bytes_sample=int(size_sample)*1024**3
+            elif us == 'tb':
+                bytes_sample=int(size_sample)*1024**4
+            return bytes_sample    
+        return to_bytes(uc,size_to_calculate)/to_bytes(us,size_sample)*time_sample_sec
+         
     def get_mapping_info_data_from_file(self,mount:str,dirpath:str,file:str,log_print:bool=False,count_print='')->tuple:
         """gets tuple with map table info from inputs 
 
@@ -418,7 +464,7 @@ class FileMapper:
             if log_print:
                 str_size=f_m.get_size_str_formatted(the_size,11)
                 # use () not [] because rich looks for commands inside []
-                str_just=f_m.get_string_justified(f"{count_print} ({str_size})",False,11+3+4)
+                str_just=f_m.get_string_justified(f"{count_print}({str_size})",False,11+3+4)
                 time_elapsed = (dt_data_modified - dt_data_created).total_seconds()
                 print(f"{str_just} ({the_md5}) \t{dirpath+os.sep+file} ... ({time_elapsed:.3f}s)")
         except (FileExistsError,PermissionError,FileNotFoundError,NotADirectoryError,TypeError) as eee:
@@ -433,8 +479,8 @@ class FileMapper:
                 dt_file_a=dt_data_created
             if not dt_file_m:
                 dt_file_m=dt_data_created
-            print("@"*100,"\nPress any Key to continue\n","@"*100)        
-            getch()
+            # print("@"*100,"\nPress any Key to continue\n","@"*100)        
+            # getch()
             return (dt_data_created,dt_data_modified,dirpath_nm,file,the_md5,the_size,dt_file_c,dt_file_a,dt_file_m)
         
         return (dt_data_created,dt_data_modified,dirpath_nm,file,the_md5,the_size,dt_file_c,dt_file_a,dt_file_m)
