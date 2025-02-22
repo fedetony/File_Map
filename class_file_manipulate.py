@@ -96,6 +96,8 @@ class FileManipulate:
             list: list containing one merged dictionary or 2 different dictionaries.
         """
         merged_dict = {}
+        if not isinstance(dict1,dict) or not isinstance(dict2,dict):
+            return []
         a_set=set(list(dict1.keys()) + list(dict2.keys()))
         if len(a_set)==2:
             return [dict1,dict2]

@@ -358,7 +358,7 @@ class FileMapper:
                     if iii>=10:
                         if log_print:
                             delta = (datetime.now() - start_datetime)
-                            print("+"*10+f" Time elapsed: {str(delta).split(".")[0]}"+"+"*10)
+                            print("+"*10+f" Time elapsed: {str(delta).split('.')[0]}"+"+"*10)
                         db.insert_data_to_table(table_name,data)
                         data=[]
                         iii=0
@@ -454,7 +454,7 @@ class FileMapper:
             # md5 calculate
             if the_size > 349175808 and log_print: #333*1024*1024=349175808
                 str_size=f_m.get_size_str_formatted(the_size)
-                t_est=self.time_seconds_to_hhmmss(self.estimate_mapping_time_sec(7557.12,0.117,the_size))
+                t_est=self.time_seconds_to_hhmmss(self.estimate_mapping_time_sec(904.29,16.08,the_size,'MB','bytes'))
                 print(f"Calculating md5 for {file}...{str_size} Estimating: {t_est}")
             the_md5=self.calculate_md5(joined_file)
             dt_data_modified=datetime.now()
@@ -570,6 +570,8 @@ class FileMapper:
             self.db.edit_value_in_table(self.mapper_reference_table,an_id,'tablename',new_table_name)
             # Rename table
             self.db.send_sql_command(f'ALTER TABLE {table_name} RENAME TO {new_table_name}')
+            return True
+        return False    
 
 
     @staticmethod

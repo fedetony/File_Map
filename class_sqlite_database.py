@@ -224,8 +224,13 @@ class SQLiteDatabase:
             list: table names
         """
         c = self.conn.cursor()
-        
-        tables=c.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        tables_tup_list=c.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        # DB Returns list of tuples
+        tables=[]
+        for a_table in tables_tup_list:
+            if isinstance(a_table,tuple):
+                if len(a_table)>0:
+                    tables.append(a_table[0])
         return tables
     
     def print_all_rows(self,table):

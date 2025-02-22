@@ -630,14 +630,8 @@ def menu_create_new_map():
     answers={'table_name':''}
     selected_db=menu_select_database(True)
     if selected_db and selected_db != '':
-        menu = [inquirer.Text(
-        'table_name',
-        message="(Leave blank to exit) Type the new table Name",
-        validate=map_validation,
-        )]
-        answers = inquirer.prompt(menu)
-        if str(answers['table_name']).strip() not in ['',None]:
-            tablename=answers['table_name']
+        tablename=menu_get_table_name_input()
+        if tablename not in ['',None]:
             # path_to_map="D:\Downloads"
             dir_available, path_to_map = menu_enter_path()
             if dir_available and path_to_map:
@@ -660,16 +654,14 @@ def get_maps_in_db(database):
     # print(referenced_tables)
     maps=[]
     for ttt in tables:
-        if isinstance(ttt,tuple):
-            if len(ttt)>0:
-                if ttt[0] not in [fm.mapper_reference_table,'sqlite_sequence']:
-                    maps.append(ttt[0])
+        if ttt not in [fm.mapper_reference_table,'sqlite_sequence']:
+            maps.append(ttt)
     for ref_map in referenced_tables:
         if ref_map not in maps:
             maps.append(ref_map)
     return maps
 
-def delete_map():
+def menu_delete_map():
     """Kill map"""
     os.system('cls' if os.name == 'nt' else 'clear')
     print(MENU_HEADER)
@@ -682,12 +674,17 @@ def delete_map():
             map_list=get_maps_in_db(selected_db)
             if len(map_list)==0:
                 return '[yellow] No maps to delete!'
-            ch=map_list+['Back']
+            ch_hints={}
+            for a_map in map_list:
+                ch_hints.update({a_map:get_map_info_text(selected_db,a_map)})
+            ch_hints.update({'Back':'Go Back'})    
+            ch=ch_hints.keys()
             menu = [inquirer.List(
                 'map_delete',
                 message="Please select",
                 choices=ch,
                 carousel=False,
+                hints=ch_hints,
                 )]
             answers = inquirer.prompt(menu)
             if answers['map_delete'] == 'Back':
@@ -701,6 +698,57 @@ def delete_map():
                 if ask_confirmation(f"Sure to delete Map {tablename} with {count} elements?"):
                     fm.delete_map(tablename)
 
+def menu_rename_map():
+    """rename map"""
+    os.system('cls' if os.name == 'nt' else 'clear')
+    print(MENU_HEADER)
+    print("Rename Map:")
+    print("----------")
+    answers={'table_name':''}
+    selected_db=menu_select_database(True)
+    if selected_db and selected_db != '':
+        while True:
+            map_list=get_maps_in_db(selected_db)
+            if len(map_list)==0:
+                return '[yellow] No maps to rename!'
+            ch_hints={}
+            for a_map in map_list:
+                ch_hints.update({(a_map,a_map):get_map_info_text(selected_db,a_map)})
+            ch_hints.update({'Back':'Go Back'})    
+            ch=ch_hints.keys()
+            menu = [inquirer.List(
+                'map_rename',
+                message="Please select",
+                choices=ch,
+                carousel=False,
+                hints=ch_hints,
+                )]
+            answers = inquirer.prompt(menu)
+            if answers['map_rename'] == 'Back':
+                return ''
+            if answers['map_rename'] not in ['',None]:
+                tablename=answers['map_rename']
+                # path_to_map="D:\Downloads"
+                new_tablename=menu_get_table_name_input()
+                if new_tablename not in ['',None]:
+                    fm=get_file_map(selected_db) 
+                    fm.db.create_connection()
+                    print(f'Renaming Map [yellow]"{tablename}"[/yellow] to [green]"{new_tablename}"')
+                    was_renamed=fm.rename_map(tablename,new_tablename)
+                    print(was_renamed)
+
+def menu_get_table_name_input():
+    tablename=''
+    menu = [inquirer.Text(
+            'table_name',
+            message="(Leave blank to exit) Type the new table Name",
+            validate=map_validation,
+            )]
+    answers = inquirer.prompt(menu)
+    if str(answers['table_name']).strip() not in ['',None]:
+        tablename=answers['table_name']
+    return tablename
+    
 def get_file_map(dbfile) -> FileMapper:
     """Returns the File Map object for database
 
@@ -715,6 +763,23 @@ def get_file_map(dbfile) -> FileMapper:
             return a_db['mapdb']
     return None
 
+def get_map_info_text(a_database,a_map):
+    """Gets a string with the Map information
+    """
+    map_info_str=''
+    fm=get_file_map(a_database)
+    if isinstance(fm,FileMapper):
+        table_list=fm.db.get_data_from_table(fm.mapper_reference_table,'*')
+        table_list_size=[]
+        for table_info in table_list:
+            #field_list=['id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype']
+            if a_map==table_info[4]:
+                table_list_size.append(table_info+(fm.db.get_number_or_rows_in_table(a_map),))
+        if len(table_list_size)>0:
+            field_list=['id','Date Time Created','Date Time Modified','Map Path','Table Name','Mount','Serial','Map Name','Map Type']+['Items']
+            data_manage=DataManage(table_list_size,field_list)
+            map_info_str=data_manage.get_tabulated_fields(fields_to_tab=[field_list[1],field_list[4],field_list[6],field_list[5],field_list[3],'Items'],header=False,index=False,justify='left')
+    return map_info_str
 
 def show_maps():
     """Prints Map information
@@ -724,23 +789,14 @@ def show_maps():
         if isinstance(fm,FileMapper):
             print(f"{iii+1}. Maps in {a_db['file']}:")
             table_list=fm.db.get_data_from_table(fm.mapper_reference_table,'*')
-            jjj=0
-            if len(table_list)>0:
-                # print('\t(id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype)')
+            table_list_size=[]
+            for table_info in table_list:
                 #field_list=['id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype']
-                field_list=['id','Date Time Created','Date Time Modified','Map Path','Table Name','Mount','Serial','Map Name','Map Type']
-                
-                data_manage=DataManage(table_list,field_list)
-                # Add Number of Rows
-                table_size=[]
-                for table in data_manage.df['Table Name']:
-                    table_size.append(fm.db.get_number_or_rows_in_table(table))
-                data_manage.df.loc[:, 'Items'] = table_size
-
+                table_list_size.append(table_info+(fm.db.get_number_or_rows_in_table(table_info[4]),))
+            if len(table_list_size)>0:
+                field_list=['id','Date Time Created','Date Time Modified','Map Path','Table Name','Mount','Serial','Map Name','Map Type']+['Items']
+                data_manage=DataManage(table_list_size,field_list)
                 print(data_manage.get_tabulated_fields(fields_to_tab=[field_list[1],field_list[4],field_list[6],field_list[5],field_list[3],'Items'],index=True,justify='left'))
-            # for table in table_list:
-            #     print(f"\t{jjj+1}. {table}")
-            #     jjj=jjj+1
 
 def get_all_maps():
     """Finds all maps in all loaded databases
@@ -822,7 +878,6 @@ def menu_select_database_map()->tuple:
         tuple: selecte database,map. None if no selected
     """
     db_map_pair_list=get_all_maps()
-    
     if len(db_map_pair_list)>0:
         field_list=['id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype']
         str_db_map=''
@@ -1134,7 +1189,7 @@ def find_duplicates_in_database(database,a_map):
 def menu_mapping_functions():
     """Interactive menu handle databases"""
     msg=''
-    ch=['Create New Map', 'Delete Map', 'Process Map','Search in Maps','Back']
+    ch=['Create New Map', 'Delete Map','Rename Map', 'Process Map','Search in Maps','Back']
     in_name='mapping'
     menu = [inquirer.List(
         in_name,
@@ -1157,8 +1212,10 @@ def menu_mapping_functions():
         if answers['mapping']=='Create New Map':
             menu_create_new_map()
         elif answers['mapping']=='Delete Map': 
-            delete_map()
-        elif answers['mapping']=='Process Map': 
+            menu_delete_map()
+        elif answers['mapping']=='Rename Map': 
+            menu_rename_map()
+        elif answers['mapping']=='Process Map':
             menu_process_map()
         elif answers['mapping']=='Search in Maps': 
             menu_search_in_maps()
