@@ -3,6 +3,7 @@
 # creation: 05.02.2025
 ########################
 import os
+import time
 from datetime import datetime
 import hashlib
 
@@ -565,12 +566,19 @@ class FileMapper:
                 an_id=getattr(db_result.dbr[0],'id')
             else:
                 return False
-            print(f"Editing table {table_name}")
-            self.db.edit_value_in_table(self.mapper_reference_table,an_id,'dt_map_modified',datetime.now())
-            self.db.edit_value_in_table(self.mapper_reference_table,an_id,'tablename',new_table_name)
+            
             # Rename table
-            self.db.send_sql_command(f'ALTER TABLE {table_name} RENAME TO {new_table_name}')
-            return True
+            self.db.send_sql_command(f"ALTER TABLE '{table_name}' RENAME TO '{new_table_name}'")
+            time.sleep(0.1)
+            if self.db.table_exists(new_table_name):
+                print(f"Editing table {table_name}")
+                self.db.edit_value_in_table(self.mapper_reference_table,an_id,'dt_map_modified',datetime.now())
+                self.db.edit_value_in_table(self.mapper_reference_table,an_id,'tablename',new_table_name)
+            old_ref=self.db.get_data_from_table(self.mapper_reference_table,'*',f"tablename='{table_name}'") 
+            new_ref=self.db.get_data_from_table(self.mapper_reference_table,'*',f"tablename='{new_table_name}'")   
+            if len(old_ref)==0 and len(new_ref)==1:
+                print(f"Reference correctly changed to {new_table_name}")
+            return self.db.table_exists(new_table_name)
         return False    
 
 
@@ -695,10 +703,20 @@ class FileMapper:
                     print(f"No data found in reference table for {table_name}")
                     return mount, mount_active, mappath_exists    
                 
-                for md in self.active_devices:
-                    if md[1] in serial:
-                        mount=md[0]
+                device_present=False
+                for a_mount,a_serial in self.active_devices:
+                    if a_serial in serial:
+                        device_present=True
+                    if mp_mount.lower() == a_mount.lower() and device_present:
+                        mount= a_mount.lower()
                         mount_active=True 
+                        break
+                if not mount:
+                    for md in self.active_devices:
+                        if md[1] in serial:
+                            mount=md[0]
+                            mount_active=True 
+                            break
                 # Check if path exists
                 if mount:
                     mappath_exists=os.path.exists(os.path.join(mount,mappath))

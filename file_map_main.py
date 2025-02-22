@@ -616,6 +616,10 @@ def validate_new_map(new_table_name,database):
 def map_validation(answers, current):
     """Validates map
     """
+    not_allowed = ' "$/'+"'|" #r'[":$\/\{\}\[\]\|\& \]'
+    for char in current:
+        if char in not_allowed:
+            raise inquirer.errors.ValidationError("", reason=f'Map name does not allow these characters "{str(not_allowed)}".') 
     for a_db in active_databases:
         if not validate_new_map(current,a_db['file']):
             raise inquirer.errors.ValidationError("", reason=f'Map "{current}" already exists. Please enter a non existing map name')
@@ -735,7 +739,13 @@ def menu_rename_map():
                     fm.db.create_connection()
                     print(f'Renaming Map [yellow]"{tablename}"[/yellow] to [green]"{new_tablename}"')
                     was_renamed=fm.rename_map(tablename,new_tablename)
-                    print(was_renamed)
+                    if was_renamed:
+                        return f'Renaming success to [green]"{new_tablename}"'
+                    print(f'Renaming Failed [red]"{tablename}"')
+                    print("-"*33)
+                    print("Press any key to continue")
+                    print("-"*33)
+                    getch()
 
 def menu_get_table_name_input():
     tablename=''
@@ -1000,9 +1010,7 @@ def menu_duplicates_actions(duplicte_list,db_map_pair):
         return ''
     elif answers['map_actions'] == 'Browse Duplicate Files': 
         selected_items=menu_duplicate_select(duplicte_list,'none')
-        print('Tree') 
     elif answers['map_actions'] == 'Remove Duplicates': 
-        
         selected_items=menu_duplicate_select(duplicte_list)
         if isinstance(selected_items,list):
             if len(selected_items)>0:
@@ -1013,53 +1021,62 @@ def menu_duplicates_actions(duplicte_list,db_map_pair):
             return ''
 
 def menu_duplicate_removal_confirmation(selected_items,duplicte_list,db_map_pair):
-    pass
-    # rem_keep_dict=get_remove_keep_dict(selected_items,duplicte_list)
-    # item=0
-    # while len(rem_keep_dict)>0:
-    #     choices_hints = {
-    #     "Remove 1 by 1": "No going back",
-    #     "Skip": "Skip removal",
-    #     "Remove All":"Prompt only when no files to keep!",
-    #     "Cancel": "Cancel"}
-    #     ch=list(choices_hints.keys())
-    #     menu = [inquirer.List(
-    #         'remove_type',
-    #         message="Please select",
-    #         choices=ch,
-    #         carousel=False,
-    #         hints=choices_hints,
-    #         )]
-    #     answers = inquirer.prompt(menu)
-    #     if answers['remove_type'] == 'Cancel':
-    #         return '[yellow]Removal Cancelled'
-    #     elif answers['remove_type'] == 'Remove 1 by 1': 
-    #         selected_items=menu_duplicate_select(duplicte_list,'none')
-    #         print('Tree') 
-    #     elif answers['remove_type'] == 'Remove All': 
-    #         for md5,rem_keep in rem_keep_dict.items():
-    #             rem=True
-    #             if len(rem_keep['keep'])==0:
-    #                 print('Marked for removal:...')
-    #                 rem= ask_confirmation(f'You aint keeping a copy of any of {len(rem_keep['all'])} files?')
-    #             if rem:
-    #                 for an_id in rem_keep['remove']:
-    #                     dupli_dict=get_dict_from_id_in_duplicate(an_id,duplicte_list)
-    #                     remove_file_from_mount_and_map(dupli_dict,db_map_pair)                    
+    """Confirms removal of selected files
 
+    Args:
+        selected_items (list): items user selected
+        duplicte_list (lis): list of dictionaries from duplicated files
+        db_map_pair (tuple): (database,map)
 
-def remove_file_from_mount_and_map(dupli_dict,db_map_pair):    
-    pass
-    # # check mount exist
-    # fm=get_file_map(db_map_pair[0])
-    # mount, mount_active, mappath_exists=fm.check_if_map_device_active(fm.db,db_map_pair[1],False)
-    # print("Check result:", mount, mount_active, mappath_exists)
-    # # get file name and path 
-    # if mount_active and mappath_exists:
-    #     filepath=os.path.join(mount,dupli_dict['filepath'],dupli_dict['filename'])
-    #     print(filepath)
-    # else:
-    #     return 'Cant find {}'
+    Returns:
+        str: message
+    """
+    rem_keep_dict=get_remove_keep_dict(selected_items,duplicte_list)
+    while len(rem_keep_dict)>0:
+        choices_hints = {
+        "Remove 1 by 1": "No going back",
+        "Skip": "Skip removal",
+        "Remove All":"Prompt only when no files to keep!",
+        "Cancel": "Cancel"}
+        ch=list(choices_hints.keys())
+        menu = [inquirer.List(
+            'remove_type',
+            message="Please select",
+            choices=ch,
+            carousel=False,
+            hints=choices_hints,
+            )]
+        answers = inquirer.prompt(menu)
+        if answers['remove_type'] == 'Cancel':
+            return '[yellow]Removal Cancelled'
+        elif answers['remove_type'] == 'Remove 1 by 1': 
+            selected_items=menu_duplicate_select(duplicte_list,'none')
+            print('Tree') 
+        elif answers['remove_type'] == 'Remove All': 
+            for md5,rem_keep in rem_keep_dict.items():
+                rem=True
+                if len(rem_keep['keep'])==0:
+                    print('Marked for removal:...')
+                    rem= ask_confirmation(f'You aint keeping a copy of any of {len(rem_keep["all"])} files?')
+                if rem:
+                    for an_id in rem_keep['remove']:
+                        dupli_dict=get_dict_from_id_in_duplicate(an_id,duplicte_list)
+                        print(remove_file_from_mount_and_map(dupli_dict,db_map_pair))                    
+        return ''
+
+def remove_file_from_mount_and_map(dupli_dict,db_map_pair):   
+    print("$"*50,'\nRemoving->',dupli_dict,' in ',db_map_pair ) 
+    
+    # check mount exist
+    fm=get_file_map(db_map_pair[0])
+    mount, mount_active, mappath_exists=fm.check_if_map_device_active(fm.db,db_map_pair[1],False)
+    print("Check result:", mount, mount_active, mappath_exists)
+    # get file name and path 
+    if mount_active and mappath_exists:
+        filepath=os.path.join(mount,dupli_dict['filepath'],dupli_dict['filename'])
+        print(filepath)
+    else:
+        return 'Cant find {}'
     # # try to remove file
     # was_removed=False
     # if os.path.exists(filepath):
@@ -1067,6 +1084,17 @@ def remove_file_from_mount_and_map(dupli_dict,db_map_pair):
     # #if was removed -> remove from db,map
     # if was_removed:
     #     fm.db.delete_data_from_table(db_map_pair[1],f'id={dupli_dict['id']}')
+    # Find in all maps with the file in the same db
+    matching_list=[]
+    for (a_db,a_map) in get_all_maps():
+        #if a_map !=db_map_pair[1]:
+            where=f"filepath='{dupli_dict['filepath']}' AND filename='{dupli_dict['filename']}' AND md5='{dupli_dict['md5']}'"
+            matches=fm.db.get_data_from_table(a_map,"*",where)
+            if len(matches)>0:
+                matching_list.append((a_db,a_map)+matches[0])
+                # print('match found',a_map,matches)
+    print('match found',matching_list)
+    return ''
 
 def get_dict_from_id_in_duplicate(an_id:int,duplicte_list):
      for dup_tup in duplicte_list:

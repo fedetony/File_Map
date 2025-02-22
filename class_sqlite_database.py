@@ -308,6 +308,7 @@ class SQLiteDatabase:
             # Update the specified column with the given value for all rows that match the condition
             c.execute(f"UPDATE {table_name} SET {column_name} = ? WHERE id = ?", (new_value, id))
             #print("Row updated successfully")
+            self.commit()
         except sqlite3.Error as eee:
             print(eee)
         finally:
