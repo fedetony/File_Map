@@ -6,6 +6,8 @@ import os
 import time
 from datetime import datetime
 import hashlib
+import threading
+import keyboard
 
 from class_sqlite_database import SQLiteDatabase
 from class_file_manipulate import FileManipulate
@@ -13,6 +15,7 @@ from class_device_monitor import DeviceMonitor
 from class_database_result import DBResult
 from class_data_manage import DataManage 
 from class_autocomplete_input import getch
+from thread_queue_calculation_stream import QueueCalcStream
 from rich import print
 from rich.progress import Progress
 
@@ -93,14 +96,15 @@ class FileMapper:
             has_password=True
         print("Started:",db,is_encrypted,has_password)
         return db,is_encrypted,has_password
-
+    
+    @staticmethod
     def calculate_time_elapsed(start_datetime,end_datetime):
         """Calculate the time elapsed between two timestamps"""
         time_elapsed = (end_datetime - start_datetime).total_seconds()
         return time_elapsed
 
     @staticmethod
-    def calculate_md5(file_path):
+    def calculate_md5(file_path,leave_to_thread=False):
         """
         Calculate the MD5 hash of a file.
         
@@ -110,6 +114,9 @@ class FileMapper:
         Returns:
             str: The MD5 sum as a hexadecimal string.
         """
+        if leave_to_thread:
+            time.sleep(0.01) # cant write to db so fast
+            return '***Calculate***'
         try:
             with open(file_path, 'rb') as f:
                 md5 = hashlib.md5()
@@ -322,8 +329,52 @@ class FileMapper:
     def file_structure_to_map(self,table_name):
         # this may not have sense since lacks information
         pass    
+    
+    def remap_map_in_thread_to_db(self,table_name,progress_bar=None,wait_for_key_press=False):
+        """Starts a thread that looks inside the table for '***Calculate***' md5.
+            Calculates the correspondant md5 and updates the value in the database.
 
-    def map_a_path_to_db(self,table_name,path_to_map,log_print=True):
+        Args:
+            table_name (str): table
+            progress_bar (object, optional):Object to use for progressbar in GUI. Defaults to None.
+        """
+        db_info={"name":self.db_path_file,"key":self.key_filepath,"pwd":self.password,"encrypt":self.is_db_encrypted}
+        mount, mount_active, mappath_exists=self.check_if_map_device_active(self.db,table_name,False)
+        if mount_active and mappath_exists:
+            kill_ev = threading.Event()
+            kill_ev.clear()
+            cycle_time=0.1
+            start_datetime=datetime.now()
+            qstream=QueueCalcStream(db_info,table_name,mount,cycle_time,kill_ev,progress_bar)
+            qstream.start()
+            try:
+                # last_txt=None
+                was_user_exit=False
+                while qstream.is_alive():        
+                    if keyboard.is_pressed('F10'):
+                        was_user_exit=True
+                        kill_ev.set()        
+                    # txt=qstream.processing_file
+                    # if txt != last_txt:
+                    #     print(txt)
+                    #     last_txt=txt
+                    time.sleep(0.5)
+            except:
+                pass
+            
+            took=self.calculate_time_elapsed(start_datetime,datetime.now())
+            
+            if was_user_exit:
+                print(f'Thread exit from user after {self.time_seconds_to_hhmmss(took)}')
+            else:
+                print(f"Thread Mapping finished after {self.time_seconds_to_hhmmss(took)}")
+            if wait_for_key_press:
+                print("+"*33)
+                print("Press any key to continue")
+                print("+"*33)
+                getch()
+            
+    def map_a_path_to_db(self,table_name,path_to_map,log_print=True,progress_bar=None):
         """Maps a path in a device into a table in the database.
 
         Args:
@@ -366,7 +417,7 @@ class FileMapper:
                     files_processed=files_processed+1
             db.insert_data_to_table(table_name,data)
             #db.print_all_rows(table_name)
-            
+            self.remap_map_in_thread_to_db(table_name,progress_bar,False)
             if log_print:
                 # time_elapsed = (datetime.now() - start_datetime).total_seconds()
                 delta = (datetime.now() - start_datetime)
@@ -379,7 +430,6 @@ class FileMapper:
             print(type(eee),line_data_tup)
             print("@"*100,"\nPress any Key to continue\n","@"*100)        
             getch()
-            # db.close_connection()
 
     @staticmethod
     def time_seconds_to_hhmmss(time_seconds:float)->str:
@@ -457,7 +507,10 @@ class FileMapper:
                 str_size=f_m.get_size_str_formatted(the_size)
                 t_est=self.time_seconds_to_hhmmss(self.estimate_mapping_time_sec(904.29,16.08,the_size,'MB','bytes'))
                 print(f"Calculating md5 for {file}...{str_size} Estimating: {t_est}")
-            the_md5=self.calculate_md5(joined_file)
+            if the_size> 50*1024*1024:   # leave to calculate with the thread 
+                the_md5=self.calculate_md5(joined_file,True)
+            else:
+                the_md5=self.calculate_md5(joined_file,False)
             dt_data_modified=datetime.now()
             # get file dates
             dt_file_a=f_m.get_accessed_date(joined_file)

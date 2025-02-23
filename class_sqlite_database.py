@@ -80,7 +80,7 @@ class SQLiteDatabase:
         if self.db_is_encrypted:
             self.decrypt_db()
         try:
-            self.conn = sqlite3.connect(self.db_path)
+            self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
             print(f"Connected to {self.db_path}")
         except sqlite3.Error as eee:
             print(f"Could not connect to {self.db_path} {eee}")

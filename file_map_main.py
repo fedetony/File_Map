@@ -872,7 +872,7 @@ def menu_select_multiple_database_map()->list[tuple]:
             hints=choice_hints,
             )]
         answers = inquirer.prompt(menu)
-        print('got->',answers,'compare to:',map_list)
+        # print('got->',answers,'compare to:',map_list)
         for answ_txt in answers['db_map_select']: 
             if answ_txt in map_list:
                 for str_pair,db_map_pair in zip(map_list,db_map_pair_list):
@@ -960,6 +960,17 @@ def menu_process_map():
         elif answers['map_process'] == 'Find Duplicates': 
             duplicte_list=find_duplicates_in_database(db_map_pair[0],db_map_pair[1])
             menu_duplicates_actions(duplicte_list,db_map_pair)
+
+def search_maps_for(selected_db_map_pair_list,column,search):
+    fs_list=[]
+    for db_map_pair in selected_db_map_pair_list:
+        where=f"filename LIKE '%{search}%'"
+        fs=map_to_file_structure(db_map_pair[0],db_map_pair[1],where=where,fields_to_tab=None,sort_by=None,ascending=True)
+        print('here',len(fs))
+        if len(fs)>0:
+            fs_list.append(fs.copy())
+            del fs
+    return fs_list
 
 def menu_search_in_maps():
     #"Find in Map": "Input a word to be searched alon the files",
