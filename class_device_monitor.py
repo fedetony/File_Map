@@ -106,16 +106,17 @@ class DeviceMonitor:
             str: Serial Number of device
         """
         # on linux generates error if you import wmi outside. Does not find the dependencies.
-        import wmi
-        try:
-            c = wmi.WMI()
-            logical_disk = c.Win32_LogicalDisk(Caption=drive_letter)[0]
-            partition = logical_disk.associators()[1]
-            physical_disc = partition.associators()[0]
-            return physical_disc.SerialNumber
-        except Exception as eee:
-            print (eee)
-            return None
+        if platform.system() == 'Windows':
+            import wmi
+            try:
+                c = wmi.WMI()
+                logical_disk = c.Win32_LogicalDisk(Caption=drive_letter)[0]
+                partition = logical_disk.associators()[1]
+                physical_disc = partition.associators()[0]
+                return physical_disc.SerialNumber
+            except Exception as eee:
+                print (eee)
+        return None
     
     def get_info_windows_device(self,drive_letter='C:'):
         """Using wmi library for windows, extract Serial Number.

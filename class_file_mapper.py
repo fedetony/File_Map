@@ -353,7 +353,7 @@ class FileMapper:
                 # last_txt=None
                 was_user_exit=False
                 while qstream.is_alive():        
-                    if keyboard.is_pressed('F10'):
+                    if keyboard.is_pressed('F12'):
                         was_user_exit=True
                         kill_ev.set()        
                     # txt=qstream.processing_file
