@@ -434,7 +434,12 @@ class FileManipulate:
         Returns:
             datetime: time stamp 
         """
-        return datetime.fromtimestamp(os.path.getmtime(file_path))
+        try:
+            dt = datetime.fromtimestamp(os.path.getmtime(file_path))
+        except (ValueError,OSError,OverflowError):
+            # datetime out of range 0== year =>10000
+            dt = dt=datetime.fromisocalendar(3333,33,3)
+        return dt
 
     @staticmethod
     def get_accessed_date(file_path):
@@ -446,7 +451,12 @@ class FileManipulate:
         Returns:
             datetime: time stamp 
         """
-        return datetime.fromtimestamp(os.path.getatime(file_path))
+        try:
+            dt = datetime.fromtimestamp(os.path.getatime(file_path))
+        except (ValueError,OSError,OverflowError):
+            # datetime out of range 0== year =>10000
+            dt = dt=datetime.fromisocalendar(3333,33,3)
+        return dt
 
     @staticmethod
     def get_created_date(file_path):
@@ -458,7 +468,12 @@ class FileManipulate:
         Returns:
             datetime: time stamp 
         """
-        return datetime.fromtimestamp(os.path.getatime(file_path))
+        try:
+            dt = datetime.fromtimestamp(os.path.getctime(file_path))
+        except (ValueError,OSError,OverflowError):
+            # datetime out of range 0== year =>10000
+            dt = dt=datetime.fromisocalendar(3333,33,3)
+        return dt
 
     @staticmethod
     def get_file_size(file_path):

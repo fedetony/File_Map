@@ -190,7 +190,7 @@ class QueueCalcStream(threading.Thread):
         count=0
         with Progress() as progress:
             if not self.pbar_stream:
-                task1 = progress.add_task(f"[blue]{self.table} [red](Press F10 to Exit)", total=100)
+                task1 = progress.add_task(f"[blue]{self.table} [red](Press F12 to Exit)", total=100)
             while not self.killer_event.wait(self.cycle_time):   
                 try:
                     if self.queue_pathfile.empty():
@@ -251,7 +251,7 @@ def main():
     try:
         last_txt=None
         while qstream.is_alive():        
-            if keyboard.is_pressed('F10'):
+            if keyboard.is_pressed('F12'):
                 kill_ev.set()        
             # txt=qstream.processing_file
             # if txt != last_txt:
