@@ -403,21 +403,30 @@ class FileMapper:
             files_processed=0
             mount, _ =self.find_mount_serial_of_path(path_to_map)
             start_datetime=datetime.now()
-            for dirpath, _, filenames in os.walk(path_to_map):
-                # Get the data for each file
-                for file in filenames:
-                    line_data_tup=self.get_mapping_info_data_from_file(mount,dirpath,file,log_print,f'{files_processed}. ')
-                    data.append(line_data_tup)
-                    iii=iii+1
-                    if iii>=10:
-                        if log_print:
-                            delta = (datetime.now() - start_datetime)
-                            print("+"*10+f" Time elapsed: {str(delta).split('.')[0]}"+"+"*10)
-                        db.insert_data_to_table(table_name,data)
-                        data=[]
-                        iii=0
-                    files_processed=files_processed+1
-            db.insert_data_to_table(table_name,data)
+            num_files,num_folders=self.count_files_in_path(path_to_map)
+            with Progress() as progress:
+                task1 = progress.add_task("[blue]Initial Mapping [red](F10 to Exit)", total=num_files)
+                delta=datetime.now()-start_datetime
+                print(f"Counted: {num_files} files and {num_folders} folders in {delta.total_seconds()} sec")
+                for dirpath, _, filenames in os.walk(path_to_map):
+                    # Get the data for each file
+                    for file in filenames:
+                        line_data_tup=self.get_mapping_info_data_from_file(mount,dirpath,file,log_print,f'{files_processed}. ')
+                        data.append(line_data_tup)
+                        iii=iii+1
+                        if keyboard.is_pressed('F10'):
+                            return "[red] User Interrupt"
+                        if iii>=10:
+                            if log_print:
+                                delta = (datetime.now() - start_datetime)
+                                print("+"*10+f" Time elapsed: {str(delta).split('.')[0]}"+"+"*10)
+                            db.insert_data_to_table(table_name,data)
+                            progress.update(task1, advance=10)
+                            data=[]
+                            iii=0
+                        files_processed=files_processed+1
+                db.insert_data_to_table(table_name,data)
+                progress.update(task1, completed=num_files)
             time.sleep(0.333)
             #db.print_all_rows(table_name)
             self.remap_map_in_thread_to_db(table_name,progress_bar,False)
@@ -433,6 +442,26 @@ class FileMapper:
             print(type(eee),line_data_tup)
             print("@"*100,"\nPress any Key to continue\n","@"*100)        
             getch()
+
+    @staticmethod
+    def count_files_in_path(path):
+        """Calculate the number of files and folders in a path.
+
+        Args:
+            path (str): path to look in
+
+        Returns:
+            tuple[int]: num_files,num_folders
+        """
+        num_files=0
+        num_folders=0 
+        if os.path.exists(path):
+            num_folders=num_folders+1 # root
+            for _, dirs, filenames in os.walk(path):
+                    # Get the data for each file
+                    num_files=num_files+len(filenames)
+                    num_folders=num_folders+len(dirs)
+        return num_files,num_folders
 
     @staticmethod
     def time_seconds_to_hhmmss(time_seconds:float)->str:
