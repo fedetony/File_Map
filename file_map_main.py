@@ -12,7 +12,7 @@ from rich import print
 from class_sqlite_database import SQLiteDatabase
 from class_file_manipulate import FileManipulate
 from class_device_monitor import DeviceMonitor
-from class_file_mapper import FileMapper
+from class_file_mapper import *
 from class_autocomplete_input import AutocompletePathFile
 from class_data_manage import DataManage
 from class_file_explorer import *
@@ -407,6 +407,8 @@ def menu_enter_path():
     input_path = AutocompletePathFile('return string [cyan]ENTER[/cyan], Autofill path/file [cyan]TAB[/cyan], Cancel [cyan]ESC[/cyan]\nOr type complete directory path: ',
                                       F_M.get_app_path(),absolute_path=False,verbose=True,inquire=False).get_input
     path_user = input_path()
+    if path_user in ['',None]:
+        return False, path_user
     if not path_user.endswith(os.sep):
         path_user=path_user+os.sep
     file_exist, is_file = F_M.validate_path_file(path_user)
@@ -616,7 +618,7 @@ def validate_new_map(new_table_name,database):
 def map_validation(answers, current):
     """Validates map
     """
-    not_allowed = ' "$/'+"'|" #r'[":$\/\{\}\[\]\|\& \]'
+    not_allowed = '"/'+"'|><={}[]()" #r'[":$\/\{\}\[\]\|\& \]'
     for char in current:
         if char in not_allowed:
             raise inquirer.errors.ValidationError("", reason=f'Map name does not allow these characters "{str(not_allowed)}".') 
@@ -631,17 +633,55 @@ def menu_create_new_map():
     print(MENU_HEADER)
     print("Create new Map:")
     print("----------")
-    answers={'table_name':''}
     selected_db=menu_select_database(True)
-    if selected_db and selected_db != '':
-        tablename=menu_get_table_name_input()
-        if tablename not in ['',None]:
-            # path_to_map="D:\Downloads"
-            dir_available, path_to_map = menu_enter_path()
-            if dir_available and path_to_map:
-                fm=get_file_map(selected_db) 
+    if selected_db and selected_db != '':    
+        dir_available, path_to_map = menu_enter_path()
+        if dir_available and path_to_map:
+            print(f'[green]Selected path:{path_to_map}')
+            print(f'[yellow]Replacements: % (Date_Time), # (Date), ? (Time), & (Dir), ! (Full_Path) ') 
+            tablename=menu_get_table_name_input()
+            tablename=format_new_table_name(tablename,path_to_map)
+            fm=get_file_map(selected_db)
+            if tablename not in ['',None]+fm.db.tables_in_db():     
                 fm.db.create_connection()
                 fm.map_a_path_to_db(tablename,path_to_map,True)
+    return ''
+
+def format_new_table_name(tablename:str,path_to_map:str)->str:
+    """Replaces the charater for the respective string: 
+    % (Date_Time), # (Date), ? (Time), & (Dir), ! (Full_Path)
+
+    Args:
+        tablename (str): new map name
+        path_to_map (str): path to map directory
+
+    Returns:
+        str: formatted string
+    """
+    tablename=tablename.replace('/','')
+    tablename=tablename.replace('\\','')
+    tablename=tablename.replace(' ','_')
+    if '%' in tablename:
+        dt=datetime.now().strftime("%Y%m%d_%H%M%S")
+        tablename=tablename.replace('%',dt)
+    if '&' in tablename:
+        p_p=F_M.extract_parent_path(path_to_map,True)
+        dp=path_to_map.replace(p_p,'')
+        tablename=tablename.replace('&',dp)
+        tablename=tablename.replace('/','')
+        tablename=tablename.replace('\\','')
+    if '#' in tablename:
+        dt=datetime.now().strftime("%Y%m%d")
+        tablename=tablename.replace('#',dt)
+    if '?' in tablename:
+        dt=datetime.now().strftime("%H%M%S")
+        tablename=tablename.replace('?',dt)
+    if '!' in tablename:
+        dp=path_to_map.replace(":",'')
+        tablename=tablename.replace('!',dp)
+        tablename=tablename.replace('/','_')
+        tablename=tablename.replace('\\','_')
+    return tablename
 
 def get_maps_in_db(database):
     """Gets maps in database
@@ -733,9 +773,14 @@ def menu_rename_map():
             if answers['map_rename'] not in ['',None]:
                 tablename=answers['map_rename']
                 # path_to_map="D:\Downloads"
+                print(f'[yellow]Replacements: % (Date_Time), # (Date), ? (Time), & (Dir), ! (Full_Path) ') 
                 new_tablename=menu_get_table_name_input()
-                if new_tablename not in ['',None]:
-                    fm=get_file_map(selected_db) 
+                fm=get_file_map(selected_db)
+                data=fm.db.get_data_from_table(fm.mapper_reference_table,'*',f"tablename='{tablename}'")
+                #field_list=['id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype']
+                path_to_map=os.path.join(data[0][5],data[0][3])
+                new_tablename=format_new_table_name(new_tablename,path_to_map)
+                if new_tablename not in ['',None]+fm.db.tables_in_db():
                     fm.db.create_connection()
                     print(f'Renaming Map [yellow]"{tablename}"[/yellow] to [green]"{new_tablename}"')
                     was_renamed=fm.rename_map(tablename,new_tablename)
@@ -746,6 +791,7 @@ def menu_rename_map():
                     print("Press any key to continue")
                     print("-"*33)
                     getch()
+    return ''
 
 def menu_get_table_name_input():
     tablename=''
@@ -775,6 +821,14 @@ def get_file_map(dbfile) -> FileMapper:
 
 def get_map_info_text(a_database,a_map):
     """Gets a string with the Map information
+
+    Args:
+        a_database (str): database
+        a_map (str): map/table name
+
+    Returns:
+        str: tabulated string with
+        'Date Time Created','Table Name','Serial','Mount','Map Path','Items'
     """
     map_info_str=''
     fm=get_file_map(a_database)
@@ -791,6 +845,38 @@ def get_map_info_text(a_database,a_map):
             map_info_str=data_manage.get_tabulated_fields(fields_to_tab=[field_list[1],field_list[4],field_list[6],field_list[5],field_list[3],'Items'],header=False,index=False,justify='left')
     return map_info_str
 
+def get_map_info_dict(a_database:str,a_map:str)->dict:
+    """Gets a dictionary with the Map reference information
+ 
+    Args:
+        a_database (str): database
+        a_map (str): map/table name
+
+    Returns:
+        dict: with format
+        {
+        'id': {0: int},
+        'dt_map_created': {0: 'YYYY-MM-DD HH:mm:SS.uS'},
+        'dt_map_modified': {0: 'YYYY-MM-DD HH:mm:SS.uS'},
+        'mappath': {0: '\\path\\of\\map'},
+        'tablename': {0: 'tablename'},
+        'mount': {0: 'mount/point'},
+        'serial': {0: 'XXXXXXXX'},
+        'mapname': {0: ''},
+        'maptype': {0: 'type of map'}
+        }
+    """
+    map_info_dict={}
+    fm=get_file_map(a_database)
+    if isinstance(fm,FileMapper):
+        table_list=fm.db.get_data_from_table(fm.mapper_reference_table,'*',f'tablename="{a_map}"')
+        if len(table_list)>0:
+            #field_list=['id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype']
+            field_list=fm.db.get_column_list_of_table(fm.mapper_reference_table)
+            data_manage=DataManage(table_list,field_list)
+            map_info_dict=data_manage.df.to_dict()
+    return map_info_dict
+
 def show_maps():
     """Prints Map information
     """
@@ -802,7 +888,11 @@ def show_maps():
             table_list_size=[]
             for table_info in table_list:
                 #field_list=['id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype']
-                table_list_size.append(table_info+(fm.db.get_number_or_rows_in_table(table_info[4]),))
+                data=fm.db.get_data_from_table(table_info[4],'*',f'md5="{MD5_CALC}"')
+                num_rows=str(fm.db.get_number_or_rows_in_table(table_info[4]))
+                if len(data)>0:
+                    num_rows=f'{num_rows}({len(data)})'
+                table_list_size.append(table_info+(num_rows,))
             if len(table_list_size)>0:
                 field_list=['id','Date Time Created','Date Time Modified','Map Path','Table Name','Mount','Serial','Map Name','Map Type']+['Items']
                 data_manage=DataManage(table_list_size,field_list)
@@ -921,6 +1011,22 @@ def menu_select_database_map()->tuple:
                     return db_map_pair
     return None
 
+def menu_continue_mapping():
+    """Menu for processing a map"""
+    os.system('cls' if os.name == 'nt' else 'clear')
+    print(MENU_HEADER)
+    print("Continue Mapping:")
+    print("----------")
+    db_map_pair=menu_select_database_map()
+    if not db_map_pair:
+        return ''
+    fm=get_file_map(db_map_pair[0])
+    data=fm.db.get_data_from_table(db_map_pair[1],'*',f'md5="{MD5_CALC}"')
+    if len(data)==0:
+        return f"[green]All files in {db_map_pair[1]} are already Mapped"
+    fm.remap_map_in_thread_to_db(db_map_pair[1],None,True)
+    return ''
+
 def menu_process_map():
     """Menu for processing a map"""
     os.system('cls' if os.name == 'nt' else 'clear')
@@ -996,7 +1102,8 @@ def menu_search_in_maps():
             fs_list=[(f'Nothing Found for {ans_txt}',0)]
         f_e=FileExplorer(None,None,{f'{ans_txt} search':fs_list})
         _=f_e.browse_files(my_style_expand_size)        
-            
+    return ''
+
 def menu_duplicates_actions(duplicte_list,db_map_pair):
     """Menu for duplicate actions
     """
@@ -1228,7 +1335,7 @@ def find_duplicates_in_database(database,a_map):
 def menu_mapping_functions():
     """Interactive menu handle databases"""
     msg=''
-    ch=['Create New Map', 'Delete Map','Rename Map', 'Process Map','Search in Maps','Back']
+    ch=['Create New Map', 'Delete Map','Rename Map','Continue Mapping', 'Process Map','Search in Maps','Back']
     in_name='mapping'
     menu = [inquirer.List(
         in_name,
@@ -1242,22 +1349,27 @@ def menu_mapping_functions():
         print(MENU_HEADER)
         print("Mapping:")
         print("----------")
-    
         if len(active_databases)==0:
             return '[magenta]There are no active databases![\magenta]'
         show_maps()
+        if not msg in ['',None]:
+            print("---------------------------------")
+            print(msg)
+            msg=''
         print("---------------------------------")
         answers = inquirer.prompt(menu)
         if answers['mapping']=='Create New Map':
-            menu_create_new_map()
+            msg=menu_create_new_map()
         elif answers['mapping']=='Delete Map': 
-            menu_delete_map()
+            msg=menu_delete_map()
         elif answers['mapping']=='Rename Map': 
-            menu_rename_map()
+            msg=menu_rename_map()
+        elif answers['mapping']=='Continue Mapping': 
+            msg=menu_continue_mapping()
         elif answers['mapping']=='Process Map':
-            menu_process_map()
+            msg=menu_process_map()
         elif answers['mapping']=='Search in Maps': 
-            menu_search_in_maps()
+            msg=menu_search_in_maps()
         elif answers['mapping']=='Back':
             return ''
 

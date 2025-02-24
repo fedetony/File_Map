@@ -1,6 +1,9 @@
 import os
 import sqlite3
+import time
 from cryptography.fernet import Fernet
+
+WAIT_TIME_WRITING=0.05 # seconds to wait after writting
 
 class SQLiteDatabase:
     def __init__(self, db_path,encrypt=False,key=None,password=None):
@@ -258,7 +261,7 @@ class SQLiteDatabase:
         """
         data=[]
         sql = "SELECT "
-        sql = sql + column_filter + " FROM "+ table
+        sql = sql + column_filter + " FROM "+ f"'{table}'"
         if where:
             sql = sql + " WHERE "+ where
         try:
@@ -309,6 +312,7 @@ class SQLiteDatabase:
             c.execute(f"UPDATE {table_name} SET {column_name} = ? WHERE id = ?", (new_value, id))
             #print("Row updated successfully")
             self.commit()
+            time.sleep(WAIT_TIME_WRITING)
         except sqlite3.Error as eee:
             print(eee)
         finally:
@@ -447,6 +451,7 @@ class SQLiteDatabase:
                     print(f"Data Size is not correct {column_name_list} != {row}")
                     return 
             self.commit()
+            time.sleep(WAIT_TIME_WRITING)
             #print("Row updated successfully")
         except sqlite3.Error as eee:
             print(eee)
@@ -472,7 +477,14 @@ class SQLiteDatabase:
     def get_number_or_rows_in_table(self,table:str)->int:
         """Get number of rows"""
         if self.table_exists(table):
-            return self.get_data_from_table(table,'COUNT(*)',None)[0][0]
+            data=self.get_data_from_table(table,'COUNT(*)',None)
+            if len(data)>0:
+                if len(data[0])>0:
+                    return data[0][0]
+                else:
+                    print("Debug---->>>",data)
+            else:
+                print("Debug---->>>",data)    
         return None
     
     def reenumerate_id_sequence(self,table:str):

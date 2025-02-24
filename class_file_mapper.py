@@ -19,6 +19,8 @@ from thread_queue_calculation_stream import QueueCalcStream
 from rich import print
 from rich.progress import Progress
 
+MD5_CALC='***Calculate***'
+
 class FileMapper:
     def __init__(self,db_filepath,key_filepath,password):
         self.password=password
@@ -115,8 +117,8 @@ class FileMapper:
             str: The MD5 sum as a hexadecimal string.
         """
         if leave_to_thread:
-            time.sleep(0.01) # cant write to db so fast
-            return '***Calculate***'
+            # time.sleep(0.01) # cant write to db so fast
+            return MD5_CALC
         try:
             with open(file_path, 'rb') as f:
                 md5 = hashlib.md5()
@@ -416,6 +418,7 @@ class FileMapper:
                         iii=0
                     files_processed=files_processed+1
             db.insert_data_to_table(table_name,data)
+            time.sleep(0.333)
             #db.print_all_rows(table_name)
             self.remap_map_in_thread_to_db(table_name,progress_bar,False)
             if log_print:
