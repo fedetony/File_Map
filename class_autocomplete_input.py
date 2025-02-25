@@ -284,13 +284,287 @@ class AutocompletePathFile:
         Returns:
             bool: True if order and size are the same.
         """
+        if not isinstance(list1,list) or not isinstance(list2,list):
+             return False
         if len(list1)!=len(list2):
             return False
         for l1,l2 in zip(list1,list2):
             if l1!=l2:
                 return False
         return True
+    
+    def _get_key_comparison(self,char_sequence,opt1:list,opt2:list=None,result:str=None):
+        """Compares options to char_sequence: if are the same then returns (result,reseted char sequence)
+            if opt2 the same then returns (result,reseted char sequence)
+            else (None , same char_sequence)
+        Args:
+            char_sequence (_type_): char sequence
+            opt1 (list): option to compare
+            opt2 (list, optional): Second option. Defaults to None.
+            result (str, optional): Value. Defaults to ''.
+
+        Returns:
+            tuple: (result,char_sequence)
+        """
+        if self.list_compare(char_sequence,opt1):
+            return result,[]
+        if self.list_compare(char_sequence,opt2):
+            return result,[]
+        return (None, char_sequence)
+    
+    def _handle_key_linux(self,key):
+        """Maps a key to a string for any character looking into sequences.
+            After getch, a sequence is emmitted for special characters.
+            Some characters map with a sequence.
+        Args:
+            key (bytes): ASCII value
+
+        Returns:
+            str: key pressed string, None
+        """
+        # Linux
+        if len(self.char_sequence)>=6:
+            self.char_sequence=[]
+        self.char_sequence.append(ord(key))
+        if isinstance(key,bytes):
+            enc_key=key
+        if isinstance(key,str):
+            enc_key=key.encode('utf-8')
+            if enc_key == b'':
+                    self.char_sequence=[]
+                    return None
+        if len(self.char_sequence)==6:
+            if self.list_compare(self.char_sequence,[27,91,49,59,53,65]):
+                    self.char_sequence=[]
+                    return 'cntr+'+'arrow'+'up' # 27-> 91 -> 49 -> 59 -> 53 -> 65
+            elif self.list_compare(self.char_sequence,[27,91,49,59,53,66]):
+                    self.char_sequence=[]
+                    return 'cntr+'+'arrow'+'down' # 27-> 91 -> 49 -> 59 -> 53 -> 66
+            elif self.list_compare(self.char_sequence,[27,91,49,59,53,67]):
+                    self.char_sequence=[]
+                    return 'cntr+'+'arrow'+'right' # 27-> 91 -> 49 -> 59 -> 53 -> 67
+            elif self.list_compare(self.char_sequence,[27,91,49,59,53,68]):
+                    self.char_sequence=[]
+                    return 'cntr+'+'arrow'+'left' # 27-> 91 -> 49 -> 59 -> 53 -> 68
+            else:
+                    out=self.char_sequence[5]
+                    self.char_sequence=[]
+                    return chr(out) # 27-> 91 -> 49 -> 59 -> 53 -> X
+        elif len(self.char_sequence)==5:
+            if self.list_compare(self.char_sequence,[27,91,49,53,126]): 
+                    self.char_sequence=[]
+                    return 'F5' # 27-> 91 ->49 ->53 ->126
+            elif self.list_compare(self.char_sequence,[27,91,49,55,126]): 
+                    self.char_sequence=[]
+                    return 'F6' # 27-> 91 ->49 ->55 ->126
+            elif self.list_compare(self.char_sequence,[27,91,49,56,126]): 
+                    self.char_sequence=[]
+                    return 'F7' # 27-> 91 ->49 ->56 ->126
+            elif self.list_compare(self.char_sequence,[27,91,49,57,126]): 
+                    self.char_sequence=[]
+                    return 'F8' # 27-> 91 ->49 ->57 ->126
+                
+            elif self.list_compare(self.char_sequence,[27,91,50,48,126]): 
+                    self.char_sequence=[]
+                    return 'F9' # 27-> 91 ->50 ->48 ->126
+            elif self.list_compare(self.char_sequence,[27,91,50,49,126]): 
+                    self.char_sequence=[]
+                    return 'F10' # 27-> 91 ->50 ->49 ->126 # os uses this key
+            elif self.list_compare(self.char_sequence,[27,91,50,51,126]): 
+                    self.char_sequence=[]
+                    return 'F11' # os uses this key ?????? Assumed
+            elif self.list_compare(self.char_sequence,[27,91,50,52,126]): 
+                    self.char_sequence=[]
+                    return 'F12' # 27-> 91 ->50 ->52 ->126
+            # elif self.char_sequence[4] not in [53]:
+            #         out=self.char_sequence[4]
+            #         self.char_sequence=[]
+            #         return chr(out)
         
+        elif len(self.char_sequence)==4:
+            if self.list_compare(self.char_sequence,[27,91,53,126]):
+                    self.char_sequence=[]
+                    return 'page'+'up' # 27-> 91 -> 53 -> 126
+            elif self.list_compare(self.char_sequence,[27,91,54,126]):
+                    self.char_sequence=[]
+                    return 'page'+'down' # 27-> 91 -> 54 -> 126
+            elif self.list_compare(self.char_sequence,[27,91,51,126]):
+                    self.char_sequence=[]
+                    return 'delete' # 27-> 91 -> 51 -> 126  
+            elif self.list_compare(self.char_sequence,[27,91,50,126]):
+                    self.char_sequence=[]
+                    return 'insert' # 27-> 91 -> 50 -> 126
+            # elif self.char_sequence[2] not in [49,50,51] and self.char_sequence[3] not in [48,49,50,51,52,53,55,56,57]:
+            #         out=self.char_sequence[3]
+            #         self.char_sequence=[]
+            #         return chr(out)
+        
+        elif len(self.char_sequence)==3:
+            if self.list_compare(self.char_sequence,[27,79,80]): 
+                    self.char_sequence=[]
+                    return 'F1' # 27-> 79 -> 80
+            elif self.list_compare(self.char_sequence,[27,79,81]): 
+                    self.char_sequence=[]
+                    return 'F2' # 27-> 79 -> 81
+            elif self.list_compare(self.char_sequence,[27,79,82]): 
+                    self.char_sequence=[]
+                    return 'F3' # 27-> 79 -> 82
+            elif self.list_compare(self.char_sequence,[27,79,83]): 
+                    self.char_sequence=[]
+                    return 'F4' # 27-> 79 -> 83
+            elif self.list_compare(self.char_sequence,[27,91,65]): 
+                    self.char_sequence=[]
+                    return 'arrow'+'up' # 27-> 91 -> 65
+            elif self.list_compare(self.char_sequence,[27,91,66]): 
+                    self.char_sequence=[]
+                    return 'arrow'+'down' # 27-> 91 -> 66
+            elif self.list_compare(self.char_sequence,[27,91,67]): 
+                    self.char_sequence=[]
+                    return 'arrow'+'right' # 27-> 91 -> 67
+            elif self.list_compare(self.char_sequence,[27,91,68]): 
+                    self.char_sequence=[]
+                    return 'arrow'+'left' # 27-> 91 -> 68
+            elif self.list_compare(self.char_sequence,[27,91,70]):
+                    self.char_sequence=[]
+                    return 'end' # 27-> 91 -> 70
+            elif self.list_compare(self.char_sequence,[27,91,72]):
+                    self.char_sequence=[]
+                    return 'home' # 27-> 91 -> 72
+            # elif self.char_sequence[1] == 91 and self.char_sequence[2] not in [49,50,51,52,53,54]:
+            #         self.char_sequence=[]
+            #         return chr(self.char_sequence[2])
+        
+        elif len(self.char_sequence)==2:
+            if self.char_sequence[0] == 27 and self.char_sequence[1] not in [79,91]: # esc
+                self.char_sequence=[]
+                return 'esc'
+            # elif self.char_sequence[1] not in [79,91]:
+            #     out=self.char_sequence[1]
+            #     self.char_sequence=[]
+            #     return chr(out)
+            
+        elif self.list_compare(self.char_sequence,[13]):
+                self.char_sequence=[]
+                return 'enter'
+        elif self.list_compare(self.char_sequence,[127]):
+                self.char_sequence=[]
+                return 'backspace'
+        elif self.list_compare(self.char_sequence,[9]):
+                self.char_sequence=[]
+                return 'tab'
+        elif len(self.char_sequence)==1:
+            if self.char_sequence[0] in range(1,27):
+                return 'cntr+'+chr(96+self.char_sequence.pop(0))
+            elif self.char_sequence[0] in range(32,127): # printable characters
+                return chr(self.char_sequence.pop(0))
+            elif self.char_sequence[0] not in [27]:
+                return chr(self.char_sequence.pop(0))
+        
+        else:
+            try:
+                return chr(ord(key))
+            except:
+                return ''
+
+    def _handle_key_windows(self,key):
+        """Maps a key to a string for any character looking into sequences.
+            After getch, a sequence is emmitted for special characters.
+            Some characters map with a sequence.
+        Args:
+            key (bytes): ASCII value
+
+        Returns:
+            str: key pressed string, None
+        """
+        if len(self.char_sequence)>2:
+            self.char_sequence=[]
+        self.char_sequence.append(ord(key))
+        if isinstance(key,str):
+            enc_key=key.encode('utf-8')
+        if isinstance(key,bytes):
+            enc_key=key
+        
+        if len(self.char_sequence)==2:
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[0,59],[224,59],result='F1') # 0 -> 59
+            if comp_result: return comp_result 
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[0,60],[224,60],result='F2') # 0 -> 60
+            if comp_result: return comp_result
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[0,61],[224,61],result='F3') # 0 -> 61
+            if comp_result: return comp_result
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[0,62],[224,62],result='F4') # 0 -> 62
+            if comp_result: return comp_result
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[0,63],[224,63],result='F5') # 0 -> 63
+            if comp_result: return comp_result
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[0,64],[224,64],result='F6') # 0 -> 64
+            if comp_result: return comp_result
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[0,65],[224,65],result='F7') # 0 -> 65
+            if comp_result: return comp_result
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[0,66],[224,66],result='F8') # 0 -> 66
+            if comp_result: return comp_result
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[0,67],[224,67],result='F9') # 0 -> 67
+            if comp_result: return comp_result
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[0,68],[224,68],result='F10') # 0 -> 68
+            if comp_result: return comp_result
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[224,133],[0,133],result='F11') # 224 -> 133
+            if comp_result: return comp_result
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[224,134],[0,134],result='F12') # 224 -> 134
+            if comp_result: return comp_result
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[0,72],[224,72],result='arrow'+'up') # 0 -> 72
+            if comp_result: return comp_result
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[0,80],[224,80],result='arrow'+'down') # 0 -> 80
+            if comp_result: return comp_result
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[0,77],[224,77],result='arrow'+'right') # 0 -> 77
+            if comp_result: return comp_result
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[0,75],[224,75],result='arrow'+'left') # 0 -> 75
+            if comp_result: return comp_result
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[224,141],[0,141],result='cntr+'+'arrow'+'up') # 224 -> 141
+            if comp_result: return comp_result
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[224,145],[0,145],result='cntr+'+'arrow'+'down') # 224 -> 145
+            if comp_result: return comp_result
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[224,116],[0,116],result='cntr+'+'arrow'+'right') # 224 -> 116
+            if comp_result: return comp_result
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[224,115],[0,115],result='cntr+'+'arrow'+'left') # 224 -> 115
+            if comp_result: return comp_result
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[0,73],[224,73],result='page'+'up') # 0 -> 73
+            if comp_result: return comp_result
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[0,81],[224,81],result='page'+'down') # 0 -> 81
+            if comp_result: return comp_result
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[0,83],[224,83],result='delete') # 0 -> 83
+            if comp_result: return comp_result
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[0,79],[224,79],result='end') # 0 -> 79
+            if comp_result: return comp_result
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[0,71],[224,71],result='home') # 0 -> 71
+            if comp_result: return comp_result
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[0,82],[224,82],result='insert') # 0 -> 82
+            if comp_result: return comp_result
+            
+            if not comp_result and self.char_sequence[1] not in [224,0]:
+                out=self.char_sequence[1]
+                self.char_sequence=[]
+                return chr(out)
+        comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[13], result='enter') # 13  
+        if comp_result: return comp_result 
+        comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[8],result='backspace') # 8 
+        if comp_result: return comp_result
+        comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[27],result='esc') # 27
+        if comp_result: return comp_result
+        comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[9],result='tab') # 9
+        if comp_result: return comp_result
+        elif len(self.char_sequence)==1:
+            if self.char_sequence[0] in range(1,27):
+                return 'cntr+'+chr(96+self.char_sequence.pop(0))
+            elif self.char_sequence[0] in range(32,127): # printable characters
+                return chr(self.char_sequence.pop(0))
+            elif self.char_sequence[0] not in [0,224]:
+                return chr(self.char_sequence.pop(0))
+        else:
+            try:
+                char=chr(ord(key))
+                return char.decode()
+                # return chr(ord(key))
+            except:
+                return key
+         
 
     def handle_key(self,last_key,key)->str:
         """Maps a key to a string for special characters ater getch
@@ -308,231 +582,9 @@ class AutocompletePathFile:
             last_key=' '
         # Windows
         if os.name == 'nt':
-            if ord(key) == 13: # enter
-                return 'enter'    
-            elif ord(last_key) == 0 and ord(key) == 59: # F1
-                return 'F1'
-            elif ord(last_key) == 0 and ord(key) == 60: # F2
-                return 'F2'
-            elif ord(last_key) == 0 and ord(key) == 61: # F3
-                return 'F3'
-            elif ord(last_key) == 0 and ord(key) == 62: 
-                return 'F4'
-            elif ord(last_key) == 0 and ord(key) == 63: 
-                return 'F5'
-            elif ord(last_key) == 0 and ord(key) == 64: 
-                return 'F6'
-            elif ord(last_key) == 0 and ord(key) == 65: 
-                return 'F7'
-            elif ord(last_key) == 0 and ord(key) == 66: 
-                return 'F8'
-            elif ord(last_key) == 0 and ord(key) == 67: 
-                return 'F9'
-            elif ord(last_key) == 0 and ord(key) == 68: 
-                return 'F10'
-            elif ord(last_key) == 224 and ord(key) == 133: 
-                return 'F11'
-            elif ord(last_key) == 224 and ord(key) == 134: 
-                return 'F12'
-            
-            elif ord(last_key) == 224 and ord(key) == 72: 
-                return 'arrow'+'up'
-            elif ord(last_key) == 224 and ord(key) == 80: 
-                return 'arrow'+'down'
-            elif ord(last_key) == 224 and ord(key) == 77: 
-                return 'arrow'+'right'
-            elif ord(last_key) == 224 and ord(key) == 75: 
-                return 'arrow'+'left'
-            elif ord(last_key) == 224 and ord(key) == 141:
-                return 'cntr+'+'arrow'+'up'
-            elif ord(last_key) == 224 and ord(key) == 145:
-                return 'cntr+'+'arrow'+'down'
-            elif ord(last_key) == 224 and ord(key) == 116:
-                return 'cntr+'+'arrow'+'right'
-            elif ord(last_key) == 224 and ord(key) == 115:
-                return 'cntr+'+'arrow'+'left'
-            elif ord(last_key) == 224 and ord(key) == 73:
-                return 'page'+'up'
-            elif ord(last_key) == 224 and ord(key) == 81:
-                return 'page'+'down'
-            elif ord(last_key) == 224 and ord(key) == 83:
-                return 'delete'
-            elif ord(last_key) == 224 and ord(key) == 79:
-                return 'end'
-            elif ord(last_key) == 224 and ord(key) == 71:
-                return 'home'
-            # elif ord(last_key) == 224 and ord(key) == 126:
-            #     return 'insert'
-            elif ord(key) == 8:
-                return 'backspace'
-            elif ord(key) == 27: # esc
-                return 'esc'
-            elif ord(key) == 9: # tab
-                return 'tab'
-            elif ord(key) in range(1,27):
-                return 'cntr+'+chr(96+ord(key))
-            elif ord(key) in range(32,127): # printable characters
-                return key.decode()
-            else:
-                try:
-                    char=chr(ord(key))
-                    return char.decode()
-                    # return chr(ord(key))
-                except:
-                    return key
-                    
+            return self._handle_key_windows(key)            
         else:
-            # Linux
-            if len(self.char_sequence)>=6:
-                self.char_sequence=[]
-            self.char_sequence.append(ord(key))
-            if isinstance(key,str):
-                enc_key=key.encode('utf-8')
-                if enc_key == b'':
-                        self.char_sequence=[]
-                        return 'cntr+'+'arrow'+'up' # 27-> 91 -> 49 -> 59 -> 53 -> 65
-                elif self.list_compare(self.char_sequence,[27,91,49,59,53,66]):
-                        self.char_sequence=[]
-                        return 'cntr+'+'arrow'+'down' # 27-> 91 -> 49 -> 59 -> 53 -> 66
-                elif self.list_compare(self.char_sequence,[27,91,49,59,53,67]):
-                        self.char_sequence=[]
-                        return 'cntr+'+'arrow'+'right' # 27-> 91 -> 49 -> 59 -> 53 -> 67
-                elif self.list_compare(self.char_sequence,[27,91,49,59,53,68]):
-                        self.char_sequence=[]
-                        return 'cntr+'+'arrow'+'left' # 27-> 91 -> 49 -> 59 -> 53 -> 68
-                 
-            if len(self.char_sequence)==6:
-                if self.list_compare(self.char_sequence,[27,91,49,59,53,65]):
-                        self.char_sequence=[]
-                        return 'cntr+'+'arrow'+'up' # 27-> 91 -> 49 -> 59 -> 53 -> 65
-                elif self.list_compare(self.char_sequence,[27,91,49,59,53,66]):
-                        self.char_sequence=[]
-                        return 'cntr+'+'arrow'+'down' # 27-> 91 -> 49 -> 59 -> 53 -> 66
-                elif self.list_compare(self.char_sequence,[27,91,49,59,53,67]):
-                        self.char_sequence=[]
-                        return 'cntr+'+'arrow'+'right' # 27-> 91 -> 49 -> 59 -> 53 -> 67
-                elif self.list_compare(self.char_sequence,[27,91,49,59,53,68]):
-                        self.char_sequence=[]
-                        return 'cntr+'+'arrow'+'left' # 27-> 91 -> 49 -> 59 -> 53 -> 68
-                else:
-                        out=self.char_sequence[5]
-                        self.char_sequence=[]
-                        return chr(out) # 27-> 91 -> 49 -> 59 -> 53 -> X
-            elif len(self.char_sequence)==5:
-                if self.list_compare(self.char_sequence,[27,91,49,53,126]): 
-                        self.char_sequence=[]
-                        return 'F5' # 27-> 91 ->49 ->53 ->126
-                elif self.list_compare(self.char_sequence,[27,91,49,55,126]): 
-                        self.char_sequence=[]
-                        return 'F6' # 27-> 91 ->49 ->55 ->126
-                elif self.list_compare(self.char_sequence,[27,91,49,56,126]): 
-                        self.char_sequence=[]
-                        return 'F7' # 27-> 91 ->49 ->56 ->126
-                elif self.list_compare(self.char_sequence,[27,91,49,57,126]): 
-                        self.char_sequence=[]
-                        return 'F8' # 27-> 91 ->49 ->57 ->126
-                    
-                elif self.list_compare(self.char_sequence,[27,91,50,48,126]): 
-                        self.char_sequence=[]
-                        return 'F9' # 27-> 91 ->50 ->48 ->126
-                elif self.list_compare(self.char_sequence,[27,91,50,49,126]): 
-                        self.char_sequence=[]
-                        return 'F10' # 27-> 91 ->50 ->49 ->126 # os uses this key
-                elif self.list_compare(self.char_sequence,[27,91,50,51,126]): 
-                        self.char_sequence=[]
-                        return 'F11' # os uses this key ?????? Assumed
-                elif self.list_compare(self.char_sequence,[27,91,50,52,126]): 
-                        self.char_sequence=[]
-                        return 'F12' # 27-> 91 ->50 ->52 ->126
-                # elif self.char_sequence[4] not in [53]:
-                #         out=self.char_sequence[4]
-                #         self.char_sequence=[]
-                #         return chr(out)
-            
-            elif len(self.char_sequence)==4:
-                if self.list_compare(self.char_sequence,[27,91,53,126]):
-                        self.char_sequence=[]
-                        return 'page'+'up' # 27-> 91 -> 53 -> 126
-                elif self.list_compare(self.char_sequence,[27,91,54,126]):
-                        self.char_sequence=[]
-                        return 'page'+'down' # 27-> 91 -> 54 -> 126
-                elif self.list_compare(self.char_sequence,[27,91,51,126]):
-                        self.char_sequence=[]
-                        return 'delete' # 27-> 91 -> 51 -> 126  
-                elif self.list_compare(self.char_sequence,[27,91,50,126]):
-                        self.char_sequence=[]
-                        return 'insert' # 27-> 91 -> 50 -> 126
-                # elif self.char_sequence[2] not in [49,50,51] and self.char_sequence[3] not in [48,49,50,51,52,53,55,56,57]:
-                #         out=self.char_sequence[3]
-                #         self.char_sequence=[]
-                #         return chr(out)
-            
-            elif len(self.char_sequence)==3:
-                if self.list_compare(self.char_sequence,[27,79,80]): 
-                        self.char_sequence=[]
-                        return 'F1' # 27-> 79 -> 80
-                elif self.list_compare(self.char_sequence,[27,79,81]): 
-                        self.char_sequence=[]
-                        return 'F2' # 27-> 79 -> 81
-                elif self.list_compare(self.char_sequence,[27,79,82]): 
-                        self.char_sequence=[]
-                        return 'F3' # 27-> 79 -> 82
-                elif self.list_compare(self.char_sequence,[27,79,83]): 
-                        self.char_sequence=[]
-                        return 'F4' # 27-> 79 -> 83
-                elif self.list_compare(self.char_sequence,[27,91,65]): 
-                        self.char_sequence=[]
-                        return 'arrow'+'up' # 27-> 91 -> 65
-                elif self.list_compare(self.char_sequence,[27,91,66]): 
-                        self.char_sequence=[]
-                        return 'arrow'+'down' # 27-> 91 -> 66
-                elif self.list_compare(self.char_sequence,[27,91,67]): 
-                        self.char_sequence=[]
-                        return 'arrow'+'right' # 27-> 91 -> 67
-                elif self.list_compare(self.char_sequence,[27,91,68]): 
-                        self.char_sequence=[]
-                        return 'arrow'+'left' # 27-> 91 -> 68
-                elif self.list_compare(self.char_sequence,[27,91,70]):
-                        self.char_sequence=[]
-                        return 'end' # 27-> 91 -> 70
-                elif self.list_compare(self.char_sequence,[27,91,72]):
-                        self.char_sequence=[]
-                        return 'home' # 27-> 91 -> 72
-                # elif self.char_sequence[1] == 91 and self.char_sequence[2] not in [49,50,51,52,53,54]:
-                #         self.char_sequence=[]
-                #         return chr(self.char_sequence[2])
-            
-            elif len(self.char_sequence)==2:
-                if self.char_sequence[0] == 27 and self.char_sequence[1] not in [79,91]: # esc
-                    self.char_sequence=[]
-                    return 'esc'
-                # elif self.char_sequence[1] not in [79,91]:
-                #     out=self.char_sequence[1]
-                #     self.char_sequence=[]
-                #     return chr(out)
-                
-            elif self.list_compare(self.char_sequence,[13]):
-                    self.char_sequence=[]
-                    return 'enter'
-            elif self.list_compare(self.char_sequence,[127]):
-                    self.char_sequence=[]
-                    return 'backspace'
-            elif self.list_compare(self.char_sequence,[9]):
-                    self.char_sequence=[]
-                    return 'tab'
-            elif len(self.char_sequence)==1:
-                if self.char_sequence[0] in range(1,27):
-                    return 'cntr+'+chr(96+self.char_sequence.pop(0))
-                elif self.char_sequence[0] in range(32,127): # printable characters
-                    return chr(self.char_sequence.pop(0))
-                elif self.char_sequence[0] not in [27]:
-                    return chr(self.char_sequence.pop(0))
-            
-            else:
-                try:
-                    return chr(ord(key))
-                except:
-                    return ''
+            return self._handle_key_linux(key)
     
     def wait_key_press(self):
         """Returns the key that was pressed and if its special character
@@ -576,12 +628,12 @@ class AutocompletePathFile:
         Returns:
             str: User input
         """
-        last_char=' '
+        
         pos=0
         lenght=0
         lenoptions=0
         while True:
-            char = getch()
+            key_handle,is_special_character=AC.wait_key_press()
             if self.verbose:
                 os.system('cls' if os.name == 'nt' else 'clear')
             else:
@@ -595,16 +647,15 @@ class AutocompletePathFile:
                     sys.stdout.write(self.line_user_input)
                     sys.stdout.flush()
                     lenoptions=0
-            #print('Char: ',chr(ord(char)),' ord:',ord(char), ' last->ord:',ord(last_char),self.handle_key(last_char,char))
-            key_handle=self.handle_key(last_char,char)
+            # Print prompt
             if self.verbose:
                 print(self.prompt)
-            if  key_handle=='enter': #enter char in [b'\r', b'\n', '\r', '\n'] or
+            if  key_handle=='enter': 
                 if not self.verbose:
                     sys.stdout.write("\r")
                     sys.stdout.flush()
                 return self.line_autocompleted
-            if  key_handle=='tab': #tab char in [ b'\t','\t'] or
+            if  key_handle=='tab': 
                 inlen=len(self.line_user_input)
                 self.line_user_input=self.autocomplete_path(self.line_user_input)
                 if not self.verbose:
@@ -615,20 +666,16 @@ class AutocompletePathFile:
                         sys.stdout.write(self.options)
                         sys.stdout.flush()
                 else:
-                    print(self.options)
-                last_char=' '    
-                char = None 
-            elif  key_handle=='esc': # esc char in [ b'\x1b','\x1b'] or
-                print(key_handle)
-                last_char=' '
+                    print(self.options)  
+                key_handle = None 
+            elif  key_handle=='esc': 
                 return None
-            elif key_handle=='cntr+c': # cntr + c char in [ b'\x03','\x03'] or 
-                print(key_handle)
+            elif key_handle=='cntr+c':
                 pass
-            elif  key_handle=='cntr+v': # cntr + v char in [ b'\x18','\x18'] or
+            elif  key_handle=='cntr+v': 
                 # paste clipboard
                 pass
-            elif key_handle=='backspace': #Back Space char in [ b'\x08','\x08'] or 
+            elif key_handle=='backspace': 
                 lenght=len(self.line_user_input)
                 self.line_user_input=self.line_user_input[:lenght-1]
                 lenght=len(self.line_user_input)
@@ -636,25 +683,16 @@ class AutocompletePathFile:
                     sys.stdout.write("\b ")
                     sys.stdout.flush()
                     sys.stdout.write("\b")
-                last_char=' '
             else: 
                 pos=pos+1
-                if char and not self.is_special_character(last_char,char):
-                    try:
-                        self.line_user_input=self.line_user_input+'{}'.format(char.decode())
-                        if not self.verbose:
-                            sys.stdout.write('{}'.format(char.decode()))
-                    except:
-                        self.line_user_input=self.line_user_input+'{}'.format(char)
-                        if not self.verbose:
-                            sys.stdout.write('{}'.format(char))
-                        pass
+                if key_handle and not is_special_character:
+                    self.line_user_input=self.line_user_input+key_handle
                     if not self.verbose:
+                        sys.stdout.write(key_handle)
                         sys.stdout.flush()
             if self.verbose:        
                 print(self.line_user_input)        
             self.line_autocompleted=self.line_user_input    
-            last_char=char
             
             
 if __name__ == "__main__":
@@ -667,7 +705,10 @@ if __name__ == "__main__":
         while True:
             print("Map keys: press enter to exit")
             char = getch()
-            print(type(char),"Here->",char,'str->',str(char),'ord->',ord(char),'encode->',char.encode('utf-8'))
+            if isinstance(char,str): # linux
+                print(type(char),"Here->",char,'str->',str(char),'ord->',ord(char),'encode->',char.encode('utf-8'))
+            if isinstance(char,bytes): # windows
+                print(type(char),"Here->",char,'str->',str(char),'ord->',ord(char),'encode->',char)
             # os.system('cls' if os.name == 'nt' else 'clear')
             print(AC.char_sequence)
             key_handle=AC.handle_key(last_char,char)
@@ -685,25 +726,4 @@ if __name__ == "__main__":
             if key_handle=='enter': #enter
                 return
     test_handle2()
-
-    # import select, time
-    # # Add a timeout of 1 second to the program
-    # fd = sys.stdin.fileno()
-    # print('select test') 
-    # char=getch()
-    # select.select([fd],[],[])
-    # time.sleep(1)
-    # print("1 sec after?")
-    # from datetime import datetime
-    # ts=datetime.now()
-    # te=datetime.now()
-    # delta=te-ts
-    # exit_flag=True
-    # while delta.total_seconds()<60:
-    #     if AC.interrupt_on_key_press('enter',exit_flag):
-    #         break
-    #     te=datetime.now()
-    #     delta=te-ts
-    #     if delta.total_seconds()>33:
-    #         exit_flag=False
-    # print(delta.total_seconds())
+    
