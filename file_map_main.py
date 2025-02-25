@@ -681,6 +681,7 @@ def format_new_table_name(tablename:str,path_to_map:str)->str:
         tablename=tablename.replace('!',dp)
         tablename=tablename.replace('/','_')
         tablename=tablename.replace('\\','_')
+        tablename=tablename.replace(' ','_')
     return tablename
 
 def get_maps_in_db(database):

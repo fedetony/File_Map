@@ -578,8 +578,6 @@ class AutocompletePathFile:
         """
         if not key:
             return '' 
-        if not last_key:
-            last_key=' '
         # Windows
         if os.name == 'nt':
             return self._handle_key_windows(key)            
@@ -595,7 +593,7 @@ class AutocompletePathFile:
         key_handle=None
         while not key_handle:       
             char = getch()
-            key_handle=AC.handle_key(char)
+            key_handle=self.handle_key(char)
         special_character = False
         if len(key_handle)>1: # words with more than 1 character is special character
             special_character = True
@@ -611,7 +609,7 @@ class AutocompletePathFile:
         lenght=0
         lenoptions=0
         while True:
-            key_handle,is_special_character=AC.wait_key_press()
+            key_handle,is_special_character=self.wait_key_press()
             if self.verbose:
                 os.system('cls' if os.name == 'nt' else 'clear')
             else:
