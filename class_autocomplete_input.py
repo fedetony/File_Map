@@ -566,7 +566,7 @@ class AutocompletePathFile:
                 return key
          
 
-    def handle_key(self,last_key,key)->str:
+    def handle_key(self,key)->str:
         """Maps a key to a string for special characters ater getch
             Some characters map with a sequence.
         Args:
@@ -593,34 +593,13 @@ class AutocompletePathFile:
             tuple[str,bool]: Key handle, True if special character.
         """
         key_handle=None
-        last_char=' '
         while not key_handle:       
             char = getch()
-            key_handle=AC.handle_key(last_char,char)
-            last_char=char
+            key_handle=AC.handle_key(char)
         special_character = False
         if len(key_handle)>1: # words with more than 1 character is special character
             special_character = True
         return key_handle, special_character 
-    
-    def is_special_character(self,last_key,key)->bool:
-        """Check if is a pecial character
-
-        Args:
-            last_key (char): last value
-            key (char): ASCII value
-
-        Returns:
-            bool: _description_
-        """
-        if os.name=='nt' and ord(key) in [0,224,13,8,27,9]+list(range(1,27)):
-            return True
-        
-        key_handle=self.handle_key(last_key,key)
-        if key_handle:
-            if len(key_handle)>1: # words with more than 1 character
-                return True
-        return False
 
     def get_input(self):
         """Get user input.
@@ -628,7 +607,6 @@ class AutocompletePathFile:
         Returns:
             str: User input
         """
-        
         pos=0
         lenght=0
         lenoptions=0
@@ -700,8 +678,8 @@ if __name__ == "__main__":
     input_path = AC.get_input
     my_path = input_path()
     print("User input:", my_path)
-    def test_handle():
-        last_char=' '
+    def test_handle(): 
+        """To see internally the keyboard mapping sequences"""
         while True:
             print("Map keys: press enter to exit")
             char = getch()
@@ -710,15 +688,14 @@ if __name__ == "__main__":
             if isinstance(char,bytes): # windows
                 print(type(char),"Here->",char,'str->',str(char),'ord->',ord(char),'encode->',char)
             # os.system('cls' if os.name == 'nt' else 'clear')
-            print(AC.char_sequence)
-            key_handle=AC.handle_key(last_char,char)
-            print(AC.char_sequence)
-            print('Char: ',chr(ord(char)),' last->ord:',ord(last_char),' ord:',ord(char), 'keyhandle=',key_handle)
-            # print(key_handle," Special :",AC.is_special_character(last_char,char))
-            if char in [b'\r', b'\n', '\r', '\n'] or key_handle=='enter': #enter
+            print(f"Sequence before:{AC.char_sequence}")
+            key_handle=AC.handle_key(char)
+            print(f"Sequence After:{AC.char_sequence}")
+            print('Char: ',chr(ord(char)),' ord:',ord(char), 'keyhandle=',key_handle)
+            if char in [b'\r', b'\n', '\r', '\n'] or key_handle=='enter': 
                 return
-            last_char=char
     def test_handle2():
+        """Teste wait key press"""
         while True:
             print("Map keys: press enter to exit")
             key_handle,is_special_character=AC.wait_key_press()
@@ -726,4 +703,3 @@ if __name__ == "__main__":
             if key_handle=='enter': #enter
                 return
     test_handle2()
-    
