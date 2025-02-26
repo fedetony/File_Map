@@ -598,7 +598,20 @@ class AutocompletePathFile:
         if len(key_handle)>1: # words with more than 1 character is special character
             special_character = True
         return key_handle, special_character 
+    
+    def wait_specific_key_press(self,key='enter'):
+        """Returns only when the specific key is pressed. Blocks the thread.
 
+        Returns:
+            tuple[str,bool]: Key handle, True if special character.
+        """
+        while True:        
+            key_handle, special_character=self.wait_key_press()
+            if key_handle.lower() == key.lower():
+                return key_handle, special_character
+            if self.verbose:
+                print(f"You pressed '{key_handle}' not '{key}'")     
+        
     def get_input(self):
         """Get user input.
 

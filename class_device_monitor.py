@@ -112,8 +112,19 @@ class DeviceMonitor:
                 c = wmi.WMI()
                 logical_disk = c.Win32_LogicalDisk(Caption=drive_letter)[0]
                 partition = logical_disk.associators()[1]
+                
                 physical_disc = partition.associators()[0]
-                return physical_disc.SerialNumber
+                try:
+                    a_serial=physical_disc.properties['SerialNumber']
+                    if a_serial:
+                        return a_serial
+                except:
+                    pass
+                try:
+                    a_serial=physical_disc.SerialNumber
+                except:
+                    return None
+                return a_serial
             except Exception as eee:
                 print (eee)
         return None
@@ -245,13 +256,15 @@ if __name__ == '__main__':
             md.check_none_devices()
 
     print(md.devices)
+    device_mount=md.devices[len(md.devices)-1][0]
     if platform.system() == 'Windows':
-        info=md.get_info_windows_device(md.devices[0][0])
+        info=md.get_info_windows_device(device_mount.replace('\\',''))
+        print(f'Windows Information on {device_mount}')
         print("info:\n",info)
         print("type:\n",type(info))
-        result = md.win32_disk_drive_to_dict(info)
-        print (result)
     if platform.system() == 'Linux':
-        info=md.get_info_linux_device(md.devices[2][0])        
+        info=md.get_info_linux_device(device_mount)        
+        print(f'Linux Information on {device_mount}')
         print("info:\n",info)
+        print("type:\n",type(info))
 

@@ -8,6 +8,7 @@ from datetime import datetime
 import hashlib
 import threading
 import keyboard
+import difflib
 
 from class_sqlite_database import SQLiteDatabase
 from class_file_manipulate import FileManipulate
@@ -405,7 +406,7 @@ class FileMapper:
             start_datetime=datetime.now()
             num_files,num_folders=self.count_files_in_path(path_to_map)
             with Progress() as progress:
-                task1 = progress.add_task("[blue]Initial Mapping [red](F10 to Exit)", total=num_files)
+                task1 = progress.add_task("[blue]Initial Mapping [red](F12 to Exit)", total=num_files)
                 delta=datetime.now()-start_datetime
                 print(f"Counted: {num_files} files and {num_folders} folders in {delta.total_seconds()} sec")
                 for dirpath, _, filenames in os.walk(path_to_map):
@@ -414,7 +415,7 @@ class FileMapper:
                         line_data_tup=self.get_mapping_info_data_from_file(mount,dirpath,file,log_print,f'{files_processed}. ')
                         data.append(line_data_tup)
                         iii=iii+1
-                        if keyboard.is_pressed('F10'):
+                        if keyboard.is_pressed('F12'):
                             return "[red] User Interrupt"
                         if iii>=10:
                             if log_print:
@@ -755,6 +756,24 @@ class FileMapper:
         except Exception as eee:
             print(f"{table_name} was not deleted: {eee}")
 
+    def serial_close_match(self,serial,devices):
+        """Gets a close match of the serial
+
+        Args:
+            serial (str): serial
+            devices (list): active devices
+
+        Returns:
+            _type_: _description_
+        """
+        serial_list=[]
+        for dev in devices:
+            serial_list.append(dev[1])
+        close=difflib.get_close_matches(serial,serial_list, n=3, cutoff=0.9)
+        if len(close)>0:
+            return close[0]
+        return None
+
     def check_if_map_device_active(self,db:SQLiteDatabase,table_name:str,rescan_devices:bool=True):
         """Checks if mounted device is active, and if map path exists. Returns the mounting point if device is active. 
 
@@ -790,7 +809,7 @@ class FileMapper:
                 
                 device_present=False
                 for a_mount,a_serial in self.active_devices:
-                    if a_serial in serial:
+                    if self.serial_close_match(serial,self.active_devices) == a_serial:
                         device_present=True
                     if mp_mount.lower() == a_mount.lower() and device_present:
                         mount= a_mount.lower()
@@ -798,7 +817,7 @@ class FileMapper:
                         break
                 if not mount:
                     for md in self.active_devices:
-                        if md[1] in serial:
+                        if md[1] == self.serial_close_match(serial,self.active_devices):
                             mount=md[0]
                             mount_active=True 
                             break

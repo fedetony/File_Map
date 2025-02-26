@@ -33,6 +33,7 @@ MENU_HEADER=""">>================FILE MAP=================<<
 >>======by FG with coffee and Love=========<<
 >>=========================================<<
 """
+__github__="https://github.com/fedetony"
 __version__="v.1.1.333 beta"
 
 
@@ -884,7 +885,7 @@ def show_maps():
     for iii,a_db in enumerate(active_databases):
         fm=a_db['mapdb']
         if isinstance(fm,FileMapper):
-            print(f"{iii+1}. Maps in {a_db['file']}:")
+            print(f"{iii+1}. [yellow]Maps in {a_db['file']}:")
             table_list=fm.db.get_data_from_table(fm.mapper_reference_table,'*')
             table_list_size=[]
             for table_info in table_list:
@@ -1377,7 +1378,7 @@ def menu_mapping_functions():
 def main_menu():
     """Interactive menu main"""
     msg=''
-    ch=['Handle Databases', 'Mapping', 'Exit']
+    ch=['About','Rescan Devices','Handle Databases', 'Mapping', 'Exit']
     menu = [inquirer.List(
         "main_menu",
         message="Please select",
@@ -1397,11 +1398,31 @@ def main_menu():
             msg=menu_handle_databases()
         elif answers['main_menu']=='Mapping':
             msg=menu_mapping_functions()
+        elif answers['main_menu']=='Rescan Devices':
+            msg=rescan_database_devices()
+        elif answers['main_menu']=='About':
+            os.system('cls' if os.name == 'nt' else 'clear')
+            print(FILE_MAP_LOGO)
+            print(__github__)
+            print(__version__)
+            print("Press any key to continue")
+            getch()
         elif answers['main_menu']=='Exit':
             # Clear the screen and exit program
             os.system('cls' if os.name == 'nt' else 'clear')
             sys.exit(0)
-	
+
+def rescan_database_devices():
+    new_active=None
+    for iii,a_db in enumerate(active_databases):
+        fm=a_db['mapdb']
+        if isinstance(fm,FileMapper) and iii==0:
+            fm.look_for_active_devices()
+            new_active=fm.active_devices
+        elif isinstance(fm,FileMapper) and iii>0:
+            fm.active_devices=new_active    
+    return '[Green]Devices Refreshed'        
+
 def main_debug():
     db_path=os.path.join(F_M.get_app_path(),"db_Files")
     db_name="test_files_db.db"
