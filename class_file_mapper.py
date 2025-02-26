@@ -340,6 +340,9 @@ class FileMapper:
         Args:
             table_name (str): table
             progress_bar (object, optional):Object to use for progressbar in GUI. Defaults to None.
+        
+        Returns:
+            str: message to print
         """
         db_info={"name":self.db_path_file,"key":self.key_filepath,"pwd":self.password,"encrypt":self.is_db_encrypted}
         mount, mount_active, mappath_exists=self.check_if_map_device_active(self.db,table_name,False)
@@ -376,6 +379,8 @@ class FileMapper:
                 print("Press any key to continue")
                 print("+"*33)
                 getch()
+            return ''
+        return 'Mount not available!'
             
     def map_a_path_to_db(self,table_name,path_to_map,log_print=True,progress_bar=None):
         """Maps a path in a device into a table in the database.
@@ -607,7 +612,7 @@ class FileMapper:
             data_list=[]
             cols=str(column_list).replace("[","").replace("'","").replace("]","")
             for index,(db,table_name) in enumerate(zip(db_list,table_name_list)):
-                data=db.get_data_from_table(f"{table_name} ORDER BY {column_list[Orderby]}", f"{cols}")
+                data=db.get_data_sql_command(f"SELECT {cols} FROM '{table_name}' ORDER BY {column_list[Orderby]}")
                 for ddd in data:
                     data_list.append((index,)+ddd) # add [db,table] index to tuple
 
@@ -920,8 +925,8 @@ class FileMapper:
         return node_dict    
 
     def find_duplicates(self,tablename):
-        """Returs a list of tuple with the dictionaries of file information of each repeated file.
-        Duplicates are the files in the same folder,with different file names but with the same md5 sum.
+        """Returns a list of tuple with the dictionaries of file information of each repeated file.
+        Duplicates are the files in the same folder,with different file names but with the same md5 sum. Excludes Repeated (different folder).
 
         Args:
             tablename (str): table in database
@@ -932,39 +937,68 @@ class FileMapper:
         """
         repeated_dict=self.get_repeated_files(self.db,tablename)
         dbresult_list=self.get_dbresult_list([self.db],[tablename])
-        a_key=None #key_list[3]
+        item_list= [ 'id', 'md5', 'size', 'filename', 'filepath']
+        match_list=[False, True, True, False, True]
+        return self.find_matching(tablename,repeated_dict,dbresult_list,item_list,match_list)
+    
+    def find_repeated(self,tablename):
+        """Returns a list of tuple with the dictionaries of file information of each repeated file.
+       Repeated are files with the same md5 sum, in different folders within the map. Excludes Duplicates (same folder).
+
+        Args:
+            tablename (str): table in database
+
+        Returns:
+            list: list of tuples, each dictionary in the tuple contains the repeat files
+            [({Repfileinfo1},{Repfileinfo2}..{RepfileinfoN}), ...({RepfileinfoX1},{RepfileinfoX2}..{RepfileinfoXN})]
+        """
+        repeated_dict=self.get_repeated_files(self.db,tablename)
+        dbresult_list=self.get_dbresult_list([self.db],[tablename])
+        item_list= [ 'id', 'md5', 'size', 'filename', 'filepath']
+        match_list=[False, True, True, False, False]
+        return self.find_matching(tablename,repeated_dict,dbresult_list,item_list,match_list)
+    
+    def find_matching(self,repeated_dict:dict,dbresult_list:list,item_list:list,match_list:list):
+        """Finds matching item and match items in a database
+
+        Args:
+            repeated_dict (dict): repeated dictionary
+            dbresult_list (list): list of databases
+            item_list (list[str]): list of items to compare
+            match_list (list[bool]): comparison criteria match
+
+        Returns:
+            list: list of tuples, each dictionary in the tuple contains the matching files
+            [({Matfileinfo1},{Matfileinfo2}..{MatfileinfoN}), ...({MatfileinfoX1},{MatfileinfoX2}..{MatfileinfoXN})]
+        """
+        a_key=None 
         repeated_info_dict=self.repeated_list_info(repeated_dict,a_key,dbresult_list)
-        #print(repeated_info_dict)
-        # repeated_in_same_db=self.repeated_in_same_db(repeated_dict,a_key)
-        # print("Elements in same database,table pair: {}".format(repeated_in_same_db))
-        duplicate_list=[]
+        repeat_list=[]
         for a_key,_ in repeated_info_dict.items():
             for iii,rid_list in enumerate(repeated_info_dict[a_key]):
                 comp_dict={}
                 if iii == 0:
                     node_1=rid_list[4] #Node object
-                    duplicate_node=None
+                    repeat_node=None
                 else:
                     node_2=rid_list[4] #Node object
                     comp_dict=dbresult_list[0].compare_nodes(node_1,node_2,'==')
-                    item_list=[ 'id', 'md5', 'size', 'filename', 'filepath']
-                    match=    [False, True, True, False, True]
-                    duplicate_file=True
+                    
+                    repeat_file=True
                     #print("."*33)
-                    for aaa,bbb in zip(item_list,match):
+                    for aaa,bbb in zip(item_list,match_list):
                         #print(f"{aaa}: {getattr(node_1,aaa)} ==? {getattr(node_2,aaa)} -> {comp_dict[aaa]} <- should be {bbb}")
                         if bbb != comp_dict[aaa]:
-                            duplicate_file=False
+                            repeat_file=False
                             break
-                    if duplicate_file:
+                    if repeat_file:
                         if iii==1:
-                            duplicate_node=(node_1.to_dict(),node_2.to_dict())
+                            repeat_node=(node_1.to_dict(),node_2.to_dict())
                         else:
-                            duplicate_node=duplicate_node+(node_2.to_dict(),)
-                if duplicate_node:    
-                    duplicate_list.append(duplicate_node)
-                        # print("@"*5+'---->Duplicate')   
-        return duplicate_list
+                            repeat_node=repeat_node+(node_2.to_dict(),)
+                if repeat_node:    
+                    repeat_list.append(repeat_node) 
+        return repeat_list
 
     def __del__(self):
         """On deletion close correctly"""

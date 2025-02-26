@@ -722,6 +722,13 @@ class FileManipulate:
         return file_structure
 
     @staticmethod
+    def add_separator_to_path(a_path):
+        """Adds the separator to a path"""
+        if a_path.endswith((os.sep,'\\','/')):
+            return a_path
+        return a_path + os.sep    
+
+    @staticmethod
     def extract_parent_path(filename: str, with_separator: bool = True) -> str:
         """Extracts parent path of a path+filename string
 

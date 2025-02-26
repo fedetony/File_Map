@@ -275,6 +275,23 @@ class SQLiteDatabase:
             #     c.close()  
         return data
     
+    def get_data_sql_command(self,sql:str)->list:
+        """returns the data from any sql query
+        Args:
+            sql (str): sql query
+
+        Returns:
+            list: data in table
+        """
+        data=[]
+        try:
+            c = self.conn.cursor()
+            c.execute(sql)
+            data= c.fetchall()
+        except sqlite3.Error as eee:
+            print(eee) 
+        return data
+    
     def delete_data_from_table(self,table:str,where:str= None)->list:
         """Delete data in the rows
 

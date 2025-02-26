@@ -464,6 +464,7 @@ def menu_get_a_directory(allow_create_dir=False):
                 continue
             file_exist, is_file = F_M.validate_path_file(path_user)
             if file_exist and not is_file:
+                path_user=F_M.add_separator_to_path(path_user)
                 dir_available=True
             elif file_exist and is_file:
                 path_user=F_M.extract_path(path_user)
@@ -527,7 +528,7 @@ def get_an_existing_file(path, extension=".db"):
             else:
                 file_available=False
             return file_available, file_user
-        elif answers['dir_select']=='Back':
+        elif answers['file_select']=='Back':
             return False,''
     
 
@@ -1026,8 +1027,10 @@ def menu_continue_mapping():
     data=fm.db.get_data_from_table(db_map_pair[1],'*',f'md5="{MD5_CALC}"')
     if len(data)==0:
         return f"[green]All files in {db_map_pair[1]} are already Mapped"
-    fm.remap_map_in_thread_to_db(db_map_pair[1],None,True)
-    return ''
+    msg = fm.remap_map_in_thread_to_db(db_map_pair[1],None,True)
+    if msg != "":
+        msg= "[magenta]"+msg 
+    return msg 
 
 def menu_process_map():
     """Menu for processing a map"""
@@ -1042,6 +1045,7 @@ def menu_process_map():
     choices_hints = {
     "Print Tree": "Tree",
     "Find Duplicates": "Duplicates are files with the same md5 sum, in the same folder but with different names.",
+    "Find Repeated": "Repeated are files with the same md5 sum, in any folder within the map.",
     "Back": "Go back"}
     ch=list(choices_hints.keys())
     menu = [inquirer.List(
@@ -1068,6 +1072,9 @@ def menu_process_map():
         elif answers['map_process'] == 'Find Duplicates': 
             duplicte_list=find_duplicates_in_database(db_map_pair[0],db_map_pair[1])
             menu_duplicates_actions(duplicte_list,db_map_pair)
+        elif answers['map_process'] == 'Find Repeated': 
+            repeat_list=find_repeated_in_database(db_map_pair[0],db_map_pair[1])
+            menu_duplicates_actions(repeat_list,db_map_pair)
 
 def search_maps_for(selected_db_map_pair_list,column,search):
     fs_list=[]
@@ -1322,17 +1329,22 @@ def find_duplicates_in_database(database,a_map):
     """
     fm=get_file_map(database)
     return fm.find_duplicates(a_map)
-    # repeated_dict=fm.get_repeated_files(fm.db,a_map)
-    # showing=['id','filepath','filename','md5','size']
-    # key_list=list(repeated_dict.keys())
-    # filelist=[]
-    # for a_key in key_list:
-    #     print(a_key)
-    #     fm.re
-    #     filelist.append(fm.repeated_list_show(repeated_dict,a_key,[fm.db],[a_map],showing))
-    #     # d_m1=DataManage(file_list,showing)
-    # return filelist
 
+def find_repeated_in_database(database,a_map):
+    """Returs a list of tuple with the dictionaries of file information of each repeated file.
+       Repeated are files with the same md5 sum, in any folder within the map. 
+
+        Args:
+            database (str): database
+            tablename (str): table in database
+
+        Returns:
+            list: list of tuples, each dictionary in the tuple contains the duplicate files
+            [({Dupfileinfo1},{Dupfileinfo2}..{DupfileinfoN}), ...({DupfileinfoX1},{DupfileinfoX2}..{DupfileinfoXN})]
+    """
+    fm=get_file_map(database)
+    return fm.find_repeated(a_map)
+    
 
 def menu_mapping_functions():
     """Interactive menu handle databases"""
@@ -1421,7 +1433,7 @@ def rescan_database_devices():
             new_active=fm.active_devices
         elif isinstance(fm,FileMapper) and iii>0:
             fm.active_devices=new_active    
-    return '[Green]Devices Refreshed'        
+    return '[green]Devices Refreshed'        
 
 def main_debug():
     db_path=os.path.join(F_M.get_app_path(),"db_Files")
