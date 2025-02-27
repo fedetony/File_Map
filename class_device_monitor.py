@@ -221,7 +221,10 @@ class DeviceMonitor:
                 serials=self.get_serial_number(disk.device)
                 #print(f"Using {disk.device} psutil: {serials}")
                 time.sleep(self.time_delay_s) #windows is slow to query. If asked too fast responds unknown
-                devices.append([disk.device,serials])
+                if platform.system() == 'Windows':
+                    devices.append([disk.device,serials])
+                elif platform.system() == 'Linux':
+                    devices.append([disk.mountpoint,serials])
         self.devices=devices
         return devices
     
