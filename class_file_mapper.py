@@ -187,7 +187,10 @@ class FileMapper:
         """
         if mount.endswith("\\"):
             mount=mount.replace("\\",'')
-            return path[len(mount):]
+            path=path[(len(mount)+1):]
+            if path.startswith('\\'):
+                return path[1:]
+            return path
         if mount.endswith("/") and len(mount)>1:
             return path[len(mount):]    
         if not mount.endswith("/") and len(mount)>1:
@@ -850,11 +853,14 @@ class FileMapper:
                             break
                 # Check if path exists
                 if mount:
-                    f_m=FileManipulate()
-                    if mappath.startswith(os.sep):
-                        mappath=mappath[1:]
-                    mount_path=os.path.join(f_m.fix_separator_in_path(mount),mappath)
-                    mappath_exists=os.path.exists(mount_path)
+                    if os.name == 'nt':
+                        mappath_exists=os.path.exists(os.path.join(mount,mappath))
+                    else:    
+                        f_m=FileManipulate()
+                        if mappath.startswith(os.sep):
+                            mappath=mappath[1:]
+                        mount_path=os.path.join(f_m.fix_separator_in_path(mount),mappath)
+                        mappath_exists=os.path.exists(mount_path)
                 else:
                     for md in self.active_devices:
                         if os.path.exists(os.path.join(md[0],mappath)):
