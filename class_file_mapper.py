@@ -568,7 +568,7 @@ class FileMapper:
                 str_just=f_m.get_string_justified(f"{count_print}({str_size})",False,11+3+4)
                 time_elapsed = (dt_data_modified - dt_data_created).total_seconds()
                 print(f"{str_just} ({the_md5}) \t{dirpath+os.sep+file} ... ({time_elapsed:.3f}s)")
-        except (FileExistsError,PermissionError,FileNotFoundError,NotADirectoryError,TypeError) as eee:
+        except (FileExistsError,PermissionError,FileNotFoundError,NotADirectoryError,TypeError,OSError) as eee:
             print(f"{mount}{dirpath}{file} Error: {eee}")
             if not the_md5:
                 the_md5='::UNKNOWN::'
