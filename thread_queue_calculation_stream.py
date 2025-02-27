@@ -190,7 +190,10 @@ class QueueCalcStream(threading.Thread):
         count=0
         with Progress() as progress:
             if not self.pbar_stream:
-                task1 = progress.add_task(f"[blue]{self.table} [red](Press F12 to Exit)", total=100)
+                exit_key="ctrl+c"
+                if os.name == 'nt':
+                    exit_key="F12"
+                task1 = progress.add_task(f"[blue]{self.table} [red](Press {exit_key} to Exit)", total=100)
             while not self.killer_event.wait(self.cycle_time):   
                 try:
                     if self.queue_pathfile.empty():
@@ -212,7 +215,10 @@ class QueueCalcStream(threading.Thread):
                         #progress.update(task1, advance=1)
                         progress.update(task1, completed=per)
                     else:
-                        self.Pbar_Set_Status(self.pbar_stream,per)          
+                        self.Pbar_Set_Status(self.pbar_stream,per)     
+                except KeyboardInterrupt:
+                    self.killer_event.set()
+                    log.info('User Cancel')     
                 except Exception as e:
                     self.killer_event.set()
                     log.error(e)
@@ -250,15 +256,16 @@ def main():
     
     try:
         last_txt=None
-        while qstream.is_alive():        
-            if keyboard.is_pressed('F12'):
-                kill_ev.set()        
+        while qstream.is_alive():    
+            if os.name=='nt':    
+                if keyboard.is_pressed('F12'):
+                    kill_ev.set()        
             # txt=qstream.processing_file
             # if txt != last_txt:
             #     print(txt)
             #     last_txt=txt
             time.sleep(1)
-    except:
+    except KeyboardInterrupt:
         pass
     end_datetime=datetime.now()
     print('took',(end_datetime-start_datetime).total_seconds(),' sec')

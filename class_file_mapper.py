@@ -183,17 +183,21 @@ class FileMapper:
             path (str): path
 
         Returns:
-            _type_: _description_
+            str: Path without mount not starting with '/' because join removes the mount.
         """
         if mount.endswith("\\"):
             mount=mount.replace("\\",'')
             return path[len(mount):]
         if mount.endswith("/") and len(mount)>1:
-            return '/'+path[len(mount):]    
-        if mount == '/':
+            return path[len(mount):]    
+        if not mount.endswith("/") and len(mount)>1:
             if path.startswith('/'):
-                return path
-            return '/'+path  
+                return path[(len(mount)+1):]
+            return path[len(mount):]
+        if mount=='/':
+            if path.startswith('/'):
+                return path[1:]
+            return path  
         return path[len(mount):]
 
     def find_mount_serial_of_path(self,path:str):
@@ -366,18 +370,16 @@ class FileMapper:
             qstream=QueueCalcStream(db_info,table_name,mount,cycle_time,kill_ev,progress_bar)
             qstream.start()
             try:
-                # last_txt=None
                 was_user_exit=False
-                while qstream.is_alive():        
-                    if keyboard.is_pressed('F12'):
-                        was_user_exit=True
-                        kill_ev.set()        
-                    # txt=qstream.processing_file
-                    # if txt != last_txt:
-                    #     print(txt)
-                    #     last_txt=txt
+                while qstream.is_alive():   
+                    if os.name=='nt':     
+                        if keyboard.is_pressed('F12'):
+                            was_user_exit=True
+                            kill_ev.set()    
                     time.sleep(0.5)
-            except:
+            except KeyboardInterrupt:
+                was_user_exit=True
+                kill_ev.set()
                 pass
             
             took=self.calculate_time_elapsed(start_datetime,datetime.now())
@@ -423,7 +425,10 @@ class FileMapper:
             start_datetime=datetime.now()
             num_files,num_folders=self.count_files_in_path(path_to_map)
             with Progress() as progress:
-                task1 = progress.add_task("[blue]Initial Mapping [red](F12 to Exit)", total=num_files)
+                exit_key="ctrl+c"
+                if os.name == 'nt':
+                    exit_key="F12"
+                task1 = progress.add_task(f"[blue]Initial Mapping [red]({exit_key} to Exit)", total=num_files)
                 delta=datetime.now()-start_datetime
                 print(f"Counted: {num_files} files and {num_folders} folders in {delta.total_seconds()} sec")
                 for dirpath, _, filenames in os.walk(path_to_map):
@@ -432,8 +437,9 @@ class FileMapper:
                         line_data_tup=self.get_mapping_info_data_from_file(mount,dirpath,file,log_print,f'{files_processed}. ')
                         data.append(line_data_tup)
                         iii=iii+1
-                        if keyboard.is_pressed('F12'):
-                            return "[red] User Interrupt"
+                        if os.name=='nt':
+                            if keyboard.is_pressed('F12'):
+                                return "[red] User Interrupt"
                         if iii>=10:
                             if log_print:
                                 delta = (datetime.now() - start_datetime)
@@ -455,6 +461,10 @@ class FileMapper:
                 print(f'[green]Successfully Mapped {db.get_number_or_rows_in_table(table_name)} files in {str(delta).split(".")[0]}')
                 print("+"*33,"\nPress any Key to continue\n","+"*33)
                 getch()
+        except KeyboardInterrupt:
+            print(f"[magenta]User cancel")
+            print("@"*100,"\nPress any Key to continue\n","@"*100)        
+            getch()
         except Exception as eee:
             print(f"[red]Error Mapping: {eee}")
             print(type(eee),line_data_tup)
@@ -829,7 +839,7 @@ class FileMapper:
                     if self.serial_close_match(serial,self.active_devices) == a_serial:
                         device_present=True
                     if mp_mount.lower() == a_mount.lower() and device_present:
-                        mount= a_mount.lower()
+                        mount= a_mount
                         mount_active=True 
                         break
                 if not mount:
@@ -840,7 +850,11 @@ class FileMapper:
                             break
                 # Check if path exists
                 if mount:
-                    mappath_exists=os.path.exists(os.path.join(mount,mappath))
+                    f_m=FileManipulate()
+                    if mappath.startswith(os.sep):
+                        mappath=mappath[1:]
+                    mount_path=os.path.join(f_m.fix_separator_in_path(mount),mappath)
+                    mappath_exists=os.path.exists(mount_path)
                 else:
                     for md in self.active_devices:
                         if os.path.exists(os.path.join(md[0],mappath)):
