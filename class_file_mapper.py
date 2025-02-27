@@ -188,8 +188,12 @@ class FileMapper:
         if mount.endswith("\\"):
             mount=mount.replace("\\",'')
             return path.replace(mount,'')
-        if mount.endswith("/"):
+        if mount.endswith("/") and len(mount)>1:
             return '/'+path.replace(mount,'')    
+        if mount == '/':
+            if path.startswith('/'):
+                return path    
+            return '/'+path  
         return path.replace(mount,'')
 
     def find_mount_serial_of_path(self,path:str):
