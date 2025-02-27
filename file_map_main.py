@@ -410,8 +410,7 @@ def menu_enter_path():
     path_user = input_path()
     if path_user in ['',None]:
         return False, path_user
-    if not path_user.endswith(os.sep):
-        path_user=path_user+os.sep
+    path_user=F_M.fix_separator_in_path(path_user)
     file_exist, is_file = F_M.validate_path_file(path_user)
     if file_exist and not is_file:
         dir_available=True
@@ -464,10 +463,11 @@ def menu_get_a_directory(allow_create_dir=False):
                 continue
             file_exist, is_file = F_M.validate_path_file(path_user)
             if file_exist and not is_file:
-                path_user=F_M.add_separator_to_path(path_user)
+                path_user=F_M.fix_separator_in_path(path_user)
                 dir_available=True
             elif file_exist and is_file:
                 path_user=F_M.extract_path(path_user)
+                path_user=F_M.fix_separator_in_path(path_user)
                 dir_available=True
             else:
                 dir_available=False
@@ -633,7 +633,7 @@ def menu_create_new_map():
     """New map"""
     os.system('cls' if os.name == 'nt' else 'clear')
     print(MENU_HEADER)
-    print("Create new Map:")
+    print("Create New Map:")
     print("----------")
     selected_db=menu_select_database(True)
     if selected_db and selected_db != '':    

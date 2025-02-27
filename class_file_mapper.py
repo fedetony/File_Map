@@ -204,20 +204,28 @@ class FileMapper:
         # find mounting point
         mount=''
         serial=''
+        lenmd=-1
         if isinstance(self.active_devices,list):
             for md in self.active_devices:
-                if path.startswith(md[0]):
-                    mount=md[0]
-                    serial=md[1]
-                    break
-                if path.startswith(md[0].lower()):
-                    mount=md[0].lower()
-                    serial=md[1]
-                    break
-                if path.startswith(md[0].upper()):
-                    mount=md[0].upper()
-                    serial=md[1]
-                    break
+                if os.name=='nt':
+                    if path.startswith(md[0]):
+                        mount=md[0]
+                        serial=md[1]
+                        break
+                    if path.startswith(md[0].lower()):
+                        mount=md[0].lower()
+                        serial=md[1]
+                        break
+                    if path.startswith(md[0].upper()):
+                        mount=md[0].upper()
+                        serial=md[1]
+                        break
+                else:    
+                    if path.startswith(md[0]) and len(md[0])>lenmd:
+                        lenmd=len(md[0])
+                        mount=md[0]
+                        serial=md[1]
+                    
             return mount, serial
 
     def add_table_to_mapper_index(self,table_name,path_to_map):

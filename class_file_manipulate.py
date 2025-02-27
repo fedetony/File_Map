@@ -365,6 +365,14 @@ class FileManipulate:
     
     @staticmethod
     def fix_path_separators(pathfile):
+        """Splits the path file and rejoins it with separators of the os. 
+
+        Args:
+            pathfile (str): path or path/file
+
+        Returns:
+            str: path with os separators
+        """
         # to fix the separators
         try:
             splitted_path=os.path.split(pathfile)
@@ -722,8 +730,10 @@ class FileManipulate:
         return file_structure
 
     @staticmethod
-    def add_separator_to_path(a_path):
-        """Adds the separator to a path"""
+    def fix_separator_in_path(a_path):
+        """Adds the separator to a path end. Replaces // for / in the start (linux)."""
+        if a_path.startswith(os.sep+os.sep):
+            a_path=a_path[1:]
         if a_path.endswith((os.sep,'\\','/')):
             return a_path
         return a_path + os.sep    
@@ -854,8 +864,8 @@ class FileManipulate:
             print(f"Error Glob: {eee}")
             return []
 
-    @staticmethod
-    def validate_path_file(pathfile: str) -> tuple[bool]:
+    
+    def validate_path_file(self,pathfile: str) -> tuple[bool]:
         """
         Validate the input file with path.
         
@@ -880,10 +890,11 @@ class FileManipulate:
         is_file = False
         if os.path.exists(pathfile):
             #print(f"{pathfile} exists")
-            if os.path.isdir(pathfile):
+            pathfile_mod=self.fix_separator_in_path(pathfile)
+            if os.path.isdir(pathfile_mod):
                 file_exist = True
                 is_file = False
-            if os.path.isdir(pathfile):
+            elif os.path.isfile(pathfile):
                 file_exist = True
                 is_file = True
         return file_exist, is_file 
