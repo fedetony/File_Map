@@ -5,10 +5,12 @@ import os
 import sys
 import glob as gb
 from class_file_manipulate import FileManipulate
+from key_press_functions import key_pressed, get_key, wait_key_press_timeout, wait_key
 from rich import print
 f_m=FileManipulate() 
 APP_PATH=f_m.get_app_path()
-
+CTRL_KEY='ctrl+'
+ARROW_KEY='arrow'
 class _Getch:
     """Gets a single character from standard input.  Does not echo to the
 screen."""
@@ -46,6 +48,11 @@ class _GetchWindows:
         return msvcrt.getch()
 
 getch = _Getch()
+
+raw_key_pressed=key_pressed
+get_raw_key=get_key
+wait_raw_key_press_timeout=wait_key_press_timeout
+wait_raw_key=wait_key
 
 class AutocompletePathFile:
     def __init__(self, prompt,base_path=APP_PATH,absolute_path=True,verbose=True,inquire=False):
@@ -274,6 +281,54 @@ class AutocompletePathFile:
         return txt
 
     @staticmethod
+    def raw_key_to_sequence(rawkey:str):
+        """Takes a key in raw format \\x## and converts it to in sequence
+
+        Args:
+            akey (str): _description_
+
+        Returns:
+            list: Sequence
+        """
+        keyhex=rawkey.split('\\x')
+        for iii,hex in enumerate(keyhex):
+            if hex !='':
+                keyhex[iii]='0x'+hex
+            else:
+                keyhex[iii]='0x00'
+        keyint=[]
+        iii=0
+        for hex in keyhex:
+            hhh=int(hex,16)
+            if iii==0 and hhh==0:
+                # ignore first 0 in sequence.
+                iii += 1
+            else:
+                keyint.append(hhh)
+        #print(keyhex,'->',keyint)
+        return keyint
+    
+    def raw_key_to_key_handle(self,rawkey:str):
+        """Converts a raw key into a key handle
+
+        Args:
+            rawkey (str): raw key in format \\x##
+
+        Returns:
+           tuple: key_handle, is_special_character
+        """
+        sequence=self.raw_key_to_sequence(rawkey)
+        special_character = False
+        key_handle=None
+        for kkk in sequence:
+            key_handle=self.handle_key(chr(kkk))
+        
+        if key_handle:
+            if len(key_handle)>1: # words with more than 1 character is special character
+                special_character = True
+        return key_handle, special_character  
+
+    @staticmethod
     def list_compare(list1:list,list2:list)->bool:
         """Compares two lists returns True if they are the same
 
@@ -336,16 +391,16 @@ class AutocompletePathFile:
         if len(self.char_sequence)==6:
             if self.list_compare(self.char_sequence,[27,91,49,59,53,65]):
                     self.char_sequence=[]
-                    return 'cntr+'+'arrow'+'up' # 27-> 91 -> 49 -> 59 -> 53 -> 65
+                    return CTRL_KEY+ARROW_KEY+'up' # 27-> 91 -> 49 -> 59 -> 53 -> 65
             elif self.list_compare(self.char_sequence,[27,91,49,59,53,66]):
                     self.char_sequence=[]
-                    return 'cntr+'+'arrow'+'down' # 27-> 91 -> 49 -> 59 -> 53 -> 66
+                    return CTRL_KEY+ARROW_KEY+'down' # 27-> 91 -> 49 -> 59 -> 53 -> 66
             elif self.list_compare(self.char_sequence,[27,91,49,59,53,67]):
                     self.char_sequence=[]
-                    return 'cntr+'+'arrow'+'right' # 27-> 91 -> 49 -> 59 -> 53 -> 67
+                    return CTRL_KEY+ARROW_KEY+'right' # 27-> 91 -> 49 -> 59 -> 53 -> 67
             elif self.list_compare(self.char_sequence,[27,91,49,59,53,68]):
                     self.char_sequence=[]
-                    return 'cntr+'+'arrow'+'left' # 27-> 91 -> 49 -> 59 -> 53 -> 68
+                    return CTRL_KEY+ARROW_KEY+'left' # 27-> 91 -> 49 -> 59 -> 53 -> 68
             else:
                     out=self.char_sequence[5]
                     self.char_sequence=[]
@@ -414,16 +469,16 @@ class AutocompletePathFile:
                     return 'F4' # 27-> 79 -> 83
             elif self.list_compare(self.char_sequence,[27,91,65]): 
                     self.char_sequence=[]
-                    return 'arrow'+'up' # 27-> 91 -> 65
+                    return ARROW_KEY+'up' # 27-> 91 -> 65
             elif self.list_compare(self.char_sequence,[27,91,66]): 
                     self.char_sequence=[]
-                    return 'arrow'+'down' # 27-> 91 -> 66
+                    return ARROW_KEY+'down' # 27-> 91 -> 66
             elif self.list_compare(self.char_sequence,[27,91,67]): 
                     self.char_sequence=[]
-                    return 'arrow'+'right' # 27-> 91 -> 67
+                    return ARROW_KEY+'right' # 27-> 91 -> 67
             elif self.list_compare(self.char_sequence,[27,91,68]): 
                     self.char_sequence=[]
-                    return 'arrow'+'left' # 27-> 91 -> 68
+                    return ARROW_KEY+'left' # 27-> 91 -> 68
             elif self.list_compare(self.char_sequence,[27,91,70]):
                     self.char_sequence=[]
                     return 'end' # 27-> 91 -> 70
@@ -454,7 +509,7 @@ class AutocompletePathFile:
                 return 'tab'
         elif len(self.char_sequence)==1:
             if self.char_sequence[0] in range(1,27):
-                return 'cntr+'+chr(96+self.char_sequence.pop(0))
+                return CTRL_KEY+chr(96+self.char_sequence.pop(0))
             elif self.char_sequence[0] in range(32,127): # printable characters
                 return chr(self.char_sequence.pop(0))
             elif self.char_sequence[0] not in [27]:
@@ -509,21 +564,21 @@ class AutocompletePathFile:
             if comp_result: return comp_result
             comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[224,134],[0,134],result='F12') # 224 -> 134
             if comp_result: return comp_result
-            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[0,72],[224,72],result='arrow'+'up') # 0 -> 72
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[0,72],[224,72],result=ARROW_KEY+'up') # 0 -> 72
             if comp_result: return comp_result
-            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[0,80],[224,80],result='arrow'+'down') # 0 -> 80
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[0,80],[224,80],result=ARROW_KEY+'down') # 0 -> 80
             if comp_result: return comp_result
-            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[0,77],[224,77],result='arrow'+'right') # 0 -> 77
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[0,77],[224,77],result=ARROW_KEY+'right') # 0 -> 77
             if comp_result: return comp_result
-            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[0,75],[224,75],result='arrow'+'left') # 0 -> 75
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[0,75],[224,75],result=ARROW_KEY+'left') # 0 -> 75
             if comp_result: return comp_result
-            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[224,141],[0,141],result='cntr+'+'arrow'+'up') # 224 -> 141
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[224,141],[0,141],result=CTRL_KEY+ARROW_KEY+'up') # 224 -> 141
             if comp_result: return comp_result
-            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[224,145],[0,145],result='cntr+'+'arrow'+'down') # 224 -> 145
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[224,145],[0,145],result=CTRL_KEY+ARROW_KEY+'down') # 224 -> 145
             if comp_result: return comp_result
-            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[224,116],[0,116],result='cntr+'+'arrow'+'right') # 224 -> 116
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[224,116],[0,116],result=CTRL_KEY+ARROW_KEY+'right') # 224 -> 116
             if comp_result: return comp_result
-            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[224,115],[0,115],result='cntr+'+'arrow'+'left') # 224 -> 115
+            comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[224,115],[0,115],result=CTRL_KEY+ARROW_KEY+'left') # 224 -> 115
             if comp_result: return comp_result
             comp_result, self.char_sequence = self._get_key_comparison(self.char_sequence,[0,73],[224,73],result='page'+'up') # 0 -> 73
             if comp_result: return comp_result
@@ -552,7 +607,7 @@ class AutocompletePathFile:
         if comp_result: return comp_result
         elif len(self.char_sequence)==1:
             if self.char_sequence[0] in range(1,27):
-                return 'cntr+'+chr(96+self.char_sequence.pop(0))
+                return CTRL_KEY+chr(96+self.char_sequence.pop(0))
             elif self.char_sequence[0] in range(32,127): # printable characters
                 return chr(self.char_sequence.pop(0))
             elif self.char_sequence[0] not in [0,224]:
@@ -659,9 +714,9 @@ class AutocompletePathFile:
                 key_handle = None 
             elif  key_handle=='esc': 
                 return None
-            elif key_handle=='cntr+c':
+            elif key_handle=='ctrl+c':
                 pass
-            elif  key_handle=='cntr+v': 
+            elif  key_handle=='ctrl+v': 
                 # paste clipboard
                 pass
             elif key_handle=='backspace': 
@@ -713,4 +768,11 @@ if __name__ == "__main__":
             print('keyhandle=',key_handle, 'is_special_character:',is_special_character)
             if key_handle=='enter': #enter
                 return
+    def test_raw_key():
+        print("Press key to print: ctrl+c to exit -> \\x03")
+        akey=''
+        while akey!='\\x03':
+            akey=get_raw_key(True)
+            print(AC.raw_key_to_key_handle(akey))
+            
     test_handle2()
