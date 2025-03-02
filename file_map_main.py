@@ -947,7 +947,8 @@ def menu_select_multiple_database_map()->list[tuple]:
         end_list=[]
         for database,a_map in db_map_pair_list:
             map_info=get_map_info(database,a_map)
-            end_list.append(map_info[0]+(database,))
+            if len(map_info)>0:
+                end_list.append(map_info[0]+(database,))
         d_m1=DataManage(end_list,field_list+["db"])
         d_m1.df
         str_db_map=d_m1.get_tabulated_fields(fields_to_tab=['tablename','mount','mappath'],index=False,justify='left',header=False)
@@ -1091,19 +1092,21 @@ def menu_search_in_maps():
     #"Find in Map": "Input a word to be searched alon the files",
     selected_db_map_pair_list=menu_select_multiple_database_map()
     print('selected_db_map_pair_list-->',selected_db_map_pair_list)
-    menu = [inquirer.Text(
-        'search_text',
-        message="(Leave blank to exit) Type the text to search the maps",
-        )]
-    answers = inquirer.prompt(menu)
-    ans_txt=str(answers['search_text']).strip()
+    # menu = [inquirer.Text(
+    #     'search_text',
+    #     message="(Leave blank to exit) Type the text to search the maps",
+    #     )]
+    # answers = inquirer.prompt(menu)
+    # ans_txt=str(answers['search_text']).strip()
+    msg=''
+    (ans_txt, msg, is_valid)=A_C.get_sql_input()
     print(ans_txt)
-    if ans_txt not in ['',None]:
+    if ans_txt not in ['',None] and is_valid:
         fs_list=[]
         for db_map_pair in selected_db_map_pair_list:
-            where=f"filename LIKE '%{ans_txt}%'"
+            where=ans_txt #f"filename LIKE '%{ans_txt}%'"
             fs=map_to_file_structure(db_map_pair[0],db_map_pair[1],where=where,fields_to_tab=None,sort_by=None,ascending=True)
-            print('here',len(fs))
+            print(f'Found {len(fs)} in {db_map_pair[1]}')
             if len(fs)>0:
                 fs_list.append(fs.copy())
                 del fs
@@ -1111,7 +1114,7 @@ def menu_search_in_maps():
             fs_list=[(f'Nothing Found for {ans_txt}',0)]
         f_e=FileExplorer(None,None,{f'{ans_txt} search':fs_list})
         _=f_e.browse_files(my_style_expand_size)        
-    return ''
+    return msg
 
 def menu_duplicates_actions(duplicte_list,db_map_pair):
     """Menu for duplicate actions

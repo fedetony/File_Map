@@ -11,10 +11,12 @@ import sys
 import glob as gb
 import inquirer
 from rich import print  # pylint: disable=redefined-builtin
+import rich.text
 from class_file_manipulate import FileManipulate
 from key_press_functions import key_pressed, get_key, wait_key_press_timeout, wait_key
+from class_sql_search_query import *
 
-
+SQL_SG=SQLSearchGenerator()
 f_m = FileManipulate()
 APP_PATH = f_m.get_app_path()
 CTRL_KEY = "ctrl+"
@@ -288,6 +290,33 @@ class AutocompletePathFile:
             return end_path
         return a_path_file
 
+    def autocomplete_from_list(self,a_txt:str,selection_list:list)->str:
+        """Autocompletes the text. If only one possibility, will autocomplete. If many possibilities, will set
+        the options text.
+
+        Args:
+            a_path_file (str): path to autocomplete
+
+        Returns:
+            str: autocompleted path
+        """
+        list_auto=[]
+        words = a_txt.split()
+        last_word =''
+        if len(words)>0:
+            last_word = words[-1]
+        for possibletxt in selection_list:
+            if last_word in possibletxt:
+                list_auto.append(possibletxt)
+        self.options = ""
+        if len(list_auto) == 1:
+            return str(list_auto[0]).replace(a_txt,"")
+        if len(list_auto) > 1:
+            fill_add, comp_list=self.get_commontxt_optionlist(list_auto)
+            self.options = f"[{len(list_auto)}] Options for {a_txt}: {comp_list}"
+            return fill_add.replace(a_txt,'')
+        return ""
+
     @staticmethod
     def get_initial_letters(comp_list: list) -> list:
         """Gets the first letters of the strings. Returns a list of initila letters"""
@@ -334,6 +363,60 @@ class AutocompletePathFile:
                 keyint.append(hhh)
         # print(keyhex,'->',keyint)
         return keyint
+
+    def get_sql_input(self)->tuple:
+        """Generates advanced search queries for Operations.
+
+        Returns:
+            tuple[str,str,bool]:  (SQL, message, is_valid)
+                Returns only SQL WHERE statement
+        """
+        # You can use key_pressed() inside a while loop:
+        text_input=''
+        pos=0
+        while True:
+            os.system("cls" if os.name == "nt" else "clear")
+            sql,msg,is_valid=SQL_SG.get_sql_from_text_input(text_input)
+            print("Test", pos)
+            print("Message:",msg)
+            print("Input Valid:",is_valid)
+            print("SQL:",sql)
+            if self.options != '':
+                print(self.options)
+            pretxt="Input Text:"
+            print(rich.text.Text(self.highlight_cursor(pretxt+text_input, len(pretxt)+pos)),end='')
+            (key_handle,is_special)=self.wait_key_press()
+            if not is_special:
+                text_input=self.insert_char_at_pos(text_input,key_handle,pos)
+                pos += 1
+            if key_handle == 'backspace':
+                if pos>0:
+                    text_input=self.remove_char_at_pos(text_input,pos)
+                    pos += -1
+            if key_handle == 'delete':
+                if pos<len(text_input):
+                    text_input=self.remove_char_at_pos(text_input,pos+1)
+            if key_handle == 'enter':
+                return sql,msg,is_valid
+            if key_handle == 'arrowleft':
+                pos += -1
+            if key_handle == 'arrowright':
+                pos += 1
+            if key_handle == 'home':
+                pos = 0
+            if key_handle == 'end':
+                pos = len(text_input)
+            if key_handle == 'tab':
+                self.options = ""
+                auto=self.autocomplete_from_list(text_input[:pos],ALLOWED_OPERATIONS)
+                text_input=text_input[:pos]+auto+text_input[pos:]
+                pos=len(text_input[:pos]+auto)
+            if key_handle == 'esc':
+                return '','User Cancel',False
+            if pos<0:
+                pos=0
+            elif pos>=len(text_input):
+                pos=len(text_input)
 
     def raw_key_to_key_handle(self, rawkey: str):
         """Converts a raw key into a key handle
@@ -798,7 +881,65 @@ class AutocompletePathFile:
         sys.stdout.write(msg)
         if do_flush:
             sys.stdout.flush()
+    
+    @staticmethod
+    def insert_char_at_pos(text, char, pos):
+        """
+        Inserts a character at a specified position in a given text.
 
+        Args:
+            text (str): The original text.
+            char (str): The character to be inserted.
+            pos (int): The position where the character should be inserted.
+
+        Returns:
+            str: The modified text with the character inserted.
+        """
+        return text[:pos] + char + text[pos:]
+    
+    @staticmethod
+    def remove_char_at_pos(text, pos):
+        """
+        Inserts a character at a specified position in a given text.
+
+        Args:
+            text (str): The original text.
+            char (str): The character to be inserted.
+            pos (int): The position where the character should be inserted.
+
+        Returns:
+            str: The modified text with the character inserted.
+        """
+        return text[:pos-1] + text[pos:]
+    
+    @staticmethod
+    def highlight_cursor(text:str, pos:int)->str:
+        """
+        Highlights a specific position in text.
+        Args:
+            text (str): The string containing the highlighted character.
+            pos (int): The position of the character to be highlighted.
+        Returns:
+            str: ANSI highlighted cursor string
+        """
+        ini_txt=''
+        hl_txt=''
+        end_txt=''
+        index=pos-1
+        lentxt=len(text)
+        if lentxt>0 and index>0:
+            if index+1>=lentxt:
+                ini_txt=text
+                hl_txt=''
+                end_txt=''
+            else:
+                ini_txt=text[:-(lentxt-index-1)]
+                hl_txt=text[index+1]
+                if index+1>lentxt:
+                    end_txt=''
+                else:
+                    end_txt=text[(index+2):]
+        return f"\033[1m{ini_txt}\033[6m\033[4;36m{hl_txt}\033[0m{end_txt}"
 
 if __name__ == "__main__":
     AC = AutocompletePathFile(
