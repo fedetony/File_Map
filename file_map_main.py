@@ -1153,7 +1153,7 @@ def menu_select_from_list_map(d_list,db_map_pair,selection_type='repeated'):
     answers = inquirer.prompt(menu)
     if answers['map_actions'] == 'Back':
         return ''
-    elif answers['map_actions'] == '': 
+    elif answers['map_actions'] == 'Browse/Select Files': 
         if selection_type=='repeated':
             selected_items=menu_make_selection(d_list,'exlast') #,'none')
         else:
