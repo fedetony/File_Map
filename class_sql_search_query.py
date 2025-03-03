@@ -14,11 +14,20 @@ class CheckParenthesees:
     def __init__(self):
         self.file = None
 
-    def get_text_split_separatorfromregex(self,regex_sep,pattern='[({})]'):
-            ppp=re.findall(regex_sep,pattern)
-            if len(ppp)>0:
-                return ppp[0] #separate first
-            return regex_sep
+    def get_text_split_separatorfromregex(self,text_to_sep,pattern='[({})]'):
+        """Returns the text before the first encounter of a separator (in the pattern) from a text.
+
+        Args:
+            text_to_sep (str): text to separate
+            pattern (str, optional): Separator. Defaults to '[({})]'.
+
+        Returns:
+            str: Text before any separator in pattern
+        """
+        ppp=re.findall(text_to_sep,pattern)
+        if len(ppp)>0:
+            return ppp[0] #separate first
+        return text_to_sep
     
     def nums_parenthesees(self,txt,ini_p,end_p):
         """counts the number of parenthesees in a text
@@ -102,6 +111,7 @@ class CheckParenthesees:
             a_format (_type_): _description_
             ini_p (regexp, optional): Regex opening sequence. Defaults to r'\['.
             end_p (regexp, optional): Regex closing sequence. Defaults to r'\]'.
+            pattern (str, optional): Separators. Defaults to '[({})]'.
 
         Returns:
             tuple(list[str],int): (list of texts in between openings, number of openings)
@@ -131,9 +141,9 @@ class CheckParenthesees:
         """Gets a sequential list of texts in between the openings and closings
 
         Args:
-            txt (_type_): text
-            inis (_type_): opening
-            ends (_type_): closing
+            txt (str): text
+            inis (str): opening
+            ends (str): closing
 
         Returns:
             list[str]: list of texts in between

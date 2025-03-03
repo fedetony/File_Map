@@ -14,7 +14,9 @@ from rich import print  # pylint: disable=redefined-builtin
 import rich.text
 from class_file_manipulate import FileManipulate
 from key_press_functions import key_pressed, get_key, wait_key_press_timeout, wait_key
-from class_sql_search_query import *
+from class_sql_search_query import SQLSearchGenerator, ALLOWED_DICT,ALLOWED_OPERATORS_DICT
+ALLOWED_OPERATORS=list(ALLOWED_OPERATORS_DICT.keys())
+ALLOWED_OPERATIONS=list(ALLOWED_DICT.keys())
 
 SQL_SG=SQLSearchGenerator()
 f_m = FileManipulate()
@@ -371,16 +373,22 @@ class AutocompletePathFile:
             tuple[str,str,bool]:  (SQL, message, is_valid)
                 Returns only SQL WHERE statement
         """
-        # You can use key_pressed() inside a while loop:
         text_input=''
         pos=0
+        is_help=False
         while True:
             os.system("cls" if os.name == "nt" else "clear")
             sql,msg,is_valid=SQL_SG.get_sql_from_text_input(text_input)
-            print("Test", pos)
+            print("Press F1 to print Options. Esc to Cancel. Enter to select SQL WHERE Query.", pos)
+            if is_help:
+                print("Available Operations:")
+                print(ALLOWED_OPERATIONS)
+                print("Available Operators:")
+                print(ALLOWED_OPERATORS_DICT)
+                is_help=False
             print("Message:",msg)
             print("Input Valid:",is_valid)
-            print("SQL:",sql)
+            print("SQL WHERE:",sql)
             if self.options != '':
                 print(self.options)
             pretxt="Input Text:"
@@ -389,30 +397,33 @@ class AutocompletePathFile:
             if not is_special:
                 text_input=self.insert_char_at_pos(text_input,key_handle,pos)
                 pos += 1
-            if key_handle == 'backspace':
+            if key_handle == 'F1':
+                is_help=True
+            elif key_handle == 'backspace':
                 if pos>0:
                     text_input=self.remove_char_at_pos(text_input,pos)
                     pos += -1
-            if key_handle == 'delete':
+            elif key_handle == 'delete':
                 if pos<len(text_input):
                     text_input=self.remove_char_at_pos(text_input,pos+1)
-            if key_handle == 'enter':
-                return sql,msg,is_valid
-            if key_handle == 'arrowleft':
+            elif key_handle == 'arrowleft':
                 pos += -1
-            if key_handle == 'arrowright':
+            elif key_handle == 'arrowright':
                 pos += 1
-            if key_handle == 'home':
+            elif key_handle == 'home':
                 pos = 0
-            if key_handle == 'end':
+            elif key_handle == 'end':
                 pos = len(text_input)
-            if key_handle == 'tab':
+            elif key_handle == 'tab':
                 self.options = ""
                 auto=self.autocomplete_from_list(text_input[:pos],ALLOWED_OPERATIONS)
                 text_input=text_input[:pos]+auto+text_input[pos:]
                 pos=len(text_input[:pos]+auto)
+            if key_handle == 'enter':
+                return sql,msg,is_valid
             if key_handle == 'esc':
                 return '','User Cancel',False
+            #Fix position before loop
             if pos<0:
                 pos=0
             elif pos>=len(text_input):
