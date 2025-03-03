@@ -990,7 +990,13 @@ def menu_select_database_map()->tuple:
         end_list=[]
         for database,a_map in db_map_pair_list:
             map_info=get_map_info(database,a_map)
-            end_list.append(map_info[0]+(database,))
+            if len(map_info)>0:
+                end_list.append(map_info[0]+(database,))
+            else:
+                print(f"Table {a_map} not in Reference table!!")
+                print("Press any key to continue")
+                A_C.wait_key_press()
+
         d_m1=DataManage(end_list,field_list+["db"])
         str_db_map=d_m1.get_tabulated_fields(fields_to_tab=['tablename','mount','mappath',"db"],index=False,justify='left',header=False)
         str_list=str_db_map.split('\n')
@@ -1047,6 +1053,7 @@ def menu_process_map():
     "Print Tree": "Tree",
     "Find Duplicates": "Duplicates are files with the same md5 sum, in the same folder but with different names.",
     "Find Repeated": "Repeated are files with the same md5 sum, in any folder within the map.",
+    "Search Map": "Search for files in the selected Map",
     "Back": "Go back"}
     ch=list(choices_hints.keys())
     menu = [inquirer.List(
@@ -1072,10 +1079,13 @@ def menu_process_map():
                 return 'No items in Map'
         elif answers['map_process'] == 'Find Duplicates': 
             duplicte_list=find_duplicates_in_database(db_map_pair[0],db_map_pair[1])
-            menu_duplicates_actions(duplicte_list,db_map_pair)
+            menu_select_from_list_map(duplicte_list,db_map_pair)
         elif answers['map_process'] == 'Find Repeated': 
             repeat_list=find_repeated_in_database(db_map_pair[0],db_map_pair[1])
-            menu_duplicates_actions(repeat_list,db_map_pair)
+            menu_select_from_list_map(repeat_list,db_map_pair)
+        elif answers['map_process'] == 'Search Map': 
+            fs_list=menu_search_in_maps([db_map_pair],True) #set to false to get the file structure list
+            # menu_select_from_list_map(repeat_list,db_map_pair)
 
 def search_maps_for(selected_db_map_pair_list,column,search):
     fs_list=[]
@@ -1088,9 +1098,10 @@ def search_maps_for(selected_db_map_pair_list,column,search):
             del fs
     return fs_list
 
-def menu_search_in_maps():
+def menu_search_in_maps(selected_db_map_pair_list:list=None,explore=True):
     #"Find in Map": "Input a word to be searched alon the files",
-    selected_db_map_pair_list=menu_select_multiple_database_map()
+    if not selected_db_map_pair_list:
+        selected_db_map_pair_list=menu_select_multiple_database_map()
     print('selected_db_map_pair_list-->',selected_db_map_pair_list)
     # menu = [inquirer.Text(
     #     'search_text',
@@ -1110,22 +1121,26 @@ def menu_search_in_maps():
             if len(fs)>0:
                 fs_list.append(fs.copy())
                 del fs
-        if len(fs_list)==0:
-            fs_list=[(f'Nothing Found for {ans_txt}',0)]
-        f_e=FileExplorer(None,None,{f'{ans_txt} search':fs_list})
-        _=f_e.browse_files(my_style_expand_size)        
+        if explore:
+            if len(fs_list)==0:
+                fs_list=[(f'Nothing Found for {ans_txt}',0)]
+            f_e=FileExplorer(None,None,{f'{ans_txt} search':fs_list})
+            _=f_e.browse_files(my_style_expand_size)   
+        else:
+            return fs_list     
     return msg
 
-def menu_duplicates_actions(duplicte_list,db_map_pair):
-    """Menu for duplicate actions
+def menu_select_from_list_map(d_list,db_map_pair,selection_type='repeated'):
+    """Menu for Selection
     """
     # os.system('cls' if os.name == 'nt' else 'clear')
     # print(MENU_HEADER)
-    print("Duplictes in Map actions:")
+    print(f"Selecting on {db_map_pair}")
+    print("Map Selection:")
     print("----------")
     choices_hints = {
-    "Browse Duplicate Files": "",
-    "Remove Duplicates": "Duplicates are files with the same md5 sum, in the same folder but with different names.",
+    "Browse/Select Files": "Make a selection",
+    # "Remove Duplicates": "Duplicates are files with the same md5 sum, in the same folder but with different names.",
     "Back": "Go back"}
     ch=list(choices_hints.keys())
     menu = [inquirer.List(
@@ -1138,17 +1153,26 @@ def menu_duplicates_actions(duplicte_list,db_map_pair):
     answers = inquirer.prompt(menu)
     if answers['map_actions'] == 'Back':
         return ''
-    elif answers['map_actions'] == 'Browse Duplicate Files': 
-        selected_items=menu_duplicate_select(duplicte_list,'none')
-    elif answers['map_actions'] == 'Remove Duplicates': 
-        selected_items=menu_duplicate_select(duplicte_list)
-        if isinstance(selected_items,list):
-            if len(selected_items)>0:
-                return menu_duplicate_removal_confirmation(selected_items,duplicte_list,db_map_pair)
-            else:
-                return '[magenta]No duplicates Selected'
+    elif answers['map_actions'] == '': 
+        if selection_type=='repeated':
+            selected_items=menu_make_selection(d_list,'exlast') #,'none')
         else:
-            return ''
+            selected_items=menu_make_selection(d_list,'none')
+        print(selected_items)
+        print("Press any key to continue")
+        A_C.wait_key_press()
+        # here ask to save map if selected items
+        # save to ma with type selection
+
+    # elif answers['map_actions'] == 'Remove Duplicates': 
+    #     selected_items=menu_make_selection(duplicte_list)
+        # if isinstance(selected_items,list):
+        #     if len(selected_items)>0:
+        #         return menu_duplicate_removal_confirmation(selected_items,duplicte_list,db_map_pair)
+        #     else:
+        #         return '[magenta]No duplicates Selected'
+        # else:
+        #     return ''
 
 def menu_duplicate_removal_confirmation(selected_items,duplicte_list,db_map_pair):
     """Confirms removal of selected files
@@ -1180,7 +1204,7 @@ def menu_duplicate_removal_confirmation(selected_items,duplicte_list,db_map_pair
         if answers['remove_type'] == 'Cancel':
             return '[yellow]Removal Cancelled'
         elif answers['remove_type'] == 'Remove 1 by 1': 
-            selected_items=menu_duplicate_select(duplicte_list,'none')
+            selected_items=menu_make_selection(duplicte_list,'none')
             print('Tree') 
         elif answers['remove_type'] == 'Remove All': 
             for md5,rem_keep in rem_keep_dict.items():
@@ -1282,12 +1306,12 @@ def get_remove_keep_dict(selected_items,duplicte_list):
     
     
 
-def menu_duplicate_select(duplicte_list,mark='exlast'):
+def menu_make_selection(duplicte_list,mark='exlast'):
     """Menu to select duplicate files:
 
     Args:
         duplicte_list (list): list of tuples containing (mapid, dict)
-        mark (str, optional): _description_. Defaults to 'exlast'.
+        mark (str, optional): 'last','exlast','first','exfirst' ex = except . Defaults to 'exlast'.
     """
     choice_hints={}
     default_list=[]
@@ -1298,9 +1322,9 @@ def menu_duplicate_select(duplicte_list,mark='exlast'):
                 default_list.append(f"{dupli_dict['id']}")
             elif iii!=len(dup_tup)-1 and mark=='exlast': # except last one
                 default_list.append(f"{dupli_dict['id']}")
-            elif iii==0 and mark=='first': # last one
+            elif iii==0 and mark=='first': # first one
                 default_list.append(f"{dupli_dict['id']}")  
-            elif iii!=0 and mark=='exfirst': # last one
+            elif iii!=0 and mark=='exfirst': # except first one
                 default_list.append(f"{dupli_dict['id']}")  
 
     if len(choice_hints)>0:      

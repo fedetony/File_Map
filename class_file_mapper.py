@@ -971,7 +971,7 @@ class FileMapper:
         dbresult_list=self.get_dbresult_list([self.db],[tablename])
         item_list= [ 'id', 'md5', 'size', 'filename', 'filepath']
         match_list=[False, True, True, False, True]
-        return self.find_matching(tablename,repeated_dict,dbresult_list,item_list,match_list)
+        return self.find_matching(repeated_dict,dbresult_list,item_list,match_list)
     
     def find_repeated(self,tablename):
         """Returns a list of tuple with the dictionaries of file information of each repeated file.
@@ -988,7 +988,7 @@ class FileMapper:
         dbresult_list=self.get_dbresult_list([self.db],[tablename])
         item_list= [ 'id', 'md5', 'size', 'filename', 'filepath']
         match_list=[False, True, True, False, False]
-        return self.find_matching(tablename,repeated_dict,dbresult_list,item_list,match_list)
+        return self.find_matching(repeated_dict,dbresult_list,item_list,match_list)
     
     def find_matching(self,repeated_dict:dict,dbresult_list:list,item_list:list,match_list:list):
         """Finds matching item and match items in a database
