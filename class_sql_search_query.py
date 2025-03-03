@@ -434,6 +434,63 @@ class SQLSearchGenerator:
             return False
         return True   
 
+    @staticmethod
+    def separate_file_size_value_and_unit(input_str:str)->tuple:
+        """Gets a string with bytes an units into a value unit tuple.
+        Valid units: bytes|by|kb|mb|gb|tb|er
+
+        Args:
+            input_str (str): value or value with units
+
+        Returns:
+            _type_: value,unit
+        """
+        # Define units to convert from
+        input_str=input_str.strip().lower()
+        # Regular expression patterns for different input formats
+        pattern_float = r'(-?\d+(?:\.)?(?:\d+)?)'
+        pattern_unit=r"(-?\d+(?:\.)?(?:\d+)?)((?:bytes|by|kb|mb|gb|tb|er|))"
+
+        match = re.match(pattern_unit, input_str)
+        if match:
+            if len(match.groups())>1:
+                value = float(match.group(1))
+                unit = str(match.group(2))
+                return value,unit
+        match = re.match(pattern_float, input_str)
+        if match:
+            value = float(match.group('value'))
+            unit = None
+            return value,unit
+        return None,None
+
+    @staticmethod
+    def to_bytes(us:str,size_sample:float)->int:
+        """Converts to bytes a size_sample.
+
+        Args:
+            us (str): units
+            size_sample (float): size value (will be converted to int)
+
+        Returns:
+            int: size value in bytes
+        """
+        try:
+            bytes_sample=int(size_sample)
+        except (TypeError,ValueError):
+            bytes_sample=None
+        if us in ['bytes','by']:
+            bytes_sample=int(size_sample)
+        elif us == 'kb':
+            bytes_sample=int(size_sample*1024)
+        elif us == 'mb':
+            bytes_sample=int(size_sample*1024**2)
+        elif us == 'gb':
+            bytes_sample=int(size_sample*1024**3)
+        elif us == 'tb':
+            bytes_sample=int(size_sample*1024**4)
+        return bytes_sample  
+
     def check_operation_allowed(self,operation:str,operator:str,q_txt:str)->tuple:
         """Check operator and operation 
 
@@ -508,10 +565,12 @@ class SQLSearchGenerator:
                 except (TypeError,ValueError):
                     is_valid=False
             elif ALLOWED_DICT[rec_dict['operation']]['format']==str(float):
-                try:
-                    val=float(rec_dict['query_text'])
+                val,unit=self.separate_file_size_value_and_unit(rec_dict['query_text'])
+                if val:
+                    val=self.to_bytes(unit,val)
                     rec_dict['query_text']=str(val)
-                except (TypeError,ValueError):
+                    is_valid=True
+                else:
                     is_valid=False
             elif ALLOWED_DICT[rec_dict['operation']]['format']==str(str):
                 pass  
