@@ -303,20 +303,22 @@ class AutocompletePathFile:
             str: autocompleted path
         """
         list_auto=[]
-        words = a_txt.split()
+        words = a_txt.split(" ")
         last_word =''
         if len(words)>0:
             last_word = words[-1]
         for possibletxt in selection_list:
             if last_word in possibletxt:
-                list_auto.append(possibletxt)
+                startw,_ =self.get_commontxt_optionlist([last_word,possibletxt])
+                if startw==last_word:
+                    list_auto.append(possibletxt)
         self.options = ""
         if len(list_auto) == 1:
-            return str(list_auto[0]).replace(a_txt,"")
+            return str(list_auto[0]).replace(last_word,'')
         if len(list_auto) > 1:
             fill_add, comp_list=self.get_commontxt_optionlist(list_auto)
             self.options = f"[{len(list_auto)}] Options for {a_txt}: {comp_list}"
-            return fill_add.replace(a_txt,'')
+            return fill_add.replace(last_word,'')
         return ""
 
     @staticmethod
@@ -1000,5 +1002,6 @@ if __name__ == "__main__":
             akey = get_raw_key(True)
             print(AC.raw_key_to_key_handle(akey))
 
+    test_handle()
     test_handle2()
     test_raw_key()

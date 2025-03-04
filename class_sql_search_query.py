@@ -418,9 +418,98 @@ class SQLSearchGenerator:
         return '',False
 
     @staticmethod
-    def check_dt_type(q_txt:str)->bool:
+    def is_time_hhmmss_format(input_str:str)->tuple:
+        """Gets a string with format hh:mm:ss 
+
+        Args:
+            input_str (str): string
+
+        Returns:
+            tuple: match string, True if hh:mm:ss format
+        """
+        # Define units to convert from
+        input_str=input_str.strip().lower()
+        # Regular expression patterns for different input formats
+        pattern_hhmmss = r'((?:[2][0-3]|[0-1]\d):[0-5]\d:[0-5]\d(?:\.)?(?:\d+)?)'
+        match = re.match(pattern_hhmmss, input_str)
+        if match:
+            return  str(match.group(1)), True
+        return input_str,False
+    
+    @staticmethod
+    def is_date_yyyymmdd_format(input_str:str)->tuple:
+        """Gets a string with format hh:mm:ss 
+
+        Args:
+            input_str (str): string
+
+        Returns:
+            tuple: match string, True if hh:mm:ss format
+        """
+        # Define units to convert from
+        input_str=input_str.strip().lower()
+        input_str=input_str.replace('*','%')
+        # Regular expression patterns for different input formats
+        pattern_yyyymmdd = r'((\d\d\d\d)-(?:[1][0-2]|0\d)-(?:[3][0-1]|[0-2]\d))$'
+        pattern_yyyy = r'([%]?\d\d\d\d[%]?)$'
+        pattern_yyyymm = r'([%]?(\d\d\d\d)-(?:[1][0-2]|0\d)[%]?)$'
+        pattern_mmdd = r'([%]?-(?:[1][0-2]|0\d)-(?:[3][0-1]|[0-2]\d)[%]?)$'
+        pattern_mm = r'([%]?-(?:[1][0-2]|0\d)-[%]?)$'
+        pattern_dd = r'([%]?-(?:[3][0-1]|[0-2]\d)[%]?)$'
+        match = re.match(pattern_yyyy, input_str)
+        if match:
+            adate=str(match.group(1))
+            if '0000' in adate:
+                return input_str,False 
+            return  adate, True
+        match = re.match(pattern_mm, input_str)
+        if match:
+            adate=str(match.group(1))
+            return  adate, True
+        match = re.match(pattern_dd, input_str)
+        if match:
+            adate=str(match.group(1))
+            return  adate, True
+        is_match=False
+        match = re.match(pattern_mmdd, input_str)
+        if match:
+            adate=str(match.group(1))
+            adate_sp=['3333']+adate.replace('%','').split('-')
+            is_match=True
+        match = re.match(pattern_yyyymm, input_str)
+        if match:
+            adate=str(match.group(1))
+            adate_sp=adate.replace('%','').split('-')+['03']   
+            is_match=True
+        match = re.match(pattern_yyyymmdd, input_str)
+        if match:
+            adate=str(match.group(1))
+            adate_sp=adate.split('-')
+            is_match=True
+        if is_match:
+            if adate.startswith('0000'):
+                return input_str,False 
+            # 30 day months
+            if adate_sp[1]in ['04','06','09','11'] and int(adate_sp[2])>30:
+                return input_str,False 
+            # February
+            _,rem=divmod(int(adate_sp[0]),4)   
+            if adate_sp[1]=='02' and int(adate_sp[2])>28 and rem!=0:
+                return input_str,False 
+            if adate_sp[1]=='02' and int(adate_sp[2])>29 and rem==0:
+                return input_str,False 
+            return  adate, True
+        return input_str,False
+
+    def check_dt_type(self,q_txt:str)->bool:
         """Chech if it has a datetime or number format"""
-        datetime.strftime(datetime.now(),"")
+        # if its time
+        _,is_time=self.is_time_hhmmss_format(q_txt)
+        if is_time:
+            return True
+        _,is_date=self.is_date_yyyymmdd_format(q_txt)
+        if is_date:
+            return True
         # if its a date
         try:
             _=datetime.fromisoformat(q_txt)
@@ -555,9 +644,18 @@ class SQLSearchGenerator:
         """
         if rec_dict['operation'] in ALLOWED_OPERATIONS:
             if ALLOWED_DICT[rec_dict['operation']]['format']==str(datetime):
-                dt_value,is_valid=self.get_datetime_text(rec_dict['query_text'])
-                if is_valid and rec_dict['operator'] in ['>=','<=','<','>','==','!=']:
-                    rec_dict['query_text']=dt_value
+                date_value,is_date=self.is_date_yyyymmdd_format(rec_dict['query_text'])
+                time_value,is_time=self.is_time_hhmmss_format(rec_dict['query_text'])
+                if is_date:
+                    rec_dict['operation']=f"DATE({rec_dict['operation']})"
+                    rec_dict['query_text']=date_value
+                elif is_time:
+                    rec_dict['operation']=f"TIME({rec_dict['operation']})"
+                    rec_dict['query_text']=time_value
+                else:
+                    dt_value,is_valid=self.get_datetime_text(rec_dict['query_text'])
+                    if is_valid and rec_dict['operator'] in ['>=','<=','<','>','==','!=']:
+                        rec_dict['query_text']=dt_value
             elif ALLOWED_DICT[rec_dict['operation']]['format']==str(int):
                 try:
                     val=int(rec_dict['query_text'])

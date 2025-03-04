@@ -15,7 +15,7 @@ from class_file_manipulate import FileManipulate
 from class_device_monitor import DeviceMonitor
 from class_database_result import DBResult
 from class_data_manage import DataManage 
-from class_autocomplete_input import getch
+from class_autocomplete_input import getch, SQL_SG
 from thread_queue_calculation_stream import QueueCalcStream
 from rich import print
 from rich.progress import Progress
@@ -526,19 +526,7 @@ class FileMapper:
             return 0
         if us==uc:
             return  int(size_to_calculate)/int(size_sample)*time_sample_sec
-        def to_bytes(us,size_sample):
-            if us in ['bytes','by']:
-                bytes_sample=int(size_sample)
-            elif us == 'kb':
-                bytes_sample=int(size_sample)*1024
-            elif us == 'mb':
-                bytes_sample=int(size_sample)*1024**2
-            elif us == 'gb':
-                bytes_sample=int(size_sample)*1024**3
-            elif us == 'tb':
-                bytes_sample=int(size_sample)*1024**4
-            return bytes_sample    
-        return to_bytes(uc,size_to_calculate)/to_bytes(us,size_sample)*time_sample_sec
+        return SQL_SG.to_bytes(uc,size_to_calculate)/SQL_SG.to_bytes(us,size_sample)*time_sample_sec
          
     def get_mapping_info_data_from_file(self,mount:str,dirpath:str,file:str,log_print:bool=False,count_print='')->tuple:
         """gets tuple with map table info from inputs 
