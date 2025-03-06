@@ -933,9 +933,11 @@ class AutocompletePathFile:
             txt (str): The input string.
             code (str): A single character representing a styling option. 
                         Supported options are:
-                        'normal','bold','italic','underline'
-                        'inverse'(white on black background)
-                        'reverse'(black on white background)
+                        'normal','bold','italic','underline',
+                        'inverse'(white on black background),
+                        'reverse'(black on white background),
+                        'clear' (Clear the current line and move to the beginning of it),
+                        'next' (Move to the next line without clearing the previous one)
                         Color Options:
                         'gray','red','green','yellow','blue','magenta','cyan','white'
                         f+color= foreground color
@@ -951,7 +953,9 @@ class AutocompletePathFile:
             'italic': '\033[3m', #italic
             'underline': '\033[4m',  #underline
             'inverse': '\033[7m', #  Inverse (white on black background)
-            'reverse': '\033[7m',# \033[9m: Reversed (black on white background)
+            'reverse': '\033[9m',# \033[9m: Reversed (black on white background)
+            'clear':'\033[K',# Clear the current line and move to the beginning of it.
+            'next':'\033[J', # Move to the next line without clearing the previous one.
         }
         end_style_code = style_codes['normal']
         if not code:
