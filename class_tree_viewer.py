@@ -17,7 +17,9 @@ class TreeNode:
         self.info=None
         self.size=None
         self.default=None
-    
+        self.selected=None
+        self.selected_children=None
+
     def to_dict(self)->dict:
         """Convert node to dictionary. Only attributes not starting with '__'
 
@@ -126,6 +128,21 @@ class TreeViewer:
         if len(file_tup)==0 or not self.size_index:
             return None
         return file_tup[self.size_index]
+
+    def exist_subdirectories(self,node:TreeNode)->bool:
+        """Searches for subdirectories in a node
+
+        Args:
+            node (TreeNode): Treenode
+
+        Returns:
+            bool: True if dir and has subdirectories.
+        """
+        if node.i_am=='dir':
+            for child in node.children:
+                if child.i_am=='dir':
+                    return True
+        return False
 
     def _get_nodes(self,fs)->TreeNode:
         """Recursive Node formation from file structure
@@ -241,6 +258,50 @@ class TreeViewer:
         """
         for node in self.all_nodes:
             node.default=False
+    
+    def clear_select(self):
+        """Expands or contract all nodes.
+
+        Args:
+            expand (bool, optional): Expand if True otherwise contract. Defaults to True.
+        """
+        for node in self.all_nodes:
+            node.select=False
+    
+    def clear_selected_children(self,node:TreeNode):
+        """Expands or contract all nodes.
+
+        Args:
+            expand (bool, optional): Expand if True otherwise contract. Defaults to True.
+        """
+        for child in node.children:   
+            node.selected_children=False
+            self.clear_selected_children(child)
+    
+    def set_selected_children(self,node:TreeNode)->bool:
+        """Searches the tree recursively and returns True if finds a selected child
+
+        Args:
+            node (TreeNode): node
+
+        Returns:
+            bool: True if at least one child is selected
+        """
+        if len(node.children)==0:
+            return False
+        else:
+            for child in node.children:
+                if child.selected:
+                    node.selected_children=True
+                    # return True
+                child.selected_children=False
+                child.selected_children=self.set_selected_children(child)
+                if child.selected_children:
+                    node.selected_children=True
+            if node.selected_children:
+                return True
+        node.selected_children=False
+        return False
 
     def treenode_to_string(self, node:TreeNode, str_out='', level=0, a_filter=None)->str:
         """Generates a string with a Tree structure.
@@ -254,45 +315,8 @@ class TreeViewer:
         Returns:
             str: File tree string 
         """
-        if not str_out:
-            str_out=''
-        if node is None:
-            return str_out
-        if not node.name:
-            return str_out
-        if level==0 and not node.parent: 
-            self.filtered_nodes=[]
-        # set the style
-        prefix = self.call_style(node,level)  
-
-        if a_filter not in ['dir','expand']:
-            str_out=str_out+prefix + str(node.name) +'\n'
-            self.filtered_nodes.append(node)
-            for child in node.children:
-                str_out=self.treenode_to_string(child, str_out, level + 1,a_filter)
-                
-        elif a_filter == 'dir':
-            if node.i_am=='dir':    
-                str_out=str_out+prefix + str(node.name) +'\n'
-                self.filtered_nodes.append(node)
-                for child in node.children:
-                    str_out=self.treenode_to_string(child, str_out, level + 1,a_filter)
-                    
-        elif a_filter == 'expand':
-            if node.i_am=='dir' and node.expand:    
-                str_out=str_out+prefix + str(node.name) +'\n'#' <─\n'
-                self.filtered_nodes.append(node)
-                for child in node.children:
-                    str_out=self.treenode_to_string(child, str_out, level + 1,a_filter)
-            elif node.i_am=='dir' and not node.expand:    
-                str_out=str_out+prefix + str(node.name) +'\n'#' ─>\n'
-                self.filtered_nodes.append(node)
-            elif node.i_am=='file':
-                str_out=str_out+prefix + str(node.name) +'\n'
-                self.filtered_nodes.append(node)
-                for child in node.children:
-                    str_out=self.treenode_to_string(child, str_out, level + 1,a_filter)
-                    
+        tree_list=self.treenode_to_string_list(node, str_out, level, a_filter)
+        str_out='\n'.join(tree_list)
         return str_out
     
     def treenode_to_string_list(self, node:TreeNode, str_out='', level=0, a_filter=None)->str:
@@ -319,7 +343,7 @@ class TreeViewer:
         # set the style
         prefix = self.call_style(node,level)  
 
-        if a_filter not in ['dir','expand']:
+        if a_filter not in ['dir','expand','expand_dir']:
             str_out=str_out+prefix + str(node.name)
             tree_list.append(str_out)
             self.filtered_nodes.append(node)
@@ -335,7 +359,21 @@ class TreeViewer:
                 for child in node.children:
                     str_out=''
                     tree_list=tree_list+self.treenode_to_string_list(child, str_out, level + 1,a_filter)
-                    
+        
+        elif a_filter == 'expand_dir':
+            if node.i_am=='dir' and node.expand:   
+                str_out=str_out+prefix + str(node.name)
+                tree_list.append(str_out)
+                self.filtered_nodes.append(node)
+                for child in node.children:
+                    str_out=''
+                    if child.i_am=='dir':
+                        tree_list=tree_list+self.treenode_to_string_list(child, str_out, level + 1,a_filter)
+            elif node.i_am=='dir' and not node.expand:    
+                str_out=str_out+prefix + str(node.name)
+                tree_list.append(str_out)
+                self.filtered_nodes.append(node)
+
         elif a_filter == 'expand':
             if node.i_am=='dir' and node.expand:    
                 str_out=str_out+prefix + str(node.name)

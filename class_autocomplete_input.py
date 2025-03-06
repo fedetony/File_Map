@@ -924,7 +924,62 @@ class AutocompletePathFile:
             str: The modified text with the character inserted.
         """
         return text[:pos-1] + text[pos:]
-    
+    @staticmethod
+    def add_ansi(txt: str, code: str) -> str:
+        """
+        Adds ANSI escape codes to style text.
+
+        Args:
+            txt (str): The input string.
+            code (str): A single character representing a styling option. 
+                        Supported options are:
+                        'normal','bold','italic','underline'
+                        'inverse'(white on black background)
+                        'reverse'(black on white background)
+                        Color Options:
+                        'gray','red','green','yellow','blue','magenta','cyan','white'
+                        f+color= foreground color
+                        h+color= highligted color
+                        
+        Returns:
+            str: The styled text with ANSI escape codes.
+        """
+        # Define a dictionary to map single character codes to their full form
+        style_codes = {
+            'normal': '\033[0m', #normal
+            'bold': '\033[1m', #bold
+            'italic': '\033[3m', #italic
+            'underline': '\033[4m',  #underline
+            'inverse': '\033[7m', #  Inverse (white on black background)
+            'reverse': '\033[7m',# \033[9m: Reversed (black on white background)
+        }
+        end_style_code = style_codes['normal']
+        if not code:
+            return txt
+        code=code.lower()
+        if code in style_codes.keys():
+            return style_codes[code]+txt+end_style_code
+        # Add the color codes for red, green and yellow
+        colors = {
+            'gray':0,
+            'red':1,
+            'green':2,
+            'yellow':3,
+            'blue':4,
+            'magenta':5,
+            'cyan':6,
+            'white':7,   
+        }
+        if code in colors.keys():
+            return f'\033[{colors[code]+30}m' + txt + end_style_code
+        for color,val in colors.items():
+            if code == 'f'+color:
+                return f'\033[{colors[color]+40}m' + txt + end_style_code
+            if code == 'h'+color:
+                return f'\033[{colors[color]+90}m' + txt + end_style_code
+        return txt
+
+
     @staticmethod
     def highlight_cursor(text:str, pos:int)->str:
         """
