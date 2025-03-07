@@ -21,6 +21,7 @@ from rich import print
 from rich.progress import Progress
 
 MD5_CALC='***Calculate***'
+MD5_SHALLOW='***Shallow***'
 
 class FileMapper:
     def __init__(self,db_filepath,key_filepath,password):
@@ -107,17 +108,21 @@ class FileMapper:
         return time_elapsed
 
     @staticmethod
-    def calculate_md5(file_path,leave_to_thread=False):
+    def calculate_md5(file_path,leave_to_thread=False,shallow_map=False):
         """
         Calculate the MD5 hash of a file.
         
         Args:
             file_path (str): The path to the file for which the MD5 hash is calculated.
+            leave_to_thread (bool, optional): Sets Calculate keyword if not shallow. Defaults to False.
+            shallow_map (bool, optional): Sets Shallow keyword. Defaults to False.
             
         Returns:
             str: The MD5 sum as a hexadecimal string.
         """
-        if leave_to_thread:
+        if shallow_map:
+            return MD5_SHALLOW
+        if leave_to_thread and not shallow_map:
             # time.sleep(0.01) # cant write to db so fast
             return MD5_CALC
         try:
@@ -277,15 +282,18 @@ class FileMapper:
         # find mounting point
         mount, serial =self.find_mount_serial_of_path(path_to_map)
         mappath=self.remove_mount_from_path(mount,path_to_map)
+        was_indexed=None
         if table_indexed:
             # Update mount point and date modified
             print(f"Editing table {table_name}")
             db.edit_value_in_table(self.mapper_reference_table,an_id,'dt_map_modified',dt_map_modified)
-            db.edit_value_in_table(self.mapper_reference_table,an_id,'mount',mount)
+            was_indexed=db.edit_value_in_table(self.mapper_reference_table,an_id,'mount',mount)
         else:
             print(f"Indexing table {table_name}")
             data=[(dt_map_created,dt_map_modified,mappath,table_name,mount,serial,mapname,maptype)]
-            db.insert_data_to_table(self.mapper_reference_table,data)
+            was_indexed=db.insert_data_to_table(self.mapper_reference_table,data)
+        if not was_indexed:
+            print(f"[red] Table {table_name} was not correctly indexed!!")
         # # check
         # if db.get_number_or_rows_in_table(self.mapper_reference_table):
         #     raise ValueError("No data was added to index")    
@@ -399,7 +407,7 @@ class FileMapper:
             return ''
         return 'Mount not available!'
             
-    def map_a_path_to_db(self,table_name,path_to_map,log_print=True,progress_bar=None):
+    def map_a_path_to_db(self,table_name,path_to_map,log_print=True,progress_bar=None,shallow_map=False):
         """Maps a path in a device into a table in the database.
 
         Args:
@@ -407,6 +415,7 @@ class FileMapper:
             table_name (_type_): table to map the path
             path_to_map (_type_): path to map on the device
             log_print (bool, optional): print logs. Defaults to True.
+            shallow_map (bool, optional): Make shallow map (Does not calculate md5,does not run thread). Defaults to False.
         """
         db=self.db
         try:
@@ -437,7 +446,7 @@ class FileMapper:
                 for dirpath, _, filenames in os.walk(path_to_map):
                     # Get the data for each file
                     for file in filenames:
-                        line_data_tup=self.get_mapping_info_data_from_file(mount,dirpath,file,log_print,f'{files_processed}. ')
+                        line_data_tup=self.get_mapping_info_data_from_file(mount,dirpath,file,log_print,f'{files_processed}. ',shallow_map)
                         data.append(line_data_tup)
                         iii=iii+1
                         if os.name=='nt':
@@ -447,7 +456,11 @@ class FileMapper:
                             if log_print:
                                 delta = (datetime.now() - start_datetime)
                                 print("+"*10+f" Time elapsed: {str(delta).split('.')[0]}"+"+"*10)
-                            db.insert_data_to_table(table_name,data)
+                            was_inserted=db.insert_data_to_table(table_name,data)
+                            if not was_inserted:
+                                time.sleep(0.333)
+                                if not db.insert_data_to_table(table_name,data):
+                                    raise ValueError(f"Could not insert data in {table_name}")
                             progress.update(task1, advance=10)
                             data=[]
                             iii=0
@@ -456,7 +469,8 @@ class FileMapper:
                 progress.update(task1, completed=num_files)
             time.sleep(0.333)
             #db.print_all_rows(table_name)
-            self.remap_map_in_thread_to_db(table_name,progress_bar,False)
+            if not shallow_map:
+                self.remap_map_in_thread_to_db(table_name,progress_bar,False)
             if log_print:
                 # time_elapsed = (datetime.now() - start_datetime).total_seconds()
                 delta = (datetime.now() - start_datetime)
@@ -528,7 +542,7 @@ class FileMapper:
             return  int(size_to_calculate)/int(size_sample)*time_sample_sec
         return SQL_SG.to_bytes(uc,size_to_calculate)/SQL_SG.to_bytes(us,size_sample)*time_sample_sec
          
-    def get_mapping_info_data_from_file(self,mount:str,dirpath:str,file:str,log_print:bool=False,count_print='')->tuple:
+    def get_mapping_info_data_from_file(self,mount:str,dirpath:str,file:str,log_print:bool=False,count_print='',shallow_map=False)->tuple:
         """gets tuple with map table info from inputs 
 
         Args:
@@ -537,7 +551,7 @@ class FileMapper:
             file (str): the file
             log_print (bool, optional): If you want to print. Defaults to False.
             count_print (int | str, optional): If you want to print the count. Defaults to ''.
-
+            shallow_map (bool, optional): Make shallow map (Does not calculate md5). Defaults to False.
         Returns:
             tuple: (dt_data_created,dt_data_modified,dirpath_nm,file,the_md5,the_size,dt_file_c,dt_file_a,dt_file_m)
         """
@@ -554,14 +568,14 @@ class FileMapper:
             #size
             the_size=f_m.get_file_size(joined_file)
             # md5 calculate
-            if the_size > 349175808 and log_print: #333*1024*1024=349175808
+            if the_size > 349175808 and log_print and not shallow_map: #333*1024*1024=349175808
                 str_size=f_m.get_size_str_formatted(the_size)
                 t_est=self.time_seconds_to_hhmmss(self.estimate_mapping_time_sec(904.29,16.08,the_size,'MB','bytes'))
                 print(f"Calculating md5 for {file}...{str_size} Estimating: {t_est}")
             if the_size> 50*1024*1024:   # leave to calculate with the thread 
-                the_md5=self.calculate_md5(joined_file,True)
+                the_md5=self.calculate_md5(joined_file,True,shallow_map)
             else:
-                the_md5=self.calculate_md5(joined_file,False)
+                the_md5=self.calculate_md5(joined_file,False,shallow_map)
             dt_data_modified=datetime.now()
             # get file dates
             dt_file_a=f_m.get_accessed_date(joined_file)

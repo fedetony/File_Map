@@ -32,7 +32,7 @@ from class_tree_viewer import TreeViewer,TreeNode
 # Overrides
 import inquirer.questions as questions
 from inquirer.render.console import ConsoleRender
-from class_override_checkbox import Checkbox ,List 
+from class_override_checkbox import Checkbox ,List ,CONTRACT_KEYWORD, EXPAND_KEYWORD, MENU_PROCESS_SELECTOR
 def checkbox_shortcut(message, default_pos=0,render=None, **kwargs):
     render = render or ConsoleRender()
     question =  questions.Checkbox(
@@ -370,11 +370,11 @@ class FileExplorer:
         #print(answers)
         ans=str(answers['path'])
         is_expand=None
-        if '***Contract***' in ans:
-            ans=ans.replace('***Contract***','')
+        if CONTRACT_KEYWORD in ans:
+            ans=ans.replace(CONTRACT_KEYWORD,'')
             is_expand=False
-        elif '***Expand***' in ans:
-            ans=ans.replace('***Expand***','')
+        elif EXPAND_KEYWORD in ans:
+            ans=ans.replace(EXPAND_KEYWORD,'')
             is_expand=True
         node=self.t_v.filtered_nodes[int(ans)]
         if is_expand is not None:
@@ -463,11 +463,11 @@ class FileExplorer:
         for ans in answers['path']:
             ans=str(ans)
             is_expand=None
-            if '***Contract***' in ans:
-                ans=ans.replace('***Contract***','')
+            if CONTRACT_KEYWORD in ans:
+                ans=ans.replace(CONTRACT_KEYWORD,'')
                 is_expand=False
-            elif '***Expand***' in ans:
-                ans=ans.replace('***Expand***','')
+            elif EXPAND_KEYWORD in ans:
+                ans=ans.replace(EXPAND_KEYWORD,'')
                 is_expand=True
             node=self.t_v.filtered_nodes[int(ans)]
             if is_expand is not None:
@@ -544,8 +544,8 @@ class FileExplorer:
 if __name__ == "__main__":
     # F_E=FileExplorer('d:\\Downloads\\amenofis',['D:\\Downloads',APP_PATH],None)
     # F_E=FileExplorer(None,['d:\\','d:\\Temp\\','D:\\Downloads',APP_PATH],None)
-    fs=F_M.load_dict_to_json(F_M.get_app_path()+os.sep+'db_files'+os.sep+'__temp__fs_small.json')
-    # fs=F_M.load_dict_to_json(F_M.get_app_path()+os.sep+'db_files'+os.sep+'d__temp__fs.json')
+    # fs=F_M.load_dict_to_json(F_M.get_app_path()+os.sep+'db_files'+os.sep+'__temp__fs_small.json')
+    fs=F_M.load_dict_to_json(F_M.get_app_path()+os.sep+'db_files'+os.sep+'d__temp__fs.json')
     F_E=FileExplorer(None,['d:\\','d:\\Temp\\','D:\\Downloads',APP_PATH],fs)
     print(F_E.is_file_structure)
     # print(F_E.file_structure)

@@ -9,7 +9,12 @@ from inquirer.render.console.base import half_options
 
 from inquirer.render.console._list import List
 from inquirer import errors
-# from inquirer.render.console._other import GLOBAL_OTHER_CHOICE
+from class_autocomplete_input import AutocompletePathFile
+
+add_ansi=AutocompletePathFile.add_ansi 
+
+CONTRACT_KEYWORD = '***Contract***'
+EXPAND_KEYWORD = '***Expand***'
 
 def process_input_list(self, pressed):
         question = self.question
@@ -33,14 +38,14 @@ def process_input_list(self, pressed):
             value = self.question.choices[self.current]
             tag=getattr(value, "tag", value)
             if '─<' in tag:
-                result = '***Contract***' + getattr(value, "value", value)
+                result = CONTRACT_KEYWORD + getattr(value, "value", value)
                 raise errors.EndOfInput(result)
         elif pressed == key.RIGHT:
             question.default_pos=self.current
             value = self.question.choices[self.current]
             tag=getattr(value, "tag", value)
             if '─>' in tag:
-                result='***Expand***'+getattr(value, "value", value)
+                result=EXPAND_KEYWORD+getattr(value, "value", value)
                 raise errors.EndOfInput(result)
         if pressed == key.ENTER:
             question.default_pos=self.current
@@ -60,6 +65,17 @@ def process_input_list(self, pressed):
 
 List.process_input=process_input_list
 
+MENU_PROCESS_SELECTOR={
+    '__mode__': None, # mode for steps
+    'R':'***Remove***', # Remove
+    'M':'***Move***', # Move
+    'F':'***NewFolder***', # New Folder
+    'N':'***Rename***', # Rename
+    'C':'***Copy***', # Copy
+    'X':'***Cut***', # Cut
+    'V':'***Paste***', # Paste
+    'E':'***Reveal***', # Reveal in Explorer
+}
 
 class Checkbox(BaseConsoleRender):
     def __init__(self, *args, **kwargs):
@@ -70,6 +86,8 @@ class Checkbox(BaseConsoleRender):
             self.current = self.question.default_pos
         except (AttributeError,ValueError,TypeError):    
             self.current = 0
+        # list of (index_from,a_process,index_to)
+        self.process=[(None,'',None)]
 
     def get_hint(self):
         try:
@@ -116,6 +134,9 @@ class Checkbox(BaseConsoleRender):
             ):  # noqa
                 symbol = self.theme.Checkbox.selected_icon
                 color = self.theme.Checkbox.selected_color
+                for index_from,a_process,index_to in self.process:
+                    if index in [index_from,index_to]:
+                        symbol = a_process
             else:
                 symbol = self.theme.Checkbox.unselected_icon
                 color = self.theme.Checkbox.unselected_color
@@ -174,7 +195,7 @@ class Checkbox(BaseConsoleRender):
                         value = self.question.choices[x]
                         result.append(getattr(value, "value", value))
                     value = self.question.choices[self.current]
-                    result.append('***Contract***'+str(getattr(value, "value", value)))
+                    result.append(CONTRACT_KEYWORD+str(getattr(value, "value", value)))
                     raise errors.EndOfInput(result)
         elif pressed == key.RIGHT:
             # if self.current not in self.selection:
@@ -188,7 +209,7 @@ class Checkbox(BaseConsoleRender):
                         value = self.question.choices[x]
                         result.append(getattr(value, "value", value))
                     value = self.question.choices[self.current]
-                    result.append('***Expand***'+str(getattr(value, "value", value)))
+                    result.append(EXPAND_KEYWORD+str(getattr(value, "value", value)))
                     raise errors.EndOfInput(result)
         elif pressed == key.CTRL_A:
             self.selection = [i for i in range(len(self.question.choices))]

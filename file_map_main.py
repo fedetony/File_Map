@@ -644,9 +644,10 @@ def menu_create_new_map():
             tablename=menu_get_table_name_input()
             tablename=format_new_table_name(tablename,path_to_map)
             fm=get_file_map(selected_db)
-            if tablename not in ['',None]+fm.db.tables_in_db():     
-                fm.db.create_connection()
-                fm.map_a_path_to_db(tablename,path_to_map,True)
+            if tablename not in ['',None]+fm.db.tables_in_db():   
+                shallow=ask_confirmation(f"Would you like a {A_C.add_ansi('Shallow','hblue')} map?",False)  
+                fm.db.create_connection()    
+                fm.map_a_path_to_db(tablename,path_to_map,True,shallow_map=shallow)
     return ''
 
 def format_new_table_name(tablename:str,path_to_map:str)->str:
@@ -742,7 +743,7 @@ def menu_delete_map():
                 fm=get_file_map(selected_db) 
                 fm.db.create_connection()
                 count=fm.db.get_number_or_rows_in_table(tablename)
-                if ask_confirmation(f"Sure to delete Map {tablename} with {count} elements?"):
+                if ask_confirmation(f"Sure to {A_C.add_ansi('delete','hred')} Map {tablename} with {count} elements?"):
                     fm.delete_map(tablename)
 
 def menu_rename_map():
@@ -892,9 +893,12 @@ def show_maps():
             for table_info in table_list:
                 #field_list=['id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype']
                 data=fm.db.get_data_from_table(table_info[4],'*',f'md5="{MD5_CALC}"')
+                shallow_data=fm.db.get_data_from_table(table_info[4],'*',f'md5="{MD5_SHALLOW}"')
                 num_rows=str(fm.db.get_number_or_rows_in_table(table_info[4]))
                 if len(data)>0:
                     num_rows=f'{num_rows}({len(data)})'
+                if len(shallow_data)>0:
+                    num_rows=f'{num_rows}[{len(shallow_data)}]'
                 table_list_size.append(table_info+(num_rows,))
             if len(table_list_size)>0:
                 field_list=['id','Date Time Created','Date Time Modified','Map Path','Table Name','Mount','Serial','Map Name','Map Type']+['Items']
@@ -1281,6 +1285,45 @@ def map_to_file_structure(database,a_map,where=None,fields_to_tab:list[str]=None
         return fm.map_to_file_structure(a_map,where,fields_to_tab,sort_by,ascending)
     return {}
 
+
+def shallow_compare_maps_same_db(db_map_pair_1,db_map_pair_2):
+        fs_1=None
+        fs_1=map_to_file_structure(db_map_pair_1[0],db_map_pair_1[1],where=None,fields_to_tab=None,sort_by=None,ascending=True)
+        if len(fs_1)==0:
+            return {} , f"No data in {db_map_pair_1}"
+        fs_2=None
+        fs_2=map_to_file_structure(db_map_pair_2[0],db_map_pair_2[1],where=None,fields_to_tab=None,sort_by=None,ascending=True)
+        if len(fs_2)==0:
+            return {} , f"No data in {db_map_pair_2}"
+        # field list in map
+        # id=0	dt_data_created'=1	'dt_data_modified'=2	'filepath'=3	'filename'=4	'md5'=5	'size'=6	
+        # 'dt_file_created'=7	'dt_file_accessed'=8	'dt_file_modified'=9
+        # Map info
+        # id=0	'dt_map_created'=1	'dt_map_modified'=2	'mappath'=3	'tablename'=4	'mount'=5	'serial'=6	'mapname'=7	'maptype'=8
+        f_e_1=FileExplorer(None,None,fs_1)
+        f_e_2=FileExplorer(None,None,fs_2)
+        text1=f_e_1.get_tree_view_string(None,my_style_size).splitlines(keepends=False)
+        text2=f_e_2.get_tree_view_string(None,my_style_size).splitlines(keepends=False)
+        diff = difflib.Differ()
+        result = list(diff.compare(text1, text2))
+        comp_list=[]
+        differences={'+':[],'-':[]}
+        for line in result:
+            if line.startswith('+'):
+                comp_list.append(line)#A_C.add_ansi(line,'hgreen'))
+                differences.update({'+':differences['+']+[line]})
+            elif line.startswith('-'):
+                comp_list.append(line)#A_C.add_ansi(line,'hred'))
+                differences.update({'-':differences['-']+[line]})
+            elif line.startswith('?'):
+                pass
+            else:
+                comp_list.append(line)   
+        # print('\n'.join(comp_list))
+        print(differences)
+        return differences , ''
+        
+
 def get_remove_keep_dict(selected_items,duplicte_list):
     """Makes a dictionary with the remove and keep files from selection
     {'md5sum': {'all': [id1,... idN], 'remove': [id1], 'keep': [id2]}}
@@ -1376,7 +1419,7 @@ def find_repeated_in_database(database,a_map):
 def menu_mapping_functions():
     """Interactive menu handle databases"""
     msg=''
-    ch=['Create New Map', 'Delete Map','Rename Map','Continue Mapping', 'Process Map','Search in Maps','Back']
+    ch=['Create New Map', 'Delete Map','Rename Map','Shallow Compare Maps','Continue Mapping', 'Process Map','Search in Maps','Back']
     in_name='mapping'
     menu = [inquirer.List(
         in_name,
@@ -1407,12 +1450,45 @@ def menu_mapping_functions():
             msg=menu_rename_map()
         elif answers['mapping']=='Continue Mapping': 
             msg=menu_continue_mapping()
+        elif answers['mapping']=='Shallow Compare Maps': 
+            msg=menu_shallow_compare_maps()
         elif answers['mapping']=='Process Map':
             msg=menu_process_map()
         elif answers['mapping']=='Search in Maps': 
             msg=menu_search_in_maps()
         elif answers['mapping']=='Back':
             return ''
+
+def menu_shallow_compare_maps():
+    os.system('cls' if os.name == 'nt' else 'clear')
+    print(MENU_HEADER)
+    print("Shallow Compare Maps:")
+    print("----------")
+    db_map_pair_1=menu_select_database_map()
+    if db_map_pair_1:
+        db_map_pair_2=menu_select_database_map()
+        if not db_map_pair_2:
+            return 'No map selected'
+        if db_map_pair_1[0]!=db_map_pair_2[0] or db_map_pair_1[1]!=db_map_pair_2[1]:
+            map_info_1=get_map_info(db_map_pair_1[0],db_map_pair_1[1])
+            map_info_2=get_map_info(db_map_pair_2[0],db_map_pair_2[1])
+            dt_mod_1=map_info_1[0][2]
+            dt_mod_2=map_info_2[0][2]
+            if datetime.fromisoformat(dt_mod_1) <= datetime.fromisoformat(dt_mod_2):
+                _, msg=shallow_compare_maps_same_db(db_map_pair_1,db_map_pair_2)
+            else:
+                _, msg=shallow_compare_maps_same_db(db_map_pair_2,db_map_pair_1)
+            print(msg)
+            print('*'*33)
+            print('Press any key to continue ...')
+            print('*'*33)
+            getch()
+            
+        else:
+            return 'Same map selected'
+    else:
+        return 'No map selected'
+    return ''    
 
 def main_menu():
     """Interactive menu main"""
@@ -1474,38 +1550,7 @@ def main_debug():
     key_list.append(key_file)
     activate_databases(None)
     main_menu()
-    # fm=FileMapper(db_path_file,key_file,None)
-    # new_map=True
-    # #db = SQLiteDatabase(db_path_file,False,None,None)    
-
-    # tablename="table_test_2"
-
-    # if new_map:
-    #     # path_to_map="D:\Downloads"
-    #     path_to_map="C:\\Users\\Tony\\Downloads"
-    #     print(fm.db.table_exists(tablename))
-    #     if fm.db.table_exists(tablename):
-    #         fm.delete_map(fm.db,tablename)      
-    #     print(fm.db.table_exists(tablename))
-    #     print(fm.db.table_exists('Cow'))  
-    #     fm.map_a_path_to_db(fm.db,tablename,path_to_map,True)
-
-    # # print("repeated files:",get_repeated_files(db,"table_test"))
-    # repeated_dict=fm.get_repeated_files(fm.db,tablename)
-    # #print("repeated files:",repeated_dict)
-    # key_list=list(repeated_dict.keys())
-
-    # showing=['id','filepath','filename','md5','size']
-    # filelist3=fm.repeated_list_show(repeated_dict,key_list[33],[fm.db],[tablename],showing)
-    # print("Show:", filelist3)
-    # mount, mount_active, mappath_exists=fm.check_if_map_device_active(fm.db,tablename,False)
-    # print("Check result:", mount, mount_active, mappath_exists)
-
-    # if mount_active and mappath_exists:
-    #     for item in filelist3:
-    #         print(os.path.join(mount,item[1],item[2]))
-
-    # fm.db.close_connection()
+    
     end_datetime=datetime.now()
     print(f" took {calculate_time_elapsed(start_datetime,end_datetime)} s")
 

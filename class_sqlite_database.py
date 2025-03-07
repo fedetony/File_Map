@@ -121,7 +121,7 @@ class SQLiteDatabase:
             if temporary:
                 temp = "TEMPORARY "
             sql = "CREATE " + temp + "TABLE "
-            sql = sql + table_name + " (id INTEGER PRIMARY KEY AUTOINCREMENT"
+            sql = sql + self.quotes(table_name) + " (id INTEGER PRIMARY KEY AUTOINCREMENT"
             for a_tup in columns:
                 (column_name, data_type, not_null_constraint) = a_tup
                 if column_name != "id":
@@ -375,7 +375,8 @@ class SQLiteDatabase:
         """
         try:
             c = self.conn.cursor()
-            c.execute(f"SELECT 1 FROM sqlite_master WHERE type='table' AND name={self.quotes(table)}")
+            sql=f"SELECT 1 FROM sqlite_master WHERE type='table' AND name={self.quotes(table)}"
+            c.execute(sql)
             return len(c.fetchall()) > 0
         except (sqlite3.OperationalError, ValueError) as eee:
             print("No table:", eee)
@@ -425,7 +426,7 @@ class SQLiteDatabase:
         description = self.describe_table_in_db(table)
         if len(description) == 0:
             print("No data in table")
-            return
+            return False
         column_name_list = []
         data_type_list = []
         for desc in description:
@@ -449,11 +450,13 @@ class SQLiteDatabase:
                 c.execute(f"INSERT INTO {self.quotes(table)} {sqltxt}", (an_id,) + sample_data)
             else:
                 print(f"id or data size is not correct {column_name_list} != {sample_data}")
-                return
+                return False
             self.commit()
+            return True
             # print("Row updated successfully")
         except sqlite3.Error as eee:
             print(eee)
+            return False
         finally:
             # Release all resources
             c.close()
@@ -469,7 +472,7 @@ class SQLiteDatabase:
         description = self.describe_table_in_db(table)
         if len(description) == 0:
             print("No data in table")
-            return
+            return False
         column_name_list = []
         data_type_list = []
         for desc in description:
@@ -494,12 +497,14 @@ class SQLiteDatabase:
                     c.execute(f"INSERT INTO {self.quotes(table)} {sqltxt}", row)
                 else:
                     print(f"Data Size is not correct {column_name_list} != {row}")
-                    return
+                    return False
             self.commit()
             time.sleep(WAIT_TIME_WRITING)
+            return True
             # print("Row updated successfully")
         except sqlite3.Error as eee:
             print(eee)
+            return False
         finally:
             # Release all resources
             c.close()
