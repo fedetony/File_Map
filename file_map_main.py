@@ -1321,7 +1321,7 @@ def shallow_compare_maps(db_map_pair_1,db_map_pair_2):
             # text1=data_manage_1.get_tabulated_fields(None,header=False,index=False,justify='right').splitlines(keepends=False)
             data_manage_1.df['filepath'] = data_manage_1.df['filepath'].apply(fix_separators)
             data_manage_1.df['size'] = data_manage_1.df['size'].apply(int)#F_M.get_size_str_formatted)
-            text1=data_manage_1.get_tab_separated_fields(None,separator=',',header=False,index=False).splitlines(keepends=False)
+            text1=data_manage_1.get_tab_separated_fields(None,sort_by=['filepath','filename'],separator=',',header=False,index=False).splitlines(keepends=False)
         else:
             return {} , f"No data in {db_map_pair_1}"
         table_list_2=fm_2.db.get_data_from_table(db_map_pair_2[1],what)
@@ -1332,7 +1332,7 @@ def shallow_compare_maps(db_map_pair_1,db_map_pair_2):
             data_manage_2.df['filepath'] = data_manage_2.df['filepath'].apply(fix_separators)
             data_manage_2.df['size'] = data_manage_2.df['size'].apply(int)#F_M.get_size_str_formatted)
             # text2=data_manage_2.get_tabulated_fields(None,header=False,index=False,justify='right').splitlines(keepends=False)
-            text2=data_manage_2.get_tab_separated_fields(None,separator=',',header=False,index=False).splitlines(keepends=False)
+            text2=data_manage_2.get_tab_separated_fields(None,sort_by=['filepath','filename'],separator=',',header=False,index=False).splitlines(keepends=False)
         else:
             return {} , f"No data in {db_map_pair_2}"
         diff = difflib.Differ()
@@ -1376,7 +1376,7 @@ def shallow_compare_maps(db_map_pair_1,db_map_pair_2):
     return {} , 'No Filemap found!'
 
 def shallow_compare_maps_fs(db_map_pair_1,db_map_pair_2):
-    """Compare 2 maps using file structures, just compares formatted size path and filename.
+    """Compare two maps using file structures, just compares formatted size path and filename.
         Not very precise 
 
     Args:
@@ -1520,7 +1520,7 @@ def find_repeated_in_database(database,a_map):
 def menu_mapping_functions():
     """Interactive menu handle databases"""
     msg=''
-    ch=['Create New Map', 'Delete Map','Rename Map','Shallow Compare Maps','Continue Mapping', 'Process Map','Search in Maps','Back']
+    ch=['Create New Map', 'Delete Map','Rename Map','Update Map','Shallow Compare Maps','Continue Mapping', 'Process Map','Search in Maps','Back']
     in_name='mapping'
     menu = [inquirer.List(
         in_name,
@@ -1551,6 +1551,8 @@ def menu_mapping_functions():
             msg=menu_rename_map()
         elif answers['mapping']=='Continue Mapping': 
             msg=menu_continue_mapping()
+        elif answers['mapping']=='Update Map': 
+            msg=menu_update_maps()
         elif answers['mapping']=='Shallow Compare Maps': 
             msg=menu_shallow_compare_maps()
         elif answers['mapping']=='Process Map':
@@ -1560,7 +1562,84 @@ def menu_mapping_functions():
         elif answers['mapping']=='Back':
             return ''
 
+def menu_update_maps():
+    """Menu update a map"""
+    os.system('cls' if os.name == 'nt' else 'clear')
+    print(MENU_HEADER)
+    print("Update a Map:")
+    print("----------")
+    db_map_pair=menu_select_database_map()
+    if db_map_pair:
+        map_info_1=get_map_info(db_map_pair[0],db_map_pair[1])
+        # field list in map
+        # id=0	dt_data_created'=1	'dt_data_modified'=2	'filepath'=3	'filename'=4	'md5'=5	'size'=6	
+        # 'dt_file_created'=7	'dt_file_accessed'=8	'dt_file_modified'=9
+        # Map info
+        # id=0	'dt_map_created'=1	'dt_map_modified'=2	'mappath'=3	'tablename'=4	'mount'=5	'serial'=6	'mapname'=7	'maptype'=8
+        mappath=map_info_1[0][3]
+        new_tablename=db_map_pair[1]+'_update'
+        # check mount exist
+        fm=get_file_map(db_map_pair[0])
+        mount, mount_active, mappath_exists=fm.check_if_map_device_active(fm.db,db_map_pair[1],False)
+        print("Check result:", mount, mount_active, mappath_exists)
+        # get file name and path 
+        filepath=None
+        if mount_active and mappath_exists:
+            filepath=os.path.join(mount,mappath)
+            print(filepath)
+        if not filepath:
+            return f'Mount or device is not active for {db_map_pair}'
+        # Make a shallow map
+        try:
+            if not fm.db.table_exists(new_tablename):
+                fm.map_a_path_to_db(new_tablename,filepath,True,None,shallow_map=True)
+            db_map_pair_1=db_map_pair
+            db_map_pair_2=(db_map_pair[0],new_tablename)
+            differences, msg = shallow_compare_maps(db_map_pair_1,db_map_pair_2)
+            # Delete the shallow map
+            print(differences['+'])
+            print(differences['-']) 
+            print(msg)
+            found_differences=False
+            for _,value in differences.items():
+                if len(value)>0:
+                    found_differences=True
+                    break
+            if not found_differences:
+                # delete shallow map
+                fm.delete_map(new_tablename)
+                return msg
+            if not ask_confirmation(f"Replace diffences in map {db_map_pair[1]}?",False):
+                return '[yellow] Map not Updated! Delete map manually or restart update to use map'
+            data_to_add=[]
+            for item in differences['diff_fs']:
+                if item[2]=='+':
+                    ddd=tuple()
+                    for iii in range(4,len(item)):
+                        if item[iii] == MD5_SHALLOW:
+                            ddd=ddd+(MD5_CALC,)
+                        else:    
+                            ddd=ddd+(item[iii],)
+                    data_to_add.append(ddd)
+                if item[2]=='-':
+                    ddd=tuple()
+                    where=f'id = {item[3]}'
+                    fm.db.delete_data_from_table(db_map_pair[1],where)    
+            fm.db.insert_data_to_table(db_map_pair[1],data_to_add)
+            # update data modified
+            fm.db.edit_value_in_table(fm.mapper_reference_table,map_info_1[0][0],'dt_data_modified',datetime.now())
+            # delete shallow map
+            fm.delete_map(new_tablename)
+            # start thread
+            msg = fm.remap_map_in_thread_to_db(db_map_pair[1],None,True)
+        except (KeyboardInterrupt,ValueError,TypeError) as eee:
+            print(f'Something Wrong:{eee}')
+            fm.delete_map(new_tablename)
+    return ''
+
+
 def menu_shallow_compare_maps():
+    """Menu for Shallow Compare two maps"""
     os.system('cls' if os.name == 'nt' else 'clear')
     print(MENU_HEADER)
     print("Shallow Compare Maps:")
