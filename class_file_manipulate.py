@@ -732,8 +732,10 @@ class FileManipulate:
         return file_structure
 
     @staticmethod
-    def fix_separator_in_path(a_path):
+    def fix_separator_in_path(a_path:str,add_sep_start=False):
         """Adds the separator to a path end. Replaces // for / in the start (linux)."""
+        if add_sep_start and not a_path.startswith(os.sep):
+            a_path = os.sep + a_path 
         if a_path.startswith(os.sep+os.sep):
             a_path=a_path[1:]
         if a_path.endswith((os.sep,'\\','/')):

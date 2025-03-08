@@ -112,6 +112,17 @@ class DataManage():
             ascending (bool, optional): if sorting, then ascendant. Defaults to True.
             indexed (bool, optional): table indexed
             header=True
+            Overload[(buf: FilePath | WriteBuffer[str], columns: list[HashableT1@to_string] | Index | Series | None = ..., 
+            col_space: int | list[int] | dict[HashableT2@to_string, int] | None = ..., header: _bool | list[_str] | tuple[str, ...] = ..., 
+            index: _bool = ..., na_rep: _str = ..., formatters: FormattersType | None = ..., float_format: ((float) -> str) | None = ..., 
+            sparsify: _bool | None = ..., index_names: _bool = ..., justify: _str | None = ..., max_rows: int | None = ..., 
+            max_cols: int | None = ..., show_dimensions: _bool = ..., decimal: _str = ..., line_width: int | None = ..., 
+            min_rows: int | None = ..., max_colwidth: int | None = ..., encoding: _str | None = ...) -> None, (buf: None = ..., 
+            columns: list[HashableT@to_string] | Index | Series | None = ..., col_space: int | list[int] | dict[Hashable, int] | None = ..., 
+            header: _bool | Sequence[_str] = ..., index: _bool = ..., na_rep: _str = ..., formatters: FormattersType | None = ..., 
+            float_format: ((float) -> str) | None = ..., sparsify: _bool | None = ..., index_names: _bool = ..., justify: _str | None = ..., 
+            max_rows: int | None = ..., max_cols: int | None = ..., show_dimensions: _bool = ..., decimal: _str = ..., line_width: int | None = ..., 
+            min_rows: int | None = ..., max_colwidth: int | None = ..., encoding: _str | None = ...) -> _str] | An
         Returns:
             str: Tabulated data
         """
@@ -119,6 +130,27 @@ class DataManage():
         if not df_selected.empty:    
             #return df_selected.to_string(index=indexed,header=header)
             return df_selected.to_string(*args,**kwargs)
+        return ''
+    
+    def get_tab_separated_fields(self,fields_to_tab=None,sort_by=None,ascending=True,separator=',',end_of_line='\r\n',*args,**kwargs):#indexed=False,header=True):
+        """Returns Tabulated string
+
+        Args:
+            fields_to_tab (list(str), optional): selected columns to use in df, None uses all. Defaults to None.
+            sort_by (int, str or list, optional): Sorting if the df is to be sorted. Defaults to None.
+            ascending (bool, optional): if sorting, then ascendant. Defaults to True.
+            indexed (bool, optional): table indexed
+            
+        Returns:
+            str: separated data
+        """
+        df_selected=self.get_selected_df(fields_to_tab,sort_by,ascending)
+        if not df_selected.empty:    
+            #return df_selected.to_string(index=indexed,header=header)
+            csv=str(df_selected.to_csv(*args,**kwargs))
+            csv=csv.replace(',',separator)
+            csv=csv.replace('\r\n',end_of_line)
+            return csv
         return ''
 
 if __name__ == '__main__':

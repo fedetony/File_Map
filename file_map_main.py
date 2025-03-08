@@ -1286,28 +1286,59 @@ def map_to_file_structure(database,a_map,where=None,fields_to_tab:list[str]=None
     return {}
 
 
-def shallow_compare_maps_same_db(db_map_pair_1,db_map_pair_2):
-        fs_1=None
-        fs_1=map_to_file_structure(db_map_pair_1[0],db_map_pair_1[1],where=None,fields_to_tab=None,sort_by=None,ascending=True)
-        if len(fs_1)==0:
+def shallow_compare_maps(db_map_pair_1,db_map_pair_2):
+    """Compare two maps using tabulated data. Compares: 
+        "dt_file_modified","size","filename","filepath"
+        Assumes db_map_pair_1 is the oldest.
+        Gives lists of differences and ids in the respective database.
+        (-_id): ids removed/changed in db_map_pair_1
+        (+_id): ids changed in db_map_pair_2
+
+    Args:
+        db_map_pair_1 (_type_): database map pair to compare
+        db_map_pair_2 (_type_): database map pair to compare
+
+    Returns:
+        tuple(dict,str): differences dictionary, message
+        differences={'+':[],'-':[],'+_id':[],'-_id':[],'diff_fs':[]}
+        'diff_fs' list of tuples (db_map_pair)+(+/-),(* data)
+    """
+    fm_1=get_file_map(db_map_pair_1[0])
+    fm_2=get_file_map(db_map_pair_2[0])
+    # field list in map
+    # id=0	dt_data_created'=1	'dt_data_modified'=2	'filepath'=3	'filename'=4	'md5'=5	'size'=6	
+    # 'dt_file_created'=7	'dt_file_accessed'=8	'dt_file_modified'=9
+    if isinstance(fm_1,FileMapper) and isinstance(fm_2,FileMapper):
+        def fix_separators(path:str):
+            """Sets same separator format for comparison"""
+            return F_M.fix_separator_in_path(F_M.fix_path_separators(path),True)
+        field_list=["dt_file_modified","size","filename","filepath"]
+        what=", ".join(field_list)
+        table_list_1=fm_1.db.get_data_from_table(db_map_pair_1[1],what)
+        if len(table_list_1)>0:
+            # field_list= fm_1.db.get_column_list_of_table(db_map_pair_1[1])
+            data_manage_1=DataManage(table_list_1,field_list)
+            # text1=data_manage_1.get_tabulated_fields(None,header=False,index=False,justify='right').splitlines(keepends=False)
+            data_manage_1.df['filepath'] = data_manage_1.df['filepath'].apply(fix_separators)
+            data_manage_1.df['size'] = data_manage_1.df['size'].apply(int)#F_M.get_size_str_formatted)
+            text1=data_manage_1.get_tab_separated_fields(None,separator=',',header=False,index=False).splitlines(keepends=False)
+        else:
             return {} , f"No data in {db_map_pair_1}"
-        fs_2=None
-        fs_2=map_to_file_structure(db_map_pair_2[0],db_map_pair_2[1],where=None,fields_to_tab=None,sort_by=None,ascending=True)
-        if len(fs_2)==0:
+        table_list_2=fm_2.db.get_data_from_table(db_map_pair_2[1],what)
+        if len(table_list_2)>0:
+            
+            # field_list=fm_2.db.get_column_list_of_table(db_map_pair_2[1])
+            data_manage_2=DataManage(table_list_2,field_list)
+            data_manage_2.df['filepath'] = data_manage_2.df['filepath'].apply(fix_separators)
+            data_manage_2.df['size'] = data_manage_2.df['size'].apply(int)#F_M.get_size_str_formatted)
+            # text2=data_manage_2.get_tabulated_fields(None,header=False,index=False,justify='right').splitlines(keepends=False)
+            text2=data_manage_2.get_tab_separated_fields(None,separator=',',header=False,index=False).splitlines(keepends=False)
+        else:
             return {} , f"No data in {db_map_pair_2}"
-        # field list in map
-        # id=0	dt_data_created'=1	'dt_data_modified'=2	'filepath'=3	'filename'=4	'md5'=5	'size'=6	
-        # 'dt_file_created'=7	'dt_file_accessed'=8	'dt_file_modified'=9
-        # Map info
-        # id=0	'dt_map_created'=1	'dt_map_modified'=2	'mappath'=3	'tablename'=4	'mount'=5	'serial'=6	'mapname'=7	'maptype'=8
-        f_e_1=FileExplorer(None,None,fs_1)
-        f_e_2=FileExplorer(None,None,fs_2)
-        text1=f_e_1.get_tree_view_string(None,my_style_size).splitlines(keepends=False)
-        text2=f_e_2.get_tree_view_string(None,my_style_size).splitlines(keepends=False)
         diff = difflib.Differ()
         result = list(diff.compare(text1, text2))
         comp_list=[]
-        differences={'+':[],'-':[]}
+        differences={'+':[],'-':[],'+_id':[],'-_id':[],'diff_fs':[]}
         for line in result:
             if line.startswith('+'):
                 comp_list.append(line)#A_C.add_ansi(line,'hgreen'))
@@ -1319,9 +1350,79 @@ def shallow_compare_maps_same_db(db_map_pair_1,db_map_pair_2):
                 pass
             else:
                 comp_list.append(line)   
-        # print('\n'.join(comp_list))
-        print(differences)
-        return differences , ''
+        # get indexes
+        for added in differences['+']:
+            added=added[2:]
+            addsep=added.split(',')
+            fp=fm_2.db.quotes('%'+addsep[3][1:-1]+'%')
+            where=f"size = {addsep[1]} AND dt_file_modified = {fm_2.db.quotes(addsep[0])} AND filename = {fm_2.db.quotes(addsep[2])} AND filepath LIKE {fp}"
+            id_list_2=fm_2.db.get_data_from_table(db_map_pair_2[1],'*',where)
+            if len(id_list_2)>0:
+                differences.update({'+_id':differences['+_id']+[id_list_2[0][0]]})
+                differences.update({'diff_fs':differences['diff_fs']+[tuple(db_map_pair_2)+('+',)+id_list_2[0]]})
+        for added in differences['-']:
+            added=added[2:]
+            addsep=added.split(',')
+            fp=fm_1.db.quotes('%'+addsep[3][1:-1]+'%')
+            where=f"size = {addsep[1]} AND dt_file_modified = {fm_2.db.quotes(addsep[0])} AND filename = {fm_2.db.quotes(addsep[2])} AND filepath LIKE {fp}"
+            id_list_1=fm_1.db.get_data_from_table(db_map_pair_1[1],'*',where)
+            if len(id_list_1)>0:
+                differences.update({'-_id':differences['-_id']+[id_list_1[0][0]]})
+                differences.update({'diff_fs':differences['diff_fs']+[tuple(db_map_pair_1)+('-',)+id_list_1[0]]})
+        
+        # print(differences)
+        return differences , f"Found {len(differences['+_id'])} (+) changes and {len(differences['-_id'])} (-) changes!"
+        
+    return {} , 'No Filemap found!'
+
+def shallow_compare_maps_fs(db_map_pair_1,db_map_pair_2):
+    """Compare 2 maps using file structures, just compares formatted size path and filename.
+        Not very precise 
+
+    Args:
+        db_map_pair_1 (_type_): database map pair to compare
+        db_map_pair_2 (_type_): database map pair to compare
+
+    Returns:
+        tuple(dict,str): differences dictionary, message
+        differences={'+':[],'-':[]}
+    """
+    fs_1=None
+    fs_1=map_to_file_structure(db_map_pair_1[0],db_map_pair_1[1],where=None,fields_to_tab=None,sort_by=None,ascending=True)
+    if len(fs_1)==0:
+        return {} , f"No data in {db_map_pair_1}"
+    fs_2=None
+    fs_2=map_to_file_structure(db_map_pair_2[0],db_map_pair_2[1],where=None,fields_to_tab=None,sort_by=None,ascending=True)
+    if len(fs_2)==0:
+        return {} , f"No data in {db_map_pair_2}"
+    # field list in map
+    # id=0	dt_data_created'=1	'dt_data_modified'=2	'filepath'=3	'filename'=4	'md5'=5	'size'=6	
+    # 'dt_file_created'=7	'dt_file_accessed'=8	'dt_file_modified'=9
+    # Map info
+    # id=0	'dt_map_created'=1	'dt_map_modified'=2	'mappath'=3	'tablename'=4	'mount'=5	'serial'=6	'mapname'=7	'maptype'=8
+    f_e_1=FileExplorer(None,None,fs_1)
+    f_e_2=FileExplorer(None,None,fs_2)
+    text1=f_e_1.get_tree_view_string(None,my_style_size).splitlines(keepends=False)
+    text2=f_e_2.get_tree_view_string(None,my_style_size).splitlines(keepends=False)
+    diff = difflib.Differ()
+    result = list(diff.compare(text1, text2))
+    comp_list=[]
+    differences={'+':[],'-':[]}
+    for line in result:
+        if line.startswith('+'):
+            comp_list.append(line)#A_C.add_ansi(line,'hgreen'))
+            differences.update({'+':differences['+']+[line]})
+        elif line.startswith('-'):
+            comp_list.append(line)#A_C.add_ansi(line,'hred'))
+            differences.update({'-':differences['-']+[line]})
+        elif line.startswith('?'):
+            pass
+        else:
+            comp_list.append(line)   
+    
+    # print('\n'.join(comp_list))
+    # print(differences)
+    return differences , ''
         
 
 def get_remove_keep_dict(selected_items,duplicte_list):
@@ -1475,9 +1576,11 @@ def menu_shallow_compare_maps():
             dt_mod_1=map_info_1[0][2]
             dt_mod_2=map_info_2[0][2]
             if datetime.fromisoformat(dt_mod_1) <= datetime.fromisoformat(dt_mod_2):
-                _, msg=shallow_compare_maps_same_db(db_map_pair_1,db_map_pair_2)
+                differences, msg=shallow_compare_maps(db_map_pair_1,db_map_pair_2)
             else:
-                _, msg=shallow_compare_maps_same_db(db_map_pair_2,db_map_pair_1)
+                differences, msg=shallow_compare_maps(db_map_pair_2,db_map_pair_1)   
+            print(differences['+'])
+            print(differences['-']) 
             print(msg)
             print('*'*33)
             print('Press any key to continue ...')
