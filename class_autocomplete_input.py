@@ -125,6 +125,24 @@ class AutocompletePathFile:
             return []
 
     @staticmethod
+    def print_cycle(iii:int,total:int=None):
+        """Prints a rotating cycle and iteration value in same position.
+
+        Args:
+            iii (int): iteration
+            total (int, optional): total. Defaults to None.
+        """
+        cycle=['/','-','\\',"|"]
+        iter,index=divmod(iii,len(cycle))
+        # print(index)
+        itstr=cycle[index]+' '+str(iter)
+        if total:
+            itstr=itstr+'/'+str(total)
+        sys.stdout.write(itstr)
+        sys.stdout.flush()
+        sys.stdout.write('\b'*len(itstr))
+
+    @staticmethod
     def get_commontxt_optionlist(a_string_list: list):
         """Takes a list of string, like paths, and returns the repeated text in the begining of each string.
 

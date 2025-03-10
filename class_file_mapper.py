@@ -16,6 +16,7 @@ from class_device_monitor import DeviceMonitor
 from class_database_result import DBResult
 from class_data_manage import DataManage 
 from class_autocomplete_input import getch, SQL_SG
+from class_file_explorer import *
 from thread_queue_calculation_stream import QueueCalcStream
 from rich import print
 from rich.progress import Progress
@@ -639,7 +640,7 @@ class FileMapper:
             data_list=[]
             cols=str(column_list).replace("[","").replace("'","").replace("]","")
             for index,(db,table_name) in enumerate(zip(db_list,table_name_list)):
-                data=db.get_data_sql_command(f"SELECT {cols} FROM '{table_name}' ORDER BY {column_list[Orderby]}")
+                data=db.get_data_sql_command(f"SELECT {cols} FROM {db.quotes(table_name)} ORDER BY {column_list[Orderby]}")
                 for ddd in data:
                     data_list.append((index,)+ddd) # add [db,table] index to tuple
 
@@ -880,25 +881,25 @@ class FileMapper:
 
         return mount, mount_active, mappath_exists
     
-    def get_dbresult_list(self,db_list: list[SQLiteDatabase],table_name_list: list) -> list[DBResult]:
-        """Returns a list with the dbresult objects for each database,table pair.
+    # def get_dbresult_list(self,db_list: list[SQLiteDatabase],table_name_list: list) -> list[DBResult]:
+    #     """Returns a list with the dbresult objects for each database,table pair.
 
-        Args:
-            db_list (list[SQLiteDatabase]): database list
-            table_name_list (list): table list
+    #     Args:
+    #         db_list (list[SQLiteDatabase]): database list
+    #         table_name_list (list): table list
 
-        Returns:
-            list[DBResult]: Dbresult of each db, table pair
-        """
-        dbresult_list=[]
-        if len(db_list)!=len(table_name_list):
-            print("Error: database,table Pairs have deffernt lengths!")
-            return  dbresult_list
-        for a_db,table_name in zip(db_list,table_name_list):
-            db_result=DBResult(a_db.describe_table_in_db(table_name))
-            db_result.set_values(a_db.get_data_from_table(table_name,'*',None))
-            dbresult_list.append(db_result)
-        return  dbresult_list
+    #     Returns:
+    #         list[DBResult]: Dbresult of each db, table pair
+    #     """
+    #     dbresult_list=[]
+    #     if len(db_list)!=len(table_name_list):
+    #         print("Error: database,table Pairs have deffernt lengths!")
+    #         return  dbresult_list
+    #     for a_db,table_name in zip(db_list,table_name_list):
+    #         db_result=DBResult(a_db.describe_table_in_db(table_name))
+    #         db_result.set_values(a_db.get_data_from_table(table_name,'*',None))
+    #         dbresult_list.append(db_result)
+    #     return  dbresult_list
     
     @staticmethod
     def repeated_in_same_db(repeated_dict,key)->bool:
@@ -970,10 +971,10 @@ class FileMapper:
             [({Dupfileinfo1},{Dupfileinfo2}..{DupfileinfoN}), ...({DupfileinfoX1},{DupfileinfoX2}..{DupfileinfoXN})]
         """
         repeated_dict=self.get_repeated_files(self.db,tablename)
-        dbresult_list=self.get_dbresult_list([self.db],[tablename])
-        item_list= [ 'id', 'md5', 'size', 'filename', 'filepath']
-        match_list=[False, True, True, False, True]
-        return self.find_matching(repeated_dict,dbresult_list,item_list,match_list)
+        item_list= [ 'filepath','filename'] #,'id', 'md5', 'size' ]
+        match_list=[ True, False] #, False, True, True] same md5 implicit in repeated : if same md5-> same size, id is always different
+        # return self.find_matching_data(repeated_dict,tablename,item_list,match_list)
+        return self.find_matching_dbresult(repeated_dict,tablename,item_list,match_list)
     
     def find_repeated(self,tablename):
         """Returns a list of tuple with the dictionaries of file information of each repeated file.
@@ -987,12 +988,13 @@ class FileMapper:
             [({Repfileinfo1},{Repfileinfo2}..{RepfileinfoN}), ...({RepfileinfoX1},{RepfileinfoX2}..{RepfileinfoXN})]
         """
         repeated_dict=self.get_repeated_files(self.db,tablename)
-        dbresult_list=self.get_dbresult_list([self.db],[tablename])
-        item_list= [ 'id', 'md5', 'size', 'filename', 'filepath']
-        match_list=[False, True, True, False, False]
-        return self.find_matching(repeated_dict,dbresult_list,item_list,match_list)
+        
+        item_list= [ 'filename', 'filepath'] #,'id', 'md5', 'size']
+        match_list=[ False, False ] # , False, True, True]
+        # return self.find_matching_data(repeated_dict,tablename,item_list,match_list)
+        return self.find_matching_dbresult(repeated_dict,tablename,item_list,match_list)
     
-    def find_matching(self,repeated_dict:dict,dbresult_list:list,item_list:list,match_list:list):
+    def find_matching_dbresult(self,repeated_dict:dict,table_name:str,item_list:list,match_list:list):
         """Finds matching item and match items in a database
 
         Args:
@@ -1006,33 +1008,155 @@ class FileMapper:
             [({Matfileinfo1},{Matfileinfo2}..{MatfileinfoN}), ...({MatfileinfoX1},{MatfileinfoX2}..{MatfileinfoXN})]
         """
         a_key=None 
-        repeated_info_dict=self.repeated_list_info(repeated_dict,a_key,dbresult_list)
+        db_result=DBResult(self.db.describe_table_in_db(table_name))
         repeat_list=[]
-        for a_key,_ in repeated_info_dict.items():
-            for iii,rid_list in enumerate(repeated_info_dict[a_key]):
-                comp_dict={}
-                if iii == 0:
-                    node_1=rid_list[4] #Node object
-                    repeat_node=None
+        with Progress() as progress:
+            exit_key="ctrl+c"
+            if os.name == 'nt':
+                exit_key="F12"
+            total_count=len(repeated_dict)
+            task1 = progress.add_task(f"[blue]Calculating Match [red]({exit_key} to Exit)", total=total_count)
+            for count_processed,(a_key,db_id_tup_list) in enumerate(repeated_dict.items()):
+                print(f'{count_processed+1}/{total_count} found {len(repeat_list)} looking at {a_key}={repeated_dict[a_key]}')
+                data_same_md5=[]
+                if len(db_id_tup_list)<10:
+                    for db_id_tup in db_id_tup_list:
+                        data_same_md5=data_same_md5+self.db.get_data_from_table(table_name,"*",f'id={db_id_tup[1]}')
                 else:
-                    node_2=rid_list[4] #Node object
-                    comp_dict=dbresult_list[0].compare_nodes(node_1,node_2,'==')
-                    
-                    repeat_file=True
-                    #print("."*33)
-                    for aaa,bbb in zip(item_list,match_list):
-                        #print(f"{aaa}: {getattr(node_1,aaa)} ==? {getattr(node_2,aaa)} -> {comp_dict[aaa]} <- should be {bbb}")
-                        if bbb != comp_dict[aaa]:
-                            repeat_file=False
-                            break
-                    if repeat_file:
-                        if iii==1:
-                            repeat_node=(node_1.to_dict(),node_2.to_dict())
+                    data_same_md5=self.db.get_data_from_table(table_name,"*",f'md5={self.db.quotes(a_key)}') # makes a search in all db -> slow if few, fast if many
+                db_result.clear_values()
+                if raw_key_pressed(r'\xe0\x86'): # F12
+                   return repeat_list
+                if len(data_same_md5)>0:    
+                    db_result.set_values(data_same_md5)
+                    for iii,_ in enumerate(data_same_md5):
+                        comp_dict={}
+                        if iii == 0:
+                            node_1=db_result.dbr[iii] #Node object
+                            repeat_node=None
                         else:
-                            repeat_node=repeat_node+(node_2.to_dict(),)
-                if repeat_node:    
-                    repeat_list.append(repeat_node) 
+                            node_2=db_result.dbr[iii] #Node object
+                            comp_dict=db_result.compare_nodes(node_1,node_2,'==')
+                            
+                            repeat_file=True
+                            for aaa,bbb in zip(item_list,match_list):
+                                #print(f"{aaa}: {getattr(node_1,aaa)} ==? {getattr(node_2,aaa)} -> {comp_dict[aaa]} <- should be {bbb}")
+                                if bbb != comp_dict[aaa]:
+                                    repeat_file=False
+                                    break
+                            if repeat_file:
+                                if not repeat_node:
+                                    repeat_node=(node_1.to_dict(),node_2.to_dict())
+                                else:
+                                    repeat_node=repeat_node+(node_2.to_dict(),)
+                        if repeat_node:    
+                            repeat_list.append(repeat_node) 
+                progress.update(task1, completed=count_processed+1)
+            progress.update(task1, completed=total_count)
         return repeat_list
+    
+    @staticmethod
+    def compare_data_tuple(comp_dict:dict,data1:tuple,data2:tuple)->bool:
+        for index,result in comp_dict.items():
+            comp=(data1[index] == data2[index])
+            if comp != result:
+                return False
+        return True
+    
+    def find_matching_data(self,repeated_dict:dict,table_name:str,item_list:list,match_list:list):
+        """Finds matching item and match items in a database
+
+        Args:
+            repeated_dict (dict): repeated dictionary
+            dbresult_list (list): list of databases
+            item_list (list[str]): list of items to compare
+            match_list (list[bool]): comparison criteria match
+
+        Returns:
+            list: list of tuples, each dictionary in the tuple contains the matching files
+            [({Matfileinfo1},{Matfileinfo2}..{MatfileinfoN}), ...({MatfileinfoX1},{MatfileinfoX2}..{MatfileinfoXN})]
+        """
+        a_key=None 
+        comp_dict={}
+        field_list=self.db.get_column_list_of_table(table_name)
+        for item,match in zip(item_list,match_list):
+            for iii,fff in enumerate(field_list):
+                if fff==item:
+                    comp_dict.update({iii:match})
+
+        repeat_list=[]
+        with Progress() as progress:
+            exit_key="F12"
+            if os.name == 'nt':
+                exit_key="F12"
+            total_count=len(repeated_dict)
+            task1 = progress.add_task(f"[blue]Calculating Match [red]({exit_key} to Exit)", total=total_count)
+            for count_processed,(a_key,db_id_tup_list) in enumerate(repeated_dict.items()):
+                print(f'{count_processed+1}/{total_count} found {len(repeat_list)} looking at {a_key}={repeated_dict[a_key]}')
+                data_same_md5=[]
+                if len(db_id_tup_list)<10:
+                    for db_id_tup in db_id_tup_list:
+                        data_same_md5=data_same_md5+self.db.get_data_from_table(table_name,"*",f'id={db_id_tup[1]}')
+                else:
+                    data_same_md5=self.db.get_data_from_table(table_name,"*",f'md5={self.db.quotes(a_key)}') # makes a search in all db -> slow if few, fast if many
+                if raw_key_pressed('\xe0\x86'): # F12
+                   return repeat_list
+                if len(data_same_md5)>0:    
+                    repeat_node=self.combinatorial_compare(field_list,comp_dict,data_same_md5)
+                    if repeat_node:    
+                        repeat_list.append(repeat_node) 
+                progress.update(task1, completed=count_processed+1)
+            progress.update(task1, completed=total_count)
+        return repeat_list
+    
+    def combinatorial_compare(self,field_list:list,comp_dict:dict,d_list:list[tuple])->tuple[dict]:
+        """Compares all combinations in list. 
+
+        Args:
+            field_list (list): fields of the data in data_list tuples
+            comp_dict (dict): dictionary of comparisons
+            d_list (list[tuple]): list of database data tuples
+
+        Returns:
+            tuple[dict]: if a combination matches the comp_dict criteria, the data is added as dictionary in a tuple
+        """
+        repeat_node=None
+        # if len(d_list)>=2:
+        #     # d_list=data_list.copy()
+        lendlist=len(d_list)
+        total=lendlist
+        iii=0
+        while lendlist>1:
+            data1=d_list.pop(0)
+            if total>100:
+                A_C.print_cycle(iii,total)
+            for data2 in d_list:
+                if self.compare_data_tuple(comp_dict,data1,data2):
+                    if not repeat_node:
+                        repeat_node=(self.data_to_field_dict(field_list,data1),self.data_to_field_dict(field_list,data2))
+                    else:
+                        repeat_node=repeat_node+(self.data_to_field_dict(field_list,data2),)
+            lendlist=len(d_list)
+            iii = iii + 1
+        return repeat_node 
+
+    @staticmethod
+    def data_to_field_dict(field_list:list,data:tuple)->dict:
+        """Returns a dictionary with fields and data Data in tuple
+
+        Args:
+            field_list (list): fields of data
+            data (tuple): data in tuple
+
+        Returns:
+            dict: {field:data}
+        """
+        result={}
+        if len(field_list)==len(data):
+            for field,ddd in zip(field_list,data):
+                result.update({field:ddd})
+        return result
+
 
     def __del__(self):
         """On deletion close correctly"""

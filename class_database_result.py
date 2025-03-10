@@ -51,6 +51,13 @@ class DBResult:
                 attr=self.description[index][1]
                 setattr(obj,attr,value)
             self.dbr.append(obj)
+    
+    def clear_values(self):
+        """Clears the query data in the database result list dbr.
+        """
+        numobj=len(self.dbr)
+        for _ in range(numobj):  
+            self.dbr.pop(0)
             
     @staticmethod
     def list_node_attr(a_node:Node):
