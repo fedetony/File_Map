@@ -75,9 +75,11 @@ class QueueCalcStream(threading.Thread):
                 while chunk := f.read(4096):
                     md5.update(chunk)
                 return md5.hexdigest()
-
-        except FileNotFoundError:
+        except (PermissionError):
+            return ':::NoPermission:::'
+        except (FileNotFoundError):
             print(f"File {file_path} not found.")
+            return ':::FileNotFound:::'
             exit(1)
 
     @staticmethod
