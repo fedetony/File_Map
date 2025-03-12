@@ -240,7 +240,7 @@ class TerminalMenuInterface():
 
 
 
-    def menu_enter_path():
+    def menu_enter_path(self):
         """Asks selection of a directory and returns if the selected path/input is an available directory and the path user input.
 
         Returns:
@@ -918,71 +918,7 @@ class TerminalMenuInterface():
         print("----------")
         db_map_pair=self.menu_select_database_map()
         if db_map_pair:
-            map_info_1=self.cma.get_map_info(db_map_pair[0],db_map_pair[1])
-            # field list in map
-            # id=0	dt_data_created'=1	'dt_data_modified'=2	'filepath'=3	'filename'=4	'md5'=5	'size'=6	
-            # 'dt_file_created'=7	'dt_file_accessed'=8	'dt_file_modified'=9
-            # Map info
-            # id=0	'dt_map_created'=1	'dt_map_modified'=2	'mappath'=3	'tablename'=4	'mount'=5	'serial'=6	'mapname'=7	'maptype'=8
-            mappath=map_info_1[0][3]
-            new_tablename=db_map_pair[1]+'_update'
-            # check mount exist
-            fm=self.cma.get_file_map(db_map_pair[0])
-            mount, mount_active, mappath_exists=fm.check_if_map_device_active(fm.db,db_map_pair[1],False)
-            print("Check result:", mount, mount_active, mappath_exists)
-            # get file name and path 
-            filepath=None
-            if mount_active and mappath_exists:
-                filepath=os.path.join(mount,mappath)
-                print(filepath)
-            if not filepath:
-                return f'Mount or device is not active for {db_map_pair}'
-            # Make a shallow map
-            try:
-                if not fm.db.table_exists(new_tablename):
-                    fm.map_a_path_to_db(new_tablename,filepath,True,None,shallow_map=True)
-                db_map_pair_1=db_map_pair
-                db_map_pair_2=(db_map_pair[0],new_tablename)
-                differences, msg = self.cma.shallow_compare_maps(db_map_pair_1,db_map_pair_2)
-                # Delete the shallow map
-                print(differences['+'])
-                print(differences['-']) 
-                print(msg)
-                found_differences=False
-                for _,value in differences.items():
-                    if len(value)>0:
-                        found_differences=True
-                        break
-                if not found_differences:
-                    # delete shallow map
-                    fm.delete_map(new_tablename)
-                    return msg
-                if not self.ask_confirmation(f"Replace diffences in map {db_map_pair[1]}?",False):
-                    return '[yellow] Map not Updated! Delete map manually or restart update to use map'
-                data_to_add=[]
-                for item in differences['diff_fs']:
-                    if item[2]=='+':
-                        ddd=tuple()
-                        for iii in range(4,len(item)):
-                            if item[iii] == MD5_SHALLOW:
-                                ddd=ddd+(MD5_CALC,)
-                            else:    
-                                ddd=ddd+(item[iii],)
-                        data_to_add.append(ddd)
-                    if item[2]=='-':
-                        ddd=tuple()
-                        where=f'id = {item[3]}'
-                        fm.db.delete_data_from_table(db_map_pair[1],where)    
-                fm.db.insert_data_to_table(db_map_pair[1],data_to_add)
-                # update data modified
-                fm.db.edit_value_in_table(fm.mapper_reference_table,map_info_1[0][0],'dt_data_modified',datetime.now())
-                # delete shallow map
-                fm.delete_map(new_tablename)
-                # start thread
-                msg = fm.remap_map_in_thread_to_db(db_map_pair[1],None,True)
-            except (KeyboardInterrupt,ValueError,TypeError) as eee:
-                print(f'Something Wrong:{eee}')
-                fm.delete_map(new_tablename)
+            return self.cma.update_map(db_map_pair)
         return ''
 
 

@@ -55,22 +55,6 @@ class MappingActions():
             else:
                 return password
 
-    def is_database_active(self,db_file_name:str)->bool:
-        """True if database active
-
-        Args:
-            db_file_name (str): Database
-
-        Returns:
-            bool: True if database active
-        """
-        is_active=False
-        for a_db in self.active_databases:
-            if db_file_name==a_db['file']:
-                is_active=True
-                break
-        return is_active
-
     def deactivate_databases(self,db_file_name=None):
         """Deactivate active databases, closes db connection.
 
@@ -187,8 +171,6 @@ class MappingActions():
         self.file_list.append(file_path)
         self.password_list.append(a_pwd)
         self.key_list.append(keyfile)
-
-
 
     def validate_new_map(self,new_table_name,database):
         """Check if New table name is Correct"""
@@ -381,16 +363,16 @@ class MappingActions():
         fm=self.get_file_map(database)
         return fm.db.get_data_from_table(fm.mapper_reference_table,'*',f"tablename='{a_map}'")
 
-    def search_maps_for(self,selected_db_map_pair_list,column,search):
-        fs_list=[]
-        for db_map_pair in selected_db_map_pair_list:
-            where=f"filename LIKE '%{search}%'"
-            fs=self.map_to_file_structure(db_map_pair[0],db_map_pair[1],where=where,fields_to_tab=None,sort_by=None,ascending=True)
-            print('here',len(fs))
-            if len(fs)>0:
-                fs_list.append(fs.copy())
-                del fs
-        return fs_list
+    # def search_maps_for(self,selected_db_map_pair_list,column,search):
+    #     fs_list=[]
+    #     for db_map_pair in selected_db_map_pair_list:
+    #         where=f"filename LIKE '%{search}%'"
+    #         fs=self.map_to_file_structure(db_map_pair[0],db_map_pair[1],where=where,fields_to_tab=None,sort_by=None,ascending=True)
+    #         print('here',len(fs))
+    #         if len(fs)>0:
+    #             fs_list.append(fs.copy())
+    #             del fs
+    #     return fs_list
 
 
     def remove_file_from_mount_and_map(self,dupli_dict,db_map_pair):   
@@ -649,6 +631,11 @@ class MappingActions():
         return fm.find_repeated(a_map)
 
     def rescan_database_devices(self):
+        """scans for devices when you have a drive connected or disconnected
+
+        Returns:
+            str: message
+        """
         new_active=None
         for iii,a_db in enumerate(self.active_databases):
             fm=a_db['mapdb']
@@ -657,7 +644,83 @@ class MappingActions():
                 new_active=fm.active_devices
             elif isinstance(fm,FileMapper) and iii>0:
                 fm.active_devices=new_active    
-        return '[green]Devices Refreshed'        
+        return '[green]Devices Refreshed'
+
+    def update_map(self,db_map_pair:tuple):
+        """Updates a map
+
+        Args:
+            db_map_pair (tuple): database and map pair
+
+        Returns:
+            str: message
+        """
+        map_info_1=self.get_map_info(db_map_pair[0],db_map_pair[1])
+        # field list in map
+        # id=0	dt_data_created'=1	'dt_data_modified'=2	'filepath'=3	'filename'=4	'md5'=5	'size'=6	
+        # 'dt_file_created'=7	'dt_file_accessed'=8	'dt_file_modified'=9
+        # Map info
+        # id=0	'dt_map_created'=1	'dt_map_modified'=2	'mappath'=3	'tablename'=4	'mount'=5	'serial'=6	'mapname'=7	'maptype'=8
+        mappath=map_info_1[0][3]
+        new_tablename=db_map_pair[1]+'_update'
+        # check mount exist
+        fm=self.get_file_map(db_map_pair[0])
+        mount, mount_active, mappath_exists=fm.check_if_map_device_active(fm.db,db_map_pair[1],False)
+        print("Check result:", mount, mount_active, mappath_exists)
+        # get file name and path 
+        filepath=None
+        if mount_active and mappath_exists:
+            filepath=os.path.join(mount,mappath)
+            print(filepath)
+        if not filepath:
+            return f'Mount or device is not active for {db_map_pair}'
+        # Make a shallow map
+        try:
+            if not fm.db.table_exists(new_tablename):
+                fm.map_a_path_to_db(new_tablename,filepath,True,None,shallow_map=True)
+            db_map_pair_1=db_map_pair
+            db_map_pair_2=(db_map_pair[0],new_tablename)
+            differences, msg = self.shallow_compare_maps(db_map_pair_1,db_map_pair_2)
+            # Delete the shallow map
+            print(differences['+'])
+            print(differences['-']) 
+            print(msg)
+            found_differences=False
+            for _,value in differences.items():
+                if len(value)>0:
+                    found_differences=True
+                    break
+            if not found_differences:
+                # delete shallow map
+                fm.delete_map(new_tablename)
+                return msg
+            if not self.ask_confirmation(f"Replace diffences in map {db_map_pair[1]}?",False):
+                return '[yellow] Map not Updated! Delete map manually or restart update to use map'
+            data_to_add=[]
+            for item in differences['diff_fs']:
+                if item[2]=='+':
+                    ddd=tuple()
+                    for iii in range(4,len(item)):
+                        if item[iii] == MD5_SHALLOW:
+                            ddd=ddd+(MD5_CALC,)
+                        else:    
+                            ddd=ddd+(item[iii],)
+                    data_to_add.append(ddd)
+                if item[2]=='-':
+                    ddd=tuple()
+                    where=f'id = {item[3]}'
+                    fm.db.delete_data_from_table(db_map_pair[1],where)    
+            fm.db.insert_data_to_table(db_map_pair[1],data_to_add)
+            # update data modified
+            fm.db.edit_value_in_table(fm.mapper_reference_table,map_info_1[0][0],'dt_data_modified',datetime.now())
+            # delete shallow map
+            fm.delete_map(new_tablename)
+            # start thread
+            msg = fm.remap_map_in_thread_to_db(db_map_pair[1],None,True)
+        except (KeyboardInterrupt,ValueError,TypeError) as eee:
+            print(f'Something Wrong:{eee}')
+            fm.delete_map(new_tablename)
+        return msg
 
 
 if __name__ == '__main__':
