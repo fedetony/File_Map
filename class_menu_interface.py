@@ -6,21 +6,13 @@ import sys
 
 from class_mapping_actions import *
 
+import inquirer
+import inquirer.errors
 
 # import argparse
 # import getpass
 # from datetime import datetime
-# from rich import print
-
-
-# from class_file_manipulate import FileManipulate
-
-# from class_file_mapper import *
-# from class_autocomplete_input import AutocompletePathFile
-# from class_data_manage import DataManage
-# from class_file_explorer import *
-
-
+from rich import print
 
 F_M=FileManipulate()
 
@@ -43,7 +35,6 @@ GITHUB="https://github.com/fedetony"
 VERSION="v.1.1.333 beta"
 
 
-import inquirer
 
 class TerminalMenuInterface():
     def __init__(self,file_list:list,password_list:list,key_list:list):

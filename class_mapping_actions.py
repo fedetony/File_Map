@@ -90,7 +90,7 @@ class MappingActions():
         """
         print("File Map Databases listed:")
         for iii,(file,pwd,keyf) in enumerate(zip(self.file_list,self.password_list,self.key_list)):
-            print(f"\t{iii+1}. {file} {'[yellow](pwd)[/yellow]' if pwd else '()'} {keyf} {'[green]ACTIVE[/green]' if is_database_active(file) else '[magenta]NOT ACTIVE[/magenta]'}")
+            print(f"\t{iii+1}. {file} {'[yellow](pwd)[/yellow]' if pwd else '()'} {keyf} {'[green]ACTIVE[/green]' if self.is_database_active(file) else '[magenta]NOT ACTIVE[/magenta]'}")
 
     def show_active_inactive_databases(self,show_active:bool=True,do_print=True):
         """Prints databases listed
@@ -381,12 +381,11 @@ class MappingActions():
         fm=self.get_file_map(database)
         return fm.db.get_data_from_table(fm.mapper_reference_table,'*',f"tablename='{a_map}'")
 
-    @staticmethod
-    def search_maps_for(selected_db_map_pair_list,column,search):
+    def search_maps_for(self,selected_db_map_pair_list,column,search):
         fs_list=[]
         for db_map_pair in selected_db_map_pair_list:
             where=f"filename LIKE '%{search}%'"
-            fs=map_to_file_structure(db_map_pair[0],db_map_pair[1],where=where,fields_to_tab=None,sort_by=None,ascending=True)
+            fs=self.map_to_file_structure(db_map_pair[0],db_map_pair[1],where=where,fields_to_tab=None,sort_by=None,ascending=True)
             print('here',len(fs))
             if len(fs)>0:
                 fs_list.append(fs.copy())
