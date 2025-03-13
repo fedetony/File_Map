@@ -219,7 +219,7 @@ class TerminalMenuInterface():
         keyfile=None
         a_pwd=None
         file_available=False
-        if self.ask_confirmation(f"Is {file_path} encrypted?"):
+        if self.ask_confirmation(f"Is {file_path} {A_C.add_ansi('encrypted','hblue')}?"):
             print("-"*5+"Key Directory"+"-"*5)
             dir_available,path_key=self.menu_get_a_directory(False)
             if dir_available:    
@@ -229,13 +229,13 @@ class TerminalMenuInterface():
                     keyfile=os.path.join(path_key,file_key) 
         else:
             file_available=True
-        if self.ask_confirmation(f"Is {file_path} password protected?"):
+        if self.ask_confirmation(f"Is {file_path} {A_C.add_ansi('password protected','hblue')}?"):
             a_pwd=self.cma.ask_password()
         if file_available:
             self.cma.file_list.append(file_path)
             self.cma.password_list.append(a_pwd)
             self.cma.key_list.append(keyfile)
-            if self.ask_confirmation(f"Activate {file_path}?"):
+            if self.ask_confirmation(f"{A_C.add_ansi('Activate','hblue')} {file_path}?"):
                 self.cma.activate_databases(file_path)
 
     def menu_clone_map(self):

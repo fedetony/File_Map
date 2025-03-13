@@ -742,7 +742,7 @@ class MappingActions():
                 # delete shallow map
                 fm.delete_map(new_tablename)
                 return msg
-            if not self.ask_confirmation(f"Replace diffences in map {db_map_pair[1]}?",False):
+            if not self.ask_confirmation(f"Replace differences in map {db_map_pair[1]}?",False):
                 return '[yellow] Map not Updated! Delete map manually or restart update to use map'
             data_to_add=[]
             for item in differences['diff_fs']:
