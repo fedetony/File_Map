@@ -646,6 +646,54 @@ class MappingActions():
                 fm.active_devices=new_active    
         return '[green]Devices Refreshed'
 
+    def clone_map(self,db_map_pair:tuple,selected_db:str):
+        """Clones a map in the database"""
+        map_info=self.get_map_info(db_map_pair[0],db_map_pair[1])
+        mappath=map_info[0][3]
+        newtablename=f"%{db_map_pair[1]}_clone"
+        table_name=self.format_new_table_name(newtablename,mappath)
+        new_map_info=tuple()
+        for iii,item in enumerate(map_info[0]):
+            if iii==0:
+                pass
+            elif iii==2:
+                new_map_info=new_map_info+(str(datetime.now()),)
+            elif iii==4:
+                new_map_info=new_map_info+(table_name,)
+            else:
+                new_map_info=new_map_info+(item,)
+        fm=self.get_file_map(selected_db)   
+        if not fm.db.table_exists(table_name):
+            was_indexed=fm.db.insert_data_to_table(fm.mapper_reference_table,[new_map_info]) 
+            if was_indexed:
+                # same db
+                if selected_db == db_map_pair[0]:
+                    fm.db.clone_table(db_map_pair[1],table_name)
+                    return f'Successfully cloned {db_map_pair[1]} to {table_name} in {db_map_pair[0]}' 
+                else:
+                    fmfrom=self.get_file_map(db_map_pair[0])
+                    cols=fmfrom.db.get_column_list_of_table(db_map_pair[1])
+                    datasel=str(cols[1:]).replace("[",'').replace("]",'').replace("'",'')
+                    all_data=fmfrom.db.get_data_from_table(db_map_pair[1],datasel)
+                    fm.db.create_table(table_name,[('dt_data_created', 'DATETIME DEFAULT CURRENT_TIMESTAMP', True),
+                                        ('dt_data_modified', 'DATETIME', True),
+                                        ('filepath','TEXT',True), 
+                                        ('filename','TEXT',True), 
+                                        ('md5', 'TEXT', True), 
+                                        ('size', 'REAL', True), 
+                                        ('dt_file_created','DATETIME',False),
+                                        ('dt_file_accessed','DATETIME',False),
+                                        ('dt_file_modified','DATETIME',False),
+                                        ])
+                    if fm.db.insert_data_to_table(table_name,all_data):
+                        newdb_map_pair=(selected_db,table_name)
+                        return f'Successfully cloned {db_map_pair} to {newdb_map_pair}'  
+            return "Unable to Index Table!"    
+        return f"Table exists {table_name}"
+        
+
+
+
     def update_map(self,db_map_pair:tuple):
         """Updates a map
 

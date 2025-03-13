@@ -72,12 +72,16 @@ def main_debug():
     file_list.append(db_path_file)
     password_list.append(None)
     key_list.append(key_file)
-
-    menu=TerminalMenuInterface(file_list,password_list,key_list)
-    menu.cma.activate_databases(None)
-    menu.main_menu()
-    end_datetime=datetime.now()
-    print(f" took {MappingActions.calculate_time_elapsed(start_datetime,end_datetime)} s")
+    try:
+        menu=TerminalMenuInterface(file_list,password_list,key_list)
+        menu.cma.activate_databases(None)
+        menu.main_menu()
+        end_datetime=datetime.now()
+        print(f" took {MappingActions.calculate_time_elapsed(start_datetime,end_datetime)} s")
+    except KeyboardInterrupt:
+        print(FILE_MAP_LOGO)
+        print("bye bye!")
+    
 
 if __name__ == '__main__':
     #main()

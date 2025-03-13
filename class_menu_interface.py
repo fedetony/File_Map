@@ -238,7 +238,21 @@ class TerminalMenuInterface():
             if self.ask_confirmation(f"Activate {file_path}?"):
                 self.cma.activate_databases(file_path)
 
-
+    def menu_clone_map(self):
+        """Clones a map into the selected database"""
+        os.system('cls' if os.name == 'nt' else 'clear')
+        print(MENU_HEADER)
+        self.cma.show_databases_listed()
+        print("Clone Map:")
+        print("---------------------------------")
+        print("Select Map to clone")
+        db_map_pair=self.menu_select_database_map()
+        if db_map_pair:
+            selected_db=self.menu_select_database(True)
+            if selected_db and selected_db != '': 
+                return self.cma.clone_map(db_map_pair,selected_db)
+        return ''
+        
 
     def menu_enter_path(self):
         """Asks selection of a directory and returns if the selected path/input is an available directory and the path user input.
@@ -520,7 +534,7 @@ class TerminalMenuInterface():
                     tablename=answers['map_rename']
                     # path_to_map="D:\Downloads"
                     print(f'[yellow]Replacements: % (Date_Time), # (Date), ? (Time), & (Dir), ! (Full_Path) ') 
-                    new_tablename=self.menu_get_table_name_input()
+                    new_tablename=self.menu_get_table_name_input(tablename)
                     fm=self.cma.get_file_map(selected_db)
                     data=fm.db.get_data_from_table(fm.mapper_reference_table,'*',f"tablename='{tablename}'")
                     #field_list=['id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype']
@@ -539,11 +553,12 @@ class TerminalMenuInterface():
                         getch()
         return ''
 
-    def menu_get_table_name_input(self):
+    def menu_get_table_name_input(self,default=None):
         tablename=''
         menu = [inquirer.Text(
                 'table_name',
                 message="(Leave blank to exit) Type the new table Name",
+                default=default,
                 validate=self.map_validation,
                 )]
         answers = inquirer.prompt(menu)
@@ -868,7 +883,8 @@ class TerminalMenuInterface():
     def menu_mapping_functions(self):
         """Interactive menu handle databases"""
         msg=''
-        ch=['Create New Map', 'Delete Map','Rename Map','Update Map','Shallow Compare Maps','Continue Mapping', 'Process Map','Search in Maps','Back']
+        ch=['Create New Map', 'Delete Map','Clone Map','Rename Map','Update Map',
+            'Shallow Compare Maps','Continue Mapping','Process Map','Search in Maps','Back']
         in_name='mapping'
         menu = [inquirer.List(
             in_name,
@@ -895,6 +911,8 @@ class TerminalMenuInterface():
                 msg=self.menu_create_new_map()
             elif answers['mapping']=='Delete Map': 
                 msg=self.menu_delete_map()
+            elif answers['mapping']=='Clone Map': 
+                msg=self.menu_clone_map()
             elif answers['mapping']=='Rename Map': 
                 msg=self.menu_rename_map()
             elif answers['mapping']=='Continue Mapping': 

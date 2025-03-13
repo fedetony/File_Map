@@ -140,6 +140,32 @@ class SQLiteDatabase:
         except sqlite3.Error as eee:
             print(f"Error Creating table: {eee}")
 
+    def clone_table(self, table_name: str, clone_table_name: str):
+        """Creates a clone of the table 
+
+        Args:
+            table_name (str): Table name
+            clone_table_name (str): Table name
+        """
+        if table_name.strip() == clone_table_name.strip():
+            print("Not valid table name")
+            return
+
+        if len(clone_table_name.strip()) == 0:
+            print("Empty clone_table_name!")
+            return
+
+        # Create the table
+        try:
+            c = self.conn.cursor()
+            sql = f"CREATE TABLE {self.quotes(clone_table_name)} AS SELECT * FROM {self.quotes(table_name)};"
+            c.execute(sql)
+            self.commit()
+        except sqlite3.OperationalError:
+            pass
+        except sqlite3.Error as eee:
+            print(f"Error Creating cloned table: {eee}")
+
     def send_sql_command(self, sql, table_to_lock=None):
         """Send any sql command, if a specific table needs to be locked then specify the table_name.
 
