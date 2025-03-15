@@ -141,7 +141,7 @@ class SQLiteDatabase:
             print(f"Error Creating table: {eee}")
 
     def clone_table(self, table_name: str, clone_table_name: str):
-        """Creates a clone of the table 
+        """Creates a clone of the table
 
         Args:
             table_name (str): Table name
@@ -215,29 +215,34 @@ class SQLiteDatabase:
         except sqlite3.Error as eee:
             print(eee)
 
-    @staticmethod        
-    def quotes(txt:str)->str:
+    @staticmethod
+    def quotes(txt: str) -> str:
         """Adds quotes accordingly to the text"""
-        if "'" in txt and  '"' in txt:
+        if "'" in txt and '"' in txt:
             if txt.startswith("'") and txt.endswith("'") and "'" not in txt[1:-1]:
-                return txt # is already '' quoted
+                return txt  # is already '' quoted
             if txt.startswith('"') and txt.endswith('"') and '"' not in txt[1:-1]:
-                return txt # is already "" quoted
-            txt.replace('"','')
+                return txt  # is already "" quoted
+            txt.replace('"', "")
         if "'" in txt:
             if txt.startswith("'") and txt.endswith("'"):
-                return txt # is already '' quoted
-            return '"'+txt+'"'
+                return txt  # is already '' quoted
+            return '"' + txt + '"'
         if txt.startswith('"') and txt.endswith('"'):
-            return txt # is already "" quoted
-        return "'"+txt+"'"
+            return txt  # is already "" quoted
+        return "'" + txt + "'"
 
     def rename_column_in_table(self, table_name, column_name, new_column_name):
         """Rename a column in the database"""
         try:
             c = self.conn.cursor()
             c.execute(
-                "ALTER TABLE IF EXISTS " + self.quotes(table_name) + " RENAME COLUMN " + self.quotes(column_name) + " TO " + self.quotes(new_column_name)
+                "ALTER TABLE IF EXISTS "
+                + self.quotes(table_name)
+                + " RENAME COLUMN "
+                + self.quotes(column_name)
+                + " TO "
+                + self.quotes(new_column_name)
             )
             print(f"Column {column_name} renamed to {new_column_name}")
             self.commit()
@@ -380,12 +385,16 @@ class SQLiteDatabase:
         try:
             c = self.conn.cursor()
             # Update the specified column with the given value for all rows that match the condition
-            c.execute(f"UPDATE {self.quotes(table_name)} SET {self.quotes(column_name)} = ? WHERE id = ?", (new_value, an_id))
+            c.execute(
+                f"UPDATE {self.quotes(table_name)} SET {self.quotes(column_name)} = ? WHERE id = ?", (new_value, an_id)
+            )
             # print("Row updated successfully")
             self.commit()
             time.sleep(WAIT_TIME_WRITING)
+            return True
         except sqlite3.Error as eee:
             print(eee)
+            return False
         finally:
             # Release all resources
             c.close()
@@ -401,7 +410,7 @@ class SQLiteDatabase:
         """
         try:
             c = self.conn.cursor()
-            sql=f"SELECT 1 FROM sqlite_master WHERE type='table' AND name={self.quotes(table)}"
+            sql = f"SELECT 1 FROM sqlite_master WHERE type='table' AND name={self.quotes(table)}"
             c.execute(sql)
             return len(c.fetchall()) > 0
         except (sqlite3.OperationalError, ValueError) as eee:
