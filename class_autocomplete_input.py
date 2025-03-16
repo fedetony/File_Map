@@ -8,6 +8,7 @@
 
 import os
 import sys
+import re
 import glob as gb
 import inquirer
 from rich import print  # pylint: disable=redefined-builtin
@@ -942,6 +943,21 @@ class AutocompletePathFile:
             str: The modified text with the character inserted.
         """
         return text[:pos-1] + text[pos:]
+    
+    @staticmethod
+    def remove_ansi(txt: str) -> str:
+        """
+        Removes ANSI escape codes from styled text.
+
+        Args:
+            txt (str): The input string with ANSI escape codes.
+
+        Returns:
+            str: The unstyled text without ANSI escape codes.
+        """
+        pattern = r'\\033(?:[@-Z\\]|\[[0-?]*[ -/]*m)'
+        return re.sub(pattern, '', txt)
+    
     @staticmethod
     def add_ansi(txt: str, code: str) -> str:
         """
