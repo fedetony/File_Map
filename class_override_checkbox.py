@@ -80,15 +80,24 @@ MENU_PROCESS_SELECTOR={
 class Checkbox(BaseConsoleRender):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.include_locked_in_default = False
         self.locked = self.question.locked or []
         self.selection = [k for (k, v) in enumerate(self.question.choices) if v in self.default_choices()]
         try:
             self.current = self.question.default_pos
         except (AttributeError,ValueError,TypeError):    
             self.current = 0
-        # list of (index_from,a_process,index_to)
-        self.process=[(None,'',None)]
-
+        #set process mode
+        self.m_s=MENU_PROCESS_SELECTOR.copy()
+        try:
+            self.m_s['__mode__'] = self.question.process_mode
+        except (AttributeError,ValueError,TypeError):    
+            self.m_s['__mode__'] = None
+        try:
+            self.process_list = self.question.process_list
+        except (AttributeError,ValueError,TypeError):    
+            self.process_list = [] # list of (index_from,a_process,index_to)
+        
     def get_hint(self):
         try:
             hint = self.question.hints[self.question.choices[self.current]]
@@ -98,7 +107,9 @@ class Checkbox(BaseConsoleRender):
 
     def default_choices(self):
         default = self.question.default or []
-        return default + self.locked
+        if self.include_locked_in_default:
+            return default + self.locked
+        return default
 
     @property
     def is_long(self):
@@ -134,9 +145,6 @@ class Checkbox(BaseConsoleRender):
             ):  # noqa
                 symbol = self.theme.Checkbox.selected_icon
                 color = self.theme.Checkbox.selected_color
-                for index_from,a_process,index_to in self.process:
-                    if index in [index_from,index_to]:
-                        symbol = a_process
             else:
                 symbol = self.theme.Checkbox.unselected_icon
                 color = self.theme.Checkbox.unselected_color
@@ -157,10 +165,17 @@ class Checkbox(BaseConsoleRender):
             if choice == GLOBAL_OTHER_CHOICE:
                 symbol = "+"
 
+            for proc in self.process_list:
+                (index_from,a_process,index_to) = proc
+                if index in [index_from]:
+                    symbol = a_process + '›' + symbol
+                elif index in [index_to]:
+                    symbol = a_process + '‹' + symbol
+                    
             yield choice, selector + " " + symbol, color
 
     def process_input(self, pressed):
-        question = self.question
+        question = self.question     
         # initial_selection=question.default
         is_current_choice_locked = question.choices[self.current] in self.locked
         if pressed == key.UP:
@@ -176,17 +191,17 @@ class Checkbox(BaseConsoleRender):
                 self.current = min(len(self.question.choices) - 1, self.current + 1)
             return
         elif pressed == key.SPACE or pressed == key.CTRL_I:
-            if self.question.choices[self.current] == GLOBAL_OTHER_CHOICE:
-                self.other_input()
-            elif self.current in self.selection:
-                if not is_current_choice_locked:
+            if not is_current_choice_locked:
+                if self.question.choices[self.current] == GLOBAL_OTHER_CHOICE:
+                    self.other_input()
+                elif self.current in self.selection:
                     self.selection.remove(self.current)
-            else:
-                self.selection.append(self.current)
+                else:
+                    self.selection.append(self.current)
         elif pressed == key.LEFT:
             # if self.current in self.selection:
                 # self.selection.remove(self.current)
-            if not is_current_choice_locked:
+            # if not is_current_choice_locked:
                 value = self.question.choices[self.current]
                 tag=getattr(value, "tag", value)
                 if '─<' in tag:
@@ -200,7 +215,7 @@ class Checkbox(BaseConsoleRender):
         elif pressed == key.RIGHT:
             # if self.current not in self.selection:
                 # self.selection.append(self.current)
-            if not is_current_choice_locked:
+            # if not is_current_choice_locked:
                 value = self.question.choices[self.current]
                 tag=getattr(value, "tag", value)
                 if '─>' in tag:
@@ -238,6 +253,14 @@ class Checkbox(BaseConsoleRender):
             raise errors.EndOfInput(result)
         elif pressed == key.CTRL_C:
             raise KeyboardInterrupt()
+        elif pressed.upper() in list(self.m_s.keys()) and self.m_s['__mode__']=='all':
+            self.process_list.append((self.current,pressed.upper(),None))
+        elif pressed == key.DELETE:
+            rem_p=[]
+            for proc in self.process_list:
+                if self.current not in proc[0]:
+                    rem_p.append[proc]
+            self.process_list=rem_p         
 
     def other_input(self):
         other = super().other_input()

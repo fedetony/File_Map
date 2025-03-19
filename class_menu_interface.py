@@ -723,36 +723,38 @@ class TerminalMenuInterface():
                 # menu_select_from_list_map(repeat_list,db_map_pair)
 
     def menu_search_in_maps(self,selected_db_map_pair_list:list=None,explore=True):
-        #"Find in Map": "Input a word to be searched alon the files",
+        """Search in Maps"""
         if not selected_db_map_pair_list:
             selected_db_map_pair_list=self.menu_select_multiple_database_map()
         print('selected_db_map_pair_list-->',selected_db_map_pair_list)
-        # menu = [inquirer.Text(
-        #     'search_text',
-        #     message="(Leave blank to exit) Type the text to search the maps",
-        #     )]
-        # answers = inquirer.prompt(menu)
-        # ans_txt=str(answers['search_text']).strip()
         msg=''
         (ans_txt, msg, is_valid)=A_C.get_sql_input()
-        print(ans_txt)
+        print(f'Searching for:{ans_txt}')
         if ans_txt not in ['',None] and is_valid:
             fs_list=[]
+            db_map_list=[]
+            # data_list=[]
+            search=f'{ans_txt} search'
             for db_map_pair in selected_db_map_pair_list:
                 where=ans_txt #f"filename LIKE '%{ans_txt}%'"
-                fs=self.cma.map_to_file_structure(db_map_pair[0],db_map_pair[1],where=where,fields_to_tab=None,sort_by=None,ascending=True)
+                # including Id is important
+                fs=self.cma.map_to_file_structure(db_map_pair[0],db_map_pair[1],where=where,fields_to_tab=['id'],sort_by=None,ascending=True)
                 print(f'Found {len(fs)} in {db_map_pair[1]}')
                 if len(fs)>0:
                     fs_list.append(fs.copy())
+                    db_map_list.append(db_map_pair)
                     del fs
             if explore:
                 if len(fs_list)==0:
                     fs_list=[(f'Nothing Found for {ans_txt}',0)]
-                f_e=FileExplorer(None,None,{f'{ans_txt} search':fs_list})
-                _=f_e.browse_files(my_style_expand_size)   
+                # selected_db_map_pair, selected_id, data=self.cma.explore_one_file_search(search,fs_list,db_map_list)    
+                selected_db_map_pair, selected_id, data=self.cma.explore_multiple_file_search(search,fs_list,db_map_list)
+                return str(selected_db_map_pair)+'»»»id:'+str(selected_id)+'\n»»»data:'+str(data)
             else:
                 return fs_list     
         return msg
+    
+    
 
     def menu_select_from_list_map(self,d_list,db_map_pair,selection_type='repeated'):
         """Menu for Selection

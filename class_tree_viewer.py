@@ -47,6 +47,23 @@ class TreeNode:
                                 att_list.append(None)
                         me_dict.update({key:att_list})
         return me_dict
+    
+    def get_bloodline(self,bloodline:list=None):
+        """Gets a list with parents ids
+
+        Args:
+            bloodline (list, optional): previous blodline list. Defaults to None.
+
+        Returns:
+            list: blodline list with [id, parent.id, parent.parent.id, ...,main node id]
+        """
+        if not isinstance(bloodline,list):
+            bloodline=[]
+        bloodline.append(self.id)
+        if isinstance(self.parent,TreeNode):
+            
+            bloodline=self.parent.get_bloodline(bloodline)
+        return bloodline
 
 class TreeViewer:
     def __init__(self, file_struct,indexes_dict:dict=None,str_style=0):
@@ -450,6 +467,7 @@ if __name__ == "__main__":
     T_V.call_style=T_V._call_style #need to set an style before calling
     tree=T_V.treenode_to_string(T_V.main_node,a_filter='dir')
     print(tree)
+    # print(T_V.main_node.children[0].children[0].get_bloodline())
     # print('*'*50)
     # T_V.str_style=2
     # def my_style(node:TreeNode,level):

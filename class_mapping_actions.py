@@ -630,6 +630,72 @@ class MappingActions():
         fm=self.get_file_map(database)
         return fm.find_repeated(a_map)
 
+    def explore_one_file_search(self,search,fs_list:list,db_map_list:list)->tuple:
+        """Uses file explorer to select a file from a search.
+
+        Args:
+            search (_type_): main node name to show
+            fs_list (list): list of file structures from search. 
+                Id must be included in filestructure! 
+            db_map_list (list): correspondant db_map_pair list
+
+        Returns:
+            tuple: selected_db_map_pair, selected_id, selection data
+        """
+        selected_db_map_pair=None
+        selected_id=None 
+        data=None
+        f_e=FileExplorer(None,None,{search:fs_list})
+        selected_node=f_e.browse_files(my_style_expand_size,allow_dir_selection=False,prompt="Browse and select a File")   
+        if selected_node.level not in [0,1]: # search, db_map
+            #  get the db_map_pair and id of selection.
+            b_l=selected_node.get_bloodline()
+            for iii,node in enumerate(f_e.t_v.main_node.children):
+                if node.id in b_l:
+                    selected_db_map_pair=db_map_list[iii]
+                    break
+            # directories do not have an id in map, and no info on file_structure so not allowing to select directories
+            selected_id=selected_node.info[2]
+            fm=self.get_file_map(selected_db_map_pair[0])
+            data=fm.db.get_data_from_table(selected_db_map_pair[1],"*",f'id={selected_id}')
+        # else: # only used if allow_dir_selection=True
+        #     if not self.ask_confirmation("Not valid selection, do you want to exit?",True):
+        #         selected_db_map_pair, selected_id, data = self.explore_one_file_search(search,fs_list,db_map_list)
+        return selected_db_map_pair, selected_id, data
+    
+    def explore_multiple_file_search(self,search,fs_list:list,db_map_list:list)->tuple:
+        """Uses file explorer to select a file from a search.
+
+        Args:
+            search (str): main node name to show
+            fs_list (list): list of file structures from search. 
+                Id must be included in filestructure! 
+            db_map_list (list): correspondant db_map_pair list
+
+        Returns:
+            tuple[list]: selected_db_map_pair, selected_id, selection data
+        """
+        selected_db_map_pair_list=[]
+        selected_id_list=[]
+        data=[]
+        f_e=FileExplorer(None,None,{search:fs_list})
+        selected_node_list=f_e.select_multiple_files(my_style_file_expand_size,None,prompt="Browse and select a File",allow_dir_selection=False)  
+        for selected_node in  selected_node_list:
+            if selected_node.level not in [0,1]: # search, db_map
+                #  get the db_map_pair and id of selection.
+                b_l=selected_node.get_bloodline()
+                for iii,node in enumerate(f_e.t_v.main_node.children):
+                    if node.id in b_l:
+                        selected_db_map_pair=db_map_list[iii]
+                        selected_db_map_pair_list.append(selected_db_map_pair)
+                        break
+                # directories do not have an id in map, and no info on file_structure so not allowing to select directories
+                selected_id_list.append(selected_node.info[2])
+                fm=self.get_file_map(selected_db_map_pair[0]) #last appended to list
+                data.append(fm.db.get_data_from_table(selected_db_map_pair[1],"*",f'id={selected_node.info[2]}'))
+            
+        return selected_db_map_pair_list, selected_id_list, data
+
     def rescan_database_devices(self):
         """scans for devices when you have a drive connected or disconnected
 

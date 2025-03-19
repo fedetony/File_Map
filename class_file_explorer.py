@@ -33,7 +33,7 @@ from class_tree_viewer import TreeViewer,TreeNode
 import inquirer.questions as questions
 from inquirer.render.console import ConsoleRender
 from class_override_checkbox import Checkbox ,List ,CONTRACT_KEYWORD, EXPAND_KEYWORD, MENU_PROCESS_SELECTOR
-def checkbox_shortcut(message, default_pos=0,render=None, **kwargs):
+def checkbox_shortcut(message, default_pos=0,process_mode=None,process_list=None,render=None, **kwargs):
     render = render or ConsoleRender()
     question =  questions.Checkbox(
                                     name=kwargs.get('name',""), 
@@ -53,6 +53,17 @@ def checkbox_shortcut(message, default_pos=0,render=None, **kwargs):
     setattr(question,"answers",{})
     setattr(question,"default_pos",default_pos)
     setattr(question,"current",default_pos)
+    if process_list:
+        setattr(question,"process_list",process_list)
+    else:
+        setattr(question,"process_list",[])
+    setattr(question,"process_mode",process_mode)
+    if process_mode:
+        to_print=[]
+        for a_key,value in MENU_PROCESS_SELECTOR.items():
+            if len(a_key)==1:
+                to_print.append(f"{a_key}={value.replace('*','')}")
+        print(', '.join(to_print))
     print("ESC: Cancel, ENTER:Selection, ARROWS:Navigate, TAB/SPACE:Select, CTRL+T:Toggle, CTRL+A:Select ALL, CTRL+R:Unselect ALL")
     # setattr(question,'_current_index',_current_index)
     rrr=render.render(question)
@@ -421,7 +432,7 @@ class FileExplorer:
                 is_expand = True
         return selected_node
     
-    def browse_tree_checkbox(self,a_filter,style=my_style,selected_list:list=None,locked_list:list=None,prompt:str="Select",expand_contract_id=None)->list:
+    def browse_tree_checkbox(self,a_filter,style=my_style,selected_list:list=None,locked_list:list=None,prompt:str="Select",expand_contract_id=None, allow_dir_selection=True)->list:
         """Show tree string in inquire checkbox format
 
         Args:
@@ -444,7 +455,12 @@ class FileExplorer:
                 default_selected_list.append(f"{jjj}")
             # elif node.id not in selected_list and node.selected:
             #     hidden_node_list.append(node.id)
-
+            if not allow_dir_selection and node.i_am == 'dir':    
+                if not isinstance(locked_list,list):
+                    locked_list=[]
+                locked_list.append(f"{jjj}")
+                # setattr(node,'selected',False)
+            
         ch=[(f"{suggestions[iii]}",f"{iii}") for iii in range(len(suggestions))]
         answers={}
         answers["path"] =inquirer.checkbox(
@@ -508,7 +524,7 @@ class FileExplorer:
         # locked_list=[0]
         while has_expansion: #selected_node.i_am=='dir':
             os.system('cls' if os.name == 'nt' else 'clear')
-            nodeid_list ,has_expansion, expand_contract_id=self.browse_tree_checkbox('expand_dir',style,nodeid_list,locked_list,prompt, expand_contract_id)
+            nodeid_list ,has_expansion, expand_contract_id=self.browse_tree_checkbox('expand_dir',style,nodeid_list,locked_list,prompt, expand_contract_id,allow_dir_selection=True)
             selection_list=[]
             for nodeid in nodeid_list:
                 selected_node=self.t_v.get_nodes_by_attribute('id',nodeid)[0]
@@ -518,7 +534,7 @@ class FileExplorer:
                 
         return selection_list
     
-    def select_multiple_files(self,style=my_style_file_expand,locked_list:list=None,prompt:str="Select")->list[TreeNode]:
+    def select_multiple_files(self,style=my_style_file_expand,locked_list:list=None,prompt:str="Select",allow_dir_selection=True)->list[TreeNode]:
         """Browses through files (Does not show files)
 
         Returns:
@@ -529,16 +545,124 @@ class FileExplorer:
         selection_list=None
         nodeid_list=None
         expand_contract_id=None
+        # start treeview
+        _=self.get_tree_view_list('expand_dir',style)
+        while has_expansion: #selected_node.i_am=='dir':
+            os.system('cls' if os.name == 'nt' else 'clear')
+            nodeid_list ,has_expansion, expand_contract_id=self.browse_tree_checkbox('expand',style,nodeid_list,locked_list,prompt, expand_contract_id,allow_dir_selection)
+            selection_list=[]
+            for nodeid in nodeid_list:
+                selected_node=self.t_v.get_nodes_by_attribute('id',nodeid)[0]
+                if allow_dir_selection and selected_node.selected:
+                    selection_list.append(selected_node)
+                elif not allow_dir_selection and selected_node.selected and selected_node.i_am=='file':
+                    selection_list.append(selected_node)
+        return selection_list
+    
+    def process_list_tree_checkbox(self,a_filter,style=my_style,selected_list:list=None,process_list:list=None,locked_list:list=None,prompt:str="Select",expand_contract_id=None)->list:
+        """Show and allow process selection tree string in inquire checkbox format
+
+        Args:
+            a_filter (str): filter for tree viewer
+
+        Returns:
+            list: node id in the tree
+        """
+        suggestions = self.get_tree_view_list(a_filter,style)
+        
+        default_pos=0
+        default_selected_list=[]
+        if not selected_list:
+            selected_list=[]
+        for jjj,node in enumerate(self.t_v.filtered_nodes):
+            if node.id == expand_contract_id:
+                default_pos=jjj
+            if node.id in selected_list or node.selected:
+                default_selected_list.append(f"{jjj}")
+            
+
+        ch=[(f"{suggestions[iii]}",f"{iii}") for iii in range(len(suggestions))]
+        answers={}
+        answers["path"] = inquirer.checkbox(
+                    message=prompt,
+                    default_pos=default_pos,
+                    process_mode='all',
+                    process_list=process_list,
+                    name="path",
+                    choices=ch,
+                    carousel=False,
+                    locked=locked_list,
+                    default=default_selected_list,
+                    )
+        # print(answers)
+        # getch()
+        nodeid_list=[]
+        has_expansion=False
+        for ans in answers['path']:
+            ans=str(ans)
+            is_expand=None
+            if CONTRACT_KEYWORD in ans:
+                ans=ans.replace(CONTRACT_KEYWORD,'')
+                is_expand=False
+            elif EXPAND_KEYWORD in ans:
+                ans=ans.replace(EXPAND_KEYWORD,'')
+                is_expand=True
+            node=self.t_v.filtered_nodes[int(ans)]
+            if is_expand is not None:
+                setattr(node,'expand',is_expand)
+                self.t_v.clear_default()
+                setattr(node,'default',True)
+                has_expansion=True
+                expand_contract_id=node.id
+                # self.t_v.clear_selected_children(node)
+                self.t_v.set_selected_children(node)
+            elif is_expand is None:
+                # Set selected to true
+                setattr(node,'selected',True)
+                nodeid_list.append(node.id)
+                expand_contract_id=None
+        # set the not selected to False 
+        for node in self.t_v.filtered_nodes:
+            if node.id not in nodeid_list:
+                setattr(node,'selected',False)
+        nodeid_list=[]
+        self.t_v.set_selected_children(self.t_v.main_node)
+        for node in self.t_v.all_nodes:
+            if node.selected:
+                nodeid_list.append(node.id)
+        return nodeid_list ,has_expansion, expand_contract_id
+    
+    def browse_files_with_process(self,style=my_style_expand,allow_dir_selection=True,locked_list:list=None,prompt="Browse")->TreeNode:
+        """Browser for files with expandable folders
+
+        Returns:
+            TreeNode: Selected file node
+        """
+        self.reset_t_v() # to change to new style
+        has_expansion = True
+        selection_list=None
+        nodeid_list=None
+        expand_contract_id=None
+        process_list=None
         # locked_list=[0]
         while has_expansion: #selected_node.i_am=='dir':
             os.system('cls' if os.name == 'nt' else 'clear')
-            nodeid_list ,has_expansion, expand_contract_id=self.browse_tree_checkbox('expand',style,nodeid_list,locked_list,prompt, expand_contract_id)
+            nodeid_list ,has_expansion, expand_contract_id=self.process_list_tree_checkbox(
+                a_filter='expand',
+                style=style,
+                selected_list=nodeid_list,
+                process_list=process_list,
+                locked_list=locked_list,
+                prompt=prompt, 
+                expand_contract_id=expand_contract_id,
+                )
             selection_list=[]
             for nodeid in nodeid_list:
                 selected_node=self.t_v.get_nodes_by_attribute('id',nodeid)[0]
                 if selected_node.selected:
                     selection_list.append(selected_node)
         return selection_list
+        
 
 # Example usage
 if __name__ == "__main__":
