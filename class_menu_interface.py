@@ -749,7 +749,11 @@ class TerminalMenuInterface():
                     fs_list=[(f'Nothing Found for {ans_txt}',0)]
                 # selected_db_map_pair, selected_id, data=self.cma.explore_one_file_search(search,fs_list,db_map_list)    
                 selected_db_map_pair, selected_id, data=self.cma.explore_multiple_file_search(search,fs_list,db_map_list)
-                return str(selected_db_map_pair)+'»»»id:'+str(selected_id)+'\n»»»data:'+str(data)
+                selection_name=str(datetime.now()).replace(" ","_").replace("-","").replace(":","").replace(".","")
+                selection_name=selection_name+"_selection"
+                selections=self.cma.make_selection_maps(selection_name,selected_db_map_pair,data)
+                if selections:
+                    return f'[green] Following selection maps built:{selections}'
             else:
                 return fs_list     
         return msg

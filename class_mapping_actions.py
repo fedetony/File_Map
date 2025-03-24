@@ -663,6 +663,35 @@ class MappingActions():
         #         selected_db_map_pair, selected_id, data = self.explore_one_file_search(search,fs_list,db_map_list)
         return selected_db_map_pair, selected_id, data
     
+    def make_selection_maps(self,selection_name,db_map_pair_list,data_list:list[list]):
+        """Selection maps, one for each db map pair.
+
+        Args:
+            selection_name (str): selection name
+            db_map_pair_list (list(tuple)): Lists of databases and maps
+            data_list (list[list]): data list matching length of db_map_pair_list
+        Returns:
+            list: list of selection map names
+        """
+        if not db_map_pair_list or not data_list:
+            return None
+        selections=[]
+        if len(db_map_pair_list)>0 and len(db_map_pair_list)==len(data_list):
+            set_dbmap_pairs=set(db_map_pair_list)
+            data_same_dbmap=[]
+            for iii,db_map_pair in enumerate(list(set_dbmap_pairs)):
+                selections.append(f"{selection_name}_{iii}")
+                same_data=[]
+                for s_db_m_p,s_ddd in zip(db_map_pair_list,data_list):
+                    if db_map_pair == s_db_m_p:
+                        same_data.append(s_ddd[0]) # just the tuple
+                data_same_dbmap.append(same_data)   
+            for s_db_m_p,s_ddd,s_name in zip(list(set_dbmap_pairs),data_same_dbmap,selections):
+                fm=self.get_file_map(s_db_m_p[0])
+                fm.map_a_selection(s_name,s_db_m_p[1],s_ddd)
+                
+        return selections
+
     def explore_multiple_file_search(self,search,fs_list:list,db_map_list:list)->tuple:
         """Uses file explorer to select a file from a search.
 
@@ -692,7 +721,9 @@ class MappingActions():
                 # directories do not have an id in map, and no info on file_structure so not allowing to select directories
                 selected_id_list.append(selected_node.info[2])
                 fm=self.get_file_map(selected_db_map_pair[0]) #last appended to list
-                data.append(fm.db.get_data_from_table(selected_db_map_pair[1],"*",f'id={selected_node.info[2]}'))
+                cols=fm.db.get_column_list_of_table(selected_db_map_pair[1])
+                datasel=str(cols[1:]).replace("[",'').replace("]",'').replace("'",'')
+                data.append(fm.db.get_data_from_table(selected_db_map_pair[1],datasel,f'id={selected_node.info[2]}'))
             
         return selected_db_map_pair_list, selected_id_list, data
 

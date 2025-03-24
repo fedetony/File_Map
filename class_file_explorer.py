@@ -479,6 +479,17 @@ class FileExplorer:
         for ans in answers['path']:
             ans=str(ans)
             is_expand=None
+            is_process=False
+            for a_key, value_keyword in MENU_PROCESS_SELECTOR.items():
+                if value_keyword:
+                    if value_keyword in ans:
+                        ans=ans.replace(value_keyword,'')
+                        node=self.t_v.filtered_nodes[int(ans)]
+                        self.do_process(node,a_key)
+                        setattr(node,'default',True)
+                        has_expansion=True
+                        expand_contract_id=node.id
+                        is_process=True
             if CONTRACT_KEYWORD in ans:
                 ans=ans.replace(CONTRACT_KEYWORD,'')
                 is_expand=False
@@ -486,19 +497,20 @@ class FileExplorer:
                 ans=ans.replace(EXPAND_KEYWORD,'')
                 is_expand=True
             node=self.t_v.filtered_nodes[int(ans)]
-            if is_expand is not None:
-                setattr(node,'expand',is_expand)
-                self.t_v.clear_default()
-                setattr(node,'default',True)
-                has_expansion=True
-                expand_contract_id=node.id
-                # self.t_v.clear_selected_children(node)
-                self.t_v.set_selected_children(node)
-            elif is_expand is None:
-                # Set selected to true
-                setattr(node,'selected',True)
-                nodeid_list.append(node.id)
-                expand_contract_id=None
+            if not is_process:
+                if is_expand is not None:
+                    setattr(node,'expand',is_expand)
+                    self.t_v.clear_default()
+                    setattr(node,'default',True)
+                    has_expansion=True
+                    expand_contract_id=node.id
+                    # self.t_v.clear_selected_children(node)
+                    self.t_v.set_selected_children(node)
+                elif is_expand is None:
+                    # Set selected to true
+                    setattr(node,'selected',True)
+                    nodeid_list.append(node.id)
+                    expand_contract_id=None
         # set the not selected to False 
         for node in self.t_v.filtered_nodes:
             if node.id not in nodeid_list:
@@ -510,6 +522,9 @@ class FileExplorer:
                 nodeid_list.append(node.id)
         return nodeid_list ,has_expansion, expand_contract_id   
     
+    def do_process(self,node:TreeNode,process_key:str):
+        print(node.id,f' pressed {process_key}')
+
     def select_multiple_folders(self,style=my_style_dir_expand,locked_list:list=None,prompt:str="Select")->list[TreeNode]:
         """Browses through folders (Does not show files)
 

@@ -75,6 +75,7 @@ MENU_PROCESS_SELECTOR={
     'X':'***Cut***', # Cut
     'V':'***Paste***', # Paste
     'E':'***Reveal***', # Reveal in Explorer
+    'T':'***Terminal***', # Open terminal in path
 }
 
 class Checkbox(BaseConsoleRender):
@@ -255,6 +256,14 @@ class Checkbox(BaseConsoleRender):
             raise KeyboardInterrupt()
         elif pressed.upper() in list(self.m_s.keys()) and self.m_s['__mode__']=='all':
             self.process_list.append((self.current,pressed.upper(),None))
+        elif pressed.upper() in ['E','T']:
+                result = []
+                for x in self.selection:
+                    value = self.question.choices[x]
+                    result.append(getattr(value, "value", value))
+                value = self.question.choices[self.current]
+                result.append(self.m_s[pressed.upper()]+str(getattr(value, "value", value)))
+                raise errors.EndOfInput(result)
         elif pressed == key.DELETE:
             rem_p=[]
             for proc in self.process_list:

@@ -33,7 +33,7 @@ MD5_CALC = "***Calculate***"
 MD5_SHALLOW = "***Shallow***"
 DATA_ADVANCE = 50  # gather 50 records before writting to db
 SINGLE_MULTIPLE_SEARCH = 15  # use single search or generalized search limit
-
+MAP_TYPES_LIST=["Device Map","Selection Map"]
 
 class FileMapper:
     """Class for Mapping functions in a specific database"""
@@ -262,13 +262,13 @@ class FileMapper:
                         serial = md[1]
         return mount, serial
 
-    def add_table_to_mapper_index(self, table_name, path_to_map):  # pylint: disable=too-many-locals
+    def add_table_to_mapper_index(self, table_name:str, path_to_map:str, table_type:str=None):  # pylint: disable=too-many-locals
         """Adds the information of the table to mapper index table
 
         Args:
-            db (SQLiteDatabase): database
             table_name (str): table in database
             path_to_map (str): path in device
+            table_type (str): type of table being indexed. Defaults to None ("Device Map").
         Returns:
             bool: Was indexed
         """
@@ -288,7 +288,7 @@ class FileMapper:
             ],
         )
         db_result = DBResult(db.describe_table_in_db(self.mapper_reference_table))
-        db_result.set_values(db.get_data_from_table(self.mapper_reference_table, "*", f"tablename='{table_name}'"))
+        db_result.set_values(db.get_data_from_table(self.mapper_reference_table, "*", f"tablename={db.quotes(table_name)}"))
         table_indexed = False
         if len(db_result.dbr) > 0:
             # 'id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype'
@@ -300,7 +300,10 @@ class FileMapper:
         if not table_indexed:
             print(f"Table {table_name} is Not in reference indexed")
         mapname = ""
-        maptype = "Device Map"
+        if not table_type:
+            maptype = MAP_TYPES_LIST[0] #"Device Map"
+        else:
+            maptype = table_type
         dt_map_created = datetime.now()
         dt_map_modified = datetime.now()
         # find mounting point
@@ -440,6 +443,61 @@ class FileMapper:
             return ""
         return "Mount not available!"
 
+    def is_device_map(self,table_name:str)->bool:
+        """If is a device or selection map
+
+        Args:
+            table_name (str): Map to check
+
+        Returns:
+            bool: True if is a device Map, False if selection. None if no map.
+        """
+        an_id=self.get_table_id(table_name)
+        map_type=self.db.get_data_from_table(self.mapper_reference_table,"maptype",f"id={an_id}")
+        if len(map_type)>0:
+            if map_type[0][0] == MAP_TYPES_LIST[0]:
+                return True
+            return False
+        return None
+
+    def map_a_selection(self,selection_name:str, origin_map:str, map_data:list):
+        """Makes a selection map
+
+        Args:
+            selection_name (str): map name
+            origin_map (str): map of the same db where the selection is taken from
+            map_data (list): _description_
+        """
+
+        if self.db.table_exists(origin_map) and map_data:
+            an_id=self.get_table_id(origin_map)
+            map_info=self.db.get_data_from_table(self.mapper_reference_table,"*",f"id={an_id}")
+            # mount= 5 mappath = 3
+            mount_path_to_map=os.path.join(map_info[0][5],map_info[0][3])
+            self.add_table_to_mapper_index(selection_name, mount_path_to_map, MAP_TYPES_LIST[1])
+            self._create_map_in_db(selection_name)
+            an_id=self.get_table_id(selection_name)
+            if an_id:
+                self.db.insert_data_to_table(selection_name,map_data)
+            self.set_mapname(selection_name,origin_map)
+
+    def _create_map_in_db(self,table_name):
+        """Creates map structure with table_name"""
+        self.db.create_table(
+                table_name,
+                [
+                    ("dt_data_created", "DATETIME DEFAULT CURRENT_TIMESTAMP", True),
+                    ("dt_data_modified", "DATETIME", True),
+                    ("filepath", "TEXT", True),
+                    ("filename", "TEXT", True),
+                    ("md5", "TEXT", True),
+                    ("size", "REAL", True),
+                    ("dt_file_created", "DATETIME", False),
+                    ("dt_file_accessed", "DATETIME", False),
+                    ("dt_file_modified", "DATETIME", False),
+                ],
+            )
+
     def map_a_path_to_db(
         self,
         table_name,
@@ -461,20 +519,7 @@ class FileMapper:
         db = self.db
         try:
             self.add_table_to_mapper_index(table_name, path_to_map)
-            db.create_table(
-                table_name,
-                [
-                    ("dt_data_created", "DATETIME DEFAULT CURRENT_TIMESTAMP", True),
-                    ("dt_data_modified", "DATETIME", True),
-                    ("filepath", "TEXT", True),
-                    ("filename", "TEXT", True),
-                    ("md5", "TEXT", True),
-                    ("size", "REAL", True),
-                    ("dt_file_created", "DATETIME", False),
-                    ("dt_file_accessed", "DATETIME", False),
-                    ("dt_file_modified", "DATETIME", False),
-                ],
-            )
+            self._create_map_in_db(table_name)
             data = []
             iii = 0
             files_processed = 0
@@ -818,6 +863,21 @@ class FileMapper:
                     info.append(data[0])
         return info
 
+    def get_table_id(self, table_name:str):
+        """Gets in reference table the id of a map
+
+        Args:
+            table_name (str): table name
+
+        Returns:
+            int: table id
+        """
+        if self.db.table_exists(self.mapper_reference_table):
+            id_list = self.db.get_data_from_table(self.mapper_reference_table, "id", f"tablename={self.db.quotes(table_name)}")
+            if len(id_list) > 0: # list[tuple]
+                return id_list[0][0]
+        return None
+    
     def set_mapname(self, table_name, name):
         """Renames name field in Reference
 
@@ -825,10 +885,9 @@ class FileMapper:
             table_name (str): table
             name (str): new name
         """
-        if self.db.table_exists(self.mapper_reference_table):
-            id_list = self.db.get_data_from_table(self.mapper_reference_table, "id", f"tablename='{table_name}'")
-            if len(id_list) > 0:
-                self.db.edit_value_in_table(self.mapper_reference_table, id_list[0], "mapname", name)
+        an_id=self.get_table_id(table_name)
+        if an_id:
+            self.db.edit_value_in_table(self.mapper_reference_table, an_id, "mapname", name)
 
     def get_referenced_attribute(self, attr):
         """Returns the column of mapper_reference_table as list for the attribute
