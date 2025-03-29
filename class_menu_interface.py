@@ -5,6 +5,7 @@ import os
 import sys
 
 from class_mapping_actions import *
+from class_backup_actions import BackupActions
 
 import inquirer
 import inquirer.errors
@@ -39,7 +40,8 @@ VERSION="v.1.1.333 beta"
 class TerminalMenuInterface():
     def __init__(self,file_list:list,password_list:list,key_list:list):
         
-        self.cma=MappingActions(file_list,password_list,key_list,self.ask_confirmation)
+        self.ba=BackupActions(file_list,password_list,key_list,self.ask_confirmation)
+        self.cma=self.ba.cma   
 
     @staticmethod
     def ask_confirmation(message:str,default:bool=False)->bool:
@@ -311,32 +313,46 @@ class TerminalMenuInterface():
             if answers['dir_select'] in path_list:
                 return True, answers['dir_select']
             elif answers['dir_select']=='Enter Path':
-                input_path = AutocompletePathFile('return string [cyan]ENTER[/cyan], Autofill path/file [cyan]TAB[/cyan], Cancel [cyan]ESC[/cyan]\nOr type complete directory path: ',
-                                        F_M.get_app_path(),absolute_path=False,verbose=True).get_input
-                path_user = input_path()
-                if not path_user:
-                    continue
-                file_exist, is_file = F_M.validate_path_file(path_user)
-                if file_exist and not is_file:
-                    path_user=F_M.fix_separator_in_path(path_user)
-                    dir_available=True
-                elif file_exist and is_file:
-                    path_user=F_M.extract_path(path_user)
-                    path_user=F_M.fix_separator_in_path(path_user)
-                    dir_available=True
-                else:
-                    dir_available=False
-                    if allow_create_dir:
-                        if self.ask_confirmation(f"Path {path_user} does not exist create it?") :
-                            try:
-                                os.makedirs(path_user)
-                                dir_available=True
-                            except Exception as eee:
-                                print(f'Could not create path directory {path_user}: {eee}')
-                                dir_available=False
-                return dir_available, path_user
+                dir_available, path_user=self.menu_enter_a_directory(allow_create_dir)
+                if (dir_available, path_user)!=(False,''):
+                    return dir_available, path_user
             elif answers['dir_select']=='Back':
                 return False,''
+
+    def menu_enter_a_directory(self,allow_create_dir=False):
+        """Autocomplete for directory
+
+        Args:
+            allow_create_dir (bool, optional): Creates new directory. Defaults to False.
+
+        Returns:
+            tuple:  dir_available, path_user
+        """
+        input_path = AutocompletePathFile('return string [cyan]ENTER[/cyan], Autofill path/file [cyan]TAB[/cyan], Cancel [cyan]ESC[/cyan]\nOr type complete directory path: ',
+                                        F_M.get_app_path(),absolute_path=False,verbose=True).get_input
+        path_user = input_path()
+        if not path_user:
+            return False,''
+        file_exist, is_file = F_M.validate_path_file(path_user)
+        if file_exist and not is_file:
+            path_user=F_M.fix_separator_in_path(path_user)
+            dir_available=True
+        elif file_exist and is_file:
+            path_user=F_M.extract_path(path_user)
+            path_user=F_M.fix_separator_in_path(path_user)
+            dir_available=True
+        else:
+            dir_available=False
+            if allow_create_dir:
+                if self.ask_confirmation(f"Path {path_user} does not exist create it?") :
+                    try:
+                        os.makedirs(path_user)
+                        dir_available=True
+                    except Exception as eee:
+                        print(f'Could not create path directory {path_user}: {eee}')
+                        dir_available=False
+        return dir_available, path_user
+
 
     def menu_get_an_existing_file(self,path, extension=".db"):
         """Gets a file from user selection of files with extension in path folder.
@@ -886,11 +902,48 @@ class TerminalMenuInterface():
             return None
 
 
+    def menu_backup_functions(self):
+        """Interactive menu backups"""
+        msg=''
+        ch=['Map to Backup','Shallow compare Backups','Back']
+        in_name='backup'
+        menu = [inquirer.List(
+            in_name,
+            message="Please select",
+            choices=ch,
+            carousel=False,
+            )]
+        
+        while True:
+            os.system('cls' if os.name == 'nt' else 'clear')
+            print(MENU_HEADER)
+            print("Backup:")
+            if not msg in ['',None]:
+                print("---------------------------------")
+                print(msg)
+                msg=''
+            print("---------------------------------")
+            answers = inquirer.prompt(menu)
+            if answers['backup']=='Map to Backup':
+                if len(self.cma.active_databases)==0:
+                    return '[magenta]There are no active databases![\magenta]'
+                db_map_pair=self.menu_select_database_map()
+                if not db_map_pair:
+                    return ''
+                print('Select/create a directory to set the map backup:')
+                dir_available, path_user=self.menu_enter_a_directory(True)
+                if (dir_available, path_user)!=(False,''):
+                    msg = self.ba.map_to_backup(db_map_pair,path_user,True,None)
+            elif answers['backup']=='Shallow compare Backups':
+                self.menu_shallow_compare_maps(True)
+            elif answers['backup']=='Back':
+                return ''
+
     def menu_mapping_functions(self):
         """Interactive menu handle databases"""
         msg=''
         ch=['Create New Map', 'Delete Map','Clone Map','Rename Map','Update Map',
-            'Shallow Compare Maps','Continue Mapping','Process Map','Search in Maps','Back']
+            'Shallow Compare Maps','Deepen Shallow Map','Continue Mapping','Process Map','Search in Maps','Back']
         in_name='mapping'
         menu = [inquirer.List(
             in_name,
@@ -927,6 +980,8 @@ class TerminalMenuInterface():
                 msg=self.menu_update_maps()
             elif answers['mapping']=='Shallow Compare Maps': 
                 msg=self.menu_shallow_compare_maps()
+            elif answers['mapping']=='Deepen Shallow Map': 
+                msg=self.menu_deepen_shallow_map()
             elif answers['mapping']=='Process Map':
                 msg=self.menu_process_map()
             elif answers['mapping']=='Search in Maps': 
@@ -945,8 +1000,27 @@ class TerminalMenuInterface():
             return self.cma.update_map(db_map_pair)
         return ''
 
-
-    def menu_shallow_compare_maps(self):
+    def menu_deepen_shallow_map(self):
+        """Menu for Shallow Compare two maps"""
+        os.system('cls' if os.name == 'nt' else 'clear')
+        print(MENU_HEADER)
+        print("Deepen Shallow Map:")
+        print("----------")
+        db_map_pair=self.menu_select_database_map()
+        if db_map_pair:
+            print(f'Converting {db_map_pair[1]} for calculation...')
+            self.cma.shallow_to_deep(db_map_pair)
+            fm=self.cma.get_file_map(db_map_pair[0])
+            data=fm.db.get_data_from_table(db_map_pair[1],'*',f'md5="{MD5_CALC}"')
+            if len(data)==0:
+                return f"[green]All files in {db_map_pair[1]} are already Mapped"
+            msg = fm.remap_map_in_thread_to_db(db_map_pair[1],None,True)
+            if msg != "":
+                msg= "[magenta]"+msg 
+            return msg
+        return ''
+    
+    def menu_shallow_compare_maps(self,remove_base=False):
         """Menu for Shallow Compare two maps"""
         os.system('cls' if os.name == 'nt' else 'clear')
         print(MENU_HEADER)
@@ -963,9 +1037,15 @@ class TerminalMenuInterface():
                 dt_mod_1=map_info_1[0][2]
                 dt_mod_2=map_info_2[0][2]
                 if datetime.fromisoformat(dt_mod_1) <= datetime.fromisoformat(dt_mod_2):
-                    differences, msg=self.cma.shallow_compare_maps(db_map_pair_1,db_map_pair_2)
+                    if not remove_base:
+                        differences, msg = self.cma.shallow_compare_maps(db_map_pair_1,db_map_pair_2)
+                    else:
+                        differences, msg, _ = self.ba.shallow_compare_maps_no_base_path(db_map_pair_1,db_map_pair_2,None,None,True)
                 else:
-                    differences, msg=self.cma.shallow_compare_maps(db_map_pair_2,db_map_pair_1)   
+                    if not remove_base:
+                        differences, msg = self.cma.shallow_compare_maps(db_map_pair_2,db_map_pair_1)   
+                    else:
+                        differences, msg, _ = self.ba.shallow_compare_maps_no_base_path(db_map_pair_2,db_map_pair_1,None,None,True)
                 print(differences['+'])
                 print(differences['-']) 
                 print(msg)
@@ -983,7 +1063,7 @@ class TerminalMenuInterface():
     def main_menu(self):
         """Interactive menu main"""
         msg=''
-        ch=['About','Rescan Devices','Handle Databases', 'Mapping', 'Exit']
+        ch=['About','Rescan Devices','Handle Databases', 'Mapping', 'Backup', 'Exit']
         menu = [inquirer.List(
             "main_menu",
             message="Please select",
@@ -1003,6 +1083,8 @@ class TerminalMenuInterface():
                 msg=self.menu_handle_databases()
             elif answers['main_menu']=='Mapping':
                 msg=self.menu_mapping_functions()
+            elif answers['main_menu']=='Backup':
+                msg=self.menu_backup_functions()
             elif answers['main_menu']=='Rescan Devices':
                 msg=self.cma.rescan_database_devices()
             elif answers['main_menu']=='About':

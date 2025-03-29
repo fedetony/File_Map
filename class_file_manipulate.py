@@ -183,7 +183,7 @@ class FileManipulate:
             print(f"Could not remove {file_path}\nDelete Error: {eee}")
         return False
     
-    def copy_folder(self,src_path: str, dst_path: str) -> bool:
+    def copy_folder(self,src_path: str, dst_path: str, verbose=False) -> bool:
         """
         Recursively copies the contents of src_path to dst_path.
         Args:
@@ -215,12 +215,16 @@ class FileManipulate:
                 dst_item = os.path.join(dst_path, item)
                 # If the current item is a file
                 if os.path.isfile(src_item):
+                    if verbose:
+                        print(f"Copying {self.get_size_str_formatted(self.get_file_size(src_item))} .. {src_item}")
                     copy_result=self.copy_file(src_item, dst_item)  
                     if not copy_result:
                         print(f"{src_item} Not copied !!!")
                 # If the current item is a directory
                 elif os.path.isdir(src_item):
-                    copy_result=self.copy_folder(src_item, dst_item)
+                    if verbose:
+                        print(f"Copying Directory: {src_item}")
+                    copy_result=self.copy_folder(src_item, dst_item, verbose)
                     if not copy_result:
                         print(f"Not copied items in folder {src_item}!!!")
                 all_copied &= copy_result

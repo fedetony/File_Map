@@ -147,8 +147,8 @@ class DataManage():
         df_selected=self.get_selected_df(fields_to_tab,sort_by,ascending)
         if not df_selected.empty:    
             #return df_selected.to_string(index=indexed,header=header)
-            csv=str(df_selected.to_csv(*args,**kwargs))
-            csv=csv.replace(',',separator)
+            csv=str(df_selected.to_csv(sep=separator,*args,**kwargs))
+            # csv=csv.replace(',',separator)
             csv=csv.replace('\r\n',end_of_line)
             return csv
         return ''

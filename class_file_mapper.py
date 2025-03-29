@@ -33,7 +33,7 @@ MD5_CALC = "***Calculate***"
 MD5_SHALLOW = "***Shallow***"
 DATA_ADVANCE = 50  # gather 50 records before writting to db
 SINGLE_MULTIPLE_SEARCH = 15  # use single search or generalized search limit
-MAP_TYPES_LIST=["Device Map","Selection Map"]
+MAP_TYPES_LIST=["Device Map","Selection Map","Backup Map"]
 
 class FileMapper:
     """Class for Mapping functions in a specific database"""
@@ -460,7 +460,7 @@ class FileMapper:
             return False
         return None
 
-    def map_a_selection(self,selection_name:str, origin_map:str, map_data:list):
+    def map_a_selection(self,selection_name:str, origin_map:str, map_data:list, map_type:str=None):
         """Makes a selection map
 
         Args:
@@ -474,7 +474,9 @@ class FileMapper:
             map_info=self.db.get_data_from_table(self.mapper_reference_table,"*",f"id={an_id}")
             # mount= 5 mappath = 3
             mount_path_to_map=os.path.join(map_info[0][5],map_info[0][3])
-            self.add_table_to_mapper_index(selection_name, mount_path_to_map, MAP_TYPES_LIST[1])
+            if not map_type:
+                map_type=MAP_TYPES_LIST[1]
+            self.add_table_to_mapper_index(selection_name, mount_path_to_map, map_type)
             self._create_map_in_db(selection_name)
             an_id=self.get_table_id(selection_name)
             if an_id:

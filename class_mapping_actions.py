@@ -331,7 +331,7 @@ class MappingActions():
                 if len(table_list_size)>0:
                     field_list=['id','Date Time Created','Date Time Modified','Map Path','Table Name','Mount','Serial','Map Name','Map Type']+['Items']
                     data_manage=DataManage(table_list_size,field_list)
-                    print(data_manage.get_tabulated_fields(fields_to_tab=[field_list[1],field_list[4],field_list[6],field_list[5],field_list[3],'Items'],index=True,justify='left'))
+                    print(data_manage.get_tabulated_fields(fields_to_tab=[field_list[1],field_list[4],field_list[6],field_list[5],field_list[3],'Items',field_list[8]],index=True,justify='left'))
 
     def get_all_maps(self):
         """Finds all maps in all loaded databases
@@ -438,7 +438,27 @@ class MappingActions():
             return fm.map_to_file_structure(a_map,where,fields_to_tab,sort_by,ascending)
         return {}
 
-    def shallow_compare_maps(self,db_map_pair_1,db_map_pair_2):
+    def shallow_to_deep(self,db_map_pair,id_list:list=None):
+        """Convert Shallow map into a calculation Map can be done for specific ids
+
+        Args:
+            db_map_pair (tuple): database map pair
+            id_list (list): list of ids to select. Defaults to None 
+        """
+        fm=self.get_file_map(db_map_pair[0])
+        data_np=fm.db.get_data_from_table(db_map_pair[1],"*",f"md5={fm.db.quotes(MD5_SHALLOW)}")
+        data=[]
+        if id_list:
+            for a_row in data_np:
+                if a_row[0] in id_list:
+                    data.append(a_row)
+        else:
+            data=data_np
+        for iii,a_row in enumerate(data):
+            A_C.print_cycle(iii,len(data))
+            fm.db.edit_value_in_table(db_map_pair[1],a_row[0],'md5',MD5_CALC)
+
+    def shallow_compare_maps(self,db_map_pair_1:tuple,db_map_pair_2:tuple):
         """Compare two maps using tabulated data. Compares: 
             "dt_file_modified","size","filename","filepath"
             Assumes db_map_pair_1 is the oldest.
@@ -447,8 +467,8 @@ class MappingActions():
             (+_id): ids changed in db_map_pair_2
 
         Args:
-            db_map_pair_1 (_type_): database map pair to compare
-            db_map_pair_2 (_type_): database map pair to compare
+            db_map_pair_1 (tuple): database map pair to compare
+            db_map_pair_2 (tuple): database map pair to compare
 
         Returns:
             tuple(dict,str): differences dictionary, message
@@ -473,7 +493,7 @@ class MappingActions():
                 # text1=data_manage_1.get_tabulated_fields(None,header=False,index=False,justify='right').splitlines(keepends=False)
                 data_manage_1.df['filepath'] = data_manage_1.df['filepath'].apply(fix_separators)
                 data_manage_1.df['size'] = data_manage_1.df['size'].apply(int)#F_M.get_size_str_formatted)
-                text1=data_manage_1.get_tab_separated_fields(None,sort_by=['filepath','filename'],separator=',',header=False,index=False).splitlines(keepends=False)
+                text1=data_manage_1.get_tab_separated_fields(None,sort_by=['filepath','filename'],separator='|',header=False,index=False).splitlines(keepends=False)
             else:
                 return {} , f"No data in {db_map_pair_1}"
             table_list_2=fm_2.db.get_data_from_table(db_map_pair_2[1],what)
@@ -484,7 +504,7 @@ class MappingActions():
                 data_manage_2.df['filepath'] = data_manage_2.df['filepath'].apply(fix_separators)
                 data_manage_2.df['size'] = data_manage_2.df['size'].apply(int)#F_M.get_size_str_formatted)
                 # text2=data_manage_2.get_tabulated_fields(None,header=False,index=False,justify='right').splitlines(keepends=False)
-                text2=data_manage_2.get_tab_separated_fields(None,sort_by=['filepath','filename'],separator=',',header=False,index=False).splitlines(keepends=False)
+                text2=data_manage_2.get_tab_separated_fields(None,sort_by=['filepath','filename'],separator='|',header=False,index=False).splitlines(keepends=False)
             else:
                 return {} , f"No data in {db_map_pair_2}"
             diff = difflib.Differ()
@@ -505,8 +525,8 @@ class MappingActions():
             # get indexes
             for added in differences['+']:
                 added=added[2:]
-                addsep=added.split(',')
-                fp=fm_2.db.quotes('%'+addsep[3][1:-1]+'%')
+                addsep=added.split('|')
+                fp=fm_2.db.quotes('%'+addsep[len(addsep)-1][1:-1]+'%')
                 where=f"size = {addsep[1]} AND dt_file_modified = {fm_2.db.quotes(addsep[0])} AND filename = {fm_2.db.quotes(addsep[2])} AND filepath LIKE {fp}"
                 id_list_2=fm_2.db.get_data_from_table(db_map_pair_2[1],'*',where)
                 if len(id_list_2)>0:
@@ -514,8 +534,8 @@ class MappingActions():
                     differences.update({'diff_fs':differences['diff_fs']+[tuple(db_map_pair_2)+('+',)+id_list_2[0]]})
             for added in differences['-']:
                 added=added[2:]
-                addsep=added.split(',')
-                fp=fm_1.db.quotes('%'+addsep[3][1:-1]+'%')
+                addsep=added.split('|')
+                fp=fm_1.db.quotes('%'+addsep[len(addsep)-1][1:-1]+'%')
                 where=f"size = {addsep[1]} AND dt_file_modified = {fm_2.db.quotes(addsep[0])} AND filename = {fm_2.db.quotes(addsep[2])} AND filepath LIKE {fp}"
                 id_list_1=fm_1.db.get_data_from_table(db_map_pair_1[1],'*',where)
                 if len(id_list_1)>0:
@@ -743,7 +763,7 @@ class MappingActions():
                 fm.active_devices=new_active    
         return '[green]Devices Refreshed'
 
-    def clone_map(self,db_map_pair:tuple,selected_db:str):
+    def clone_map(self,db_map_pair:tuple,selected_db:str,return_pair:bool=False):
         """Clones a map in the database"""
         map_info=self.get_map_info(db_map_pair[0],db_map_pair[1])
         mappath=map_info[0][3]
@@ -784,6 +804,8 @@ class MappingActions():
                                         ])
                     if fm.db.insert_data_to_table(table_name,all_data):
                         newdb_map_pair=(selected_db,table_name)
+                        if return_pair:
+                            return newdb_map_pair
                         return f'Successfully cloned {db_map_pair} to {newdb_map_pair}'  
             return "Unable to Index Table!"    
         return f"Table exists {table_name}"
