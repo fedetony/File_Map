@@ -60,59 +60,127 @@ class BackupActions():
             fm=self.cma.get_file_map(db_map_pair[0])
             fm.db.create_connection()
             tablename=self.cma.format_new_table_name("%!",db_map_pair[1])
-            suc_msg=fm.map_a_path_to_db(tablename,end_path,True,shallow_map=shallow)
+            suc_msg=fm.map_a_path_to_db(tablename,end_path,True,shallow_map=shallow,press_to_continue=False)
             if fm.db.table_exists(tablename) and "Successfully" in suc_msg:
                 # [end_mount,end_path_nm]=F_M.split_filepath_and_mountpoint(end_path)
                 db_map_pair_1=(db_map_pair[0],tablename)
                 db_map_pair_2=db_map_pair
                 _,action_dict=self.identify_differences(db_map_pair_1,db_map_pair_2,where,where)
                 # (index=0, db_map_pair=1, (mappath,mount)=2, identification=3,'+/-'=4, data=5)
+                str_actions=self.show_actions(action_dict,keep_changed,keep_removed)    
                 
-                # rename old first
+                print('*'*33+'FILE ACTIONS'+'*'*33)
+                print('*'*33+'************'+'*'*33)
+                print(f"[yellow] Following actions will be performed:[/yellow]\n{str_actions}")
                 
-                for action_key, act_from_to_list in action_dict.items():
-                    
-                    # 'data changed', 'file renamed', 'file moved', 'added file', or 'removed file'
-                    for act_from_to in act_from_to_list:
-                        (from_file,to_file)=act_from_to
-                        if action_key in ['file renamed', 'file moved']:
-                            # Rename file
-                            print('move',from_file,' -> ',to_file)
-                            # if not F_M.move_file(from_file,to_file):
-                            #     print(f"Could not change {from_file}")
-                        if action_key == 'added file':
-                            # add file
-                            print('copy',from_file,' -> ',to_file)
-                            # if not F_M.copy_file(from_file,to_file):
-                            #     print(f"Could not copy {from_file}")
-                        
-                        if action_key == 'data changed':
-                            # Data changed
-                            if keep_changed:
-                                fn=F_M.extract_filename(to_file,True)
-                                to_file_mod=to_file.replace(fn,"_old_"+str(datetime.now().date())+fn)
-                                print('move',to_file,' -> ',to_file_mod)
-                                # if F_M.move_file(to_file,to_file_mod):
-                                #     print(f"Could not modify {to_file} to {to_file_mod}")
-                                print('copy',from_file,' -> ',to_file)
-                                # if not F_M.copy_file(from_file,to_file):
-                                #     print(f"Could not copy {from_file}")
-                            else:
-                                print('copy replace ',from_file,' -> ',to_file)
-                                # if not F_M.copy_file(from_file,to_file):
-                                #     print(f"Could not replace changed file {from_file}")    
-                        
-                        if action_key == 'removed file':
-                            # Rename file
-                            if not keep_removed:
-                                print('remove',' -> ',to_file)
-                                # if not F_M.delete_file(to_file):
-                                #     print(f"Could not replace changed file {to_file}")        
-                    
-                fm.delete_map(tablename) # FOR TESTING FAST        
+                if self.ask_confirmation(f"Do you want to {A_C.add_ansi('do actions','cyan')}?",False):
+                    if not self.do_actions(action_dict,keep_changed,keep_removed):
+                        suc_msg="Not all actions were performed!!" 
+                # if not self.ask_confirmation(f"Do you want {A_C.add_ansi('to keep',
+                # 'cyan')} the Backup Map {A_C.add_ansi(tablename,'yellow')}?",True):    
+                fm.delete_map(tablename,False)      
+                return suc_msg   
             else:
                 return suc_msg
         return ""
+    
+    def show_actions(self,action_dict:dict,keep_changed:bool,keep_removed:bool) ->str:
+        """Return string of actions to be performed
+
+        Args:
+            action_dict (dict): action dictionary with {'action':[(from,to)]} 
+            keep_changed (bool): when is a file changed, overwrite it or make a copy.
+            keep_removed (bool): if a file was removed, keep the old file.
+        Returns:
+            str: String with actions
+        """
+        str_p=''
+        iii=1
+        for action_key, act_from_to_list in action_dict.items():   
+            # 'data changed', 'file renamed', 'file moved', 'added file', or 'removed file'
+            for act_from_to in act_from_to_list:
+                (from_file,to_file)=act_from_to
+                if action_key in ['file renamed', 'file moved']:
+                    # Rename file
+                    str_p=str_p+f'{iii} Move/Rename {from_file} -> {to_file}'+'\n'
+                    iii += 1
+                if action_key == 'added file':
+                    # add file
+                    str_p=str_p+f'{iii} Copy {from_file} -> {to_file}'+'\n'
+                    iii += 1
+                if action_key == 'data changed':
+                    # Data changed
+                    if keep_changed:
+                        fn=F_M.extract_filename(to_file,True)
+                        to_file_mod=to_file.replace(fn,"_old_"+str(datetime.now().date())+fn)
+                        str_p=str_p+f'{iii} Rename {to_file} -> {to_file_mod}'+'\n'
+                        str_p=str_p+f'then copy {from_file} -> {to_file}'+'\n'
+                        iii += 1
+                    else:
+                        str_p=str_p+f'{iii} Copy replacing {from_file} -> {to_file}'+'\n'
+                        iii += 1
+                if action_key == 'removed file':
+                    # Rename file
+                    if not keep_removed:
+                        str_p=str_p+f'{iii} Permanently remove {from_file} -> {to_file}'+'\n'
+                        iii += 1
+                    else:
+                        str_p=str_p+f'{iii} Keeping {from_file} -> {to_file}'+'\n'
+                        iii += 1
+        return str_p
+                        
+    def do_actions(self,action_dict:dict,keep_changed:bool,keep_removed:bool):
+        """Actions to files
+
+        Args:
+            action_dict (dict): action dictionary with {'action':[(from,to)]} 
+            keep_changed (bool): when is a file changed, overwrite it or make a copy.
+            keep_removed (bool): if a file was removed, keep the old file.
+
+        Returns:
+            bool: all actions performed
+        """
+        did_actions=True
+        for action_key, act_from_to_list in action_dict.items():   
+            # 'data changed', 'file renamed', 'file moved', 'added file', or 'removed file'
+            for act_from_to in act_from_to_list:
+                (from_file,to_file)=act_from_to
+                if action_key in ['file renamed', 'file moved']:
+                    # Rename file
+                    if not F_M.move_file(from_file,to_file):
+                        print(f"Could not change {from_file}")
+                        did_actions=False
+                if action_key == 'added file':
+                    # add file            
+                    if not F_M.copy_file(from_file,to_file):
+                        print(f"Could not copy {from_file}")
+                        did_actions=False          
+                if action_key == 'data changed':
+                    # Data changed
+                    if keep_changed:
+                        fn=F_M.extract_filename(to_file,True)
+                        to_file_mod=to_file.replace(fn,"_old_"+str(datetime.now().date())+fn)
+                        # print('move',to_file,' -> ',to_file_mod)
+                        if F_M.move_file(to_file,to_file_mod):
+                            print(f"Could not modify {to_file} to {to_file_mod}")
+                            did_actions=False
+                        # print('copy',from_file,' -> ',to_file)
+                        if not F_M.copy_file(from_file,to_file):
+                            print(f"Could not copy {from_file}")
+                            did_actions=False
+                    else:
+                        # print('copy replace ',from_file,' -> ',to_file)
+                        if not F_M.copy_file(from_file,to_file):
+                            print(f"Could not replace changed file {from_file}")  
+                            did_actions=False  
+                if action_key == 'removed file':
+                    # Rename file
+                    if not keep_removed:
+                        # print('remove',' -> ',to_file)
+                        if not F_M.delete_file(to_file):
+                            print(f"Could not replace changed file {to_file}") 
+                            did_actions=False
+        return did_actions
 
     def identify_differences(self,db_map_pair_1,db_map_pair_2,where_1=None,where_2=None):
         """Compares two maps and gets the changes identified as:
@@ -211,8 +279,8 @@ class BackupActions():
         print(f"Identified {index} changes")            
         
         # Remove temp maps
-        fm2.delete_map(name_2)
-        fm1.delete_map(name_1) 
+        fm2.delete_map(name_2,False)
+        fm1.delete_map(name_1,False) 
         return identified, action_dict
 
 
@@ -238,8 +306,8 @@ class BackupActions():
         mappath_end,mount_end=self._remove_base_path_map_(name_2,db_map_pair_2,where_2)
         differences, msg = self.cma.shallow_compare_maps((db_map_pair_1[0],name_1),(db_map_pair_2[0],name_2))
         if remove_temp:
-            fm1.delete_map(name_1)
-            fm2.delete_map(name_2)
+            fm1.delete_map(name_1,False)
+            fm2.delete_map(name_2,False)
             diff_info = tuple()
         else:
             diff_info = ((name_1,mappath,mount),(name_2,mappath_end,mount_end))

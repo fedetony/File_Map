@@ -205,12 +205,13 @@ class SQLiteDatabase:
         if self.conn is not None:
             self.conn.close()
 
-    def delete_table_from_db(self, table_name):
+    def delete_table_from_db(self, table_name,log_print=True):
         """Delete a table from the database"""
         try:
             c = self.conn.cursor()
             c.execute("DROP TABLE IF EXISTS " + self.quotes(table_name))
-            print(f"Table {table_name} deleted")
+            if log_print:
+                print(f"Table {table_name} deleted")
             self.commit()
         except sqlite3.Error as eee:
             print(eee)

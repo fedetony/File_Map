@@ -507,6 +507,7 @@ class FileMapper:
         log_print=True,
         progress_bar=None,
         shallow_map=False,
+        press_to_continue=True,
     ):
         """Maps a path in a device into a table in the database.
 
@@ -571,8 +572,9 @@ class FileMapper:
                 print("+" * 33)
                 n_r = db.get_number_or_rows_in_table(table_name)
                 print(f'[green]Successfully Mapped {n_r} files in {str(delta).split(".", maxsplit=1)[0]}')
-                print("+" * 33, "\nPress any Key to continue\n", "+" * 33)
-                getch()
+                if press_to_continue:
+                    print("+" * 33, "\nPress any Key to continue\n", "+" * 33)
+                    getch()
                 return f'[green]Successfully Mapped {n_r} files in {str(delta).split(".", maxsplit=1)[0]}'
         except KeyboardInterrupt:
             print("[magenta]User cancel")
@@ -581,8 +583,9 @@ class FileMapper:
         except Exception as eee:  # pylint: disable=broad-exception-caught
             print(f"[red]Error Mapping: {eee}")
             print(type(eee), line_data_tup)
-            print("@" * 100, "\nPress any Key to continue\n", "@" * 100)
-            getch()
+            if press_to_continue:
+                print("@" * 100, "\nPress any Key to continue\n", "@" * 100)
+                getch()
         return f"[red]Error Mapping: {eee}"
 
     @staticmethod
@@ -910,12 +913,12 @@ class FileMapper:
                 tablename_list.append(getattr(dbr, attr))
         return tablename_list
 
-    def delete_map(self, table_name):
+    def delete_map(self, table_name,log_print=True):
         """Removes a map from index and its referenced table from db.
 
         Args:
-            db (SQLiteDatabase): database
             table_name (str): table
+            log_print (bool): print information. Default True
         """
         try:
             if self.db.table_exists(self.mapper_reference_table):
@@ -926,15 +929,17 @@ class FileMapper:
                 if len(db_result.dbr) > 0:
                     # 'id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype'
                     an_id = getattr(db_result.dbr[0], "id")
-                    print(f"Here id {an_id}")
+                    # print(f"Here id {an_id}")
                     self.db.delete_data_from_table(self.mapper_reference_table, f"id={an_id}")
-                    print(f"{table_name} reference was deleted!!")
+                    if log_print:
+                        print(f"{table_name} reference was deleted!!")
                 else:
                     print(f"{table_name} Not found in reference!")
             if self.db.table_exists(table_name):
                 self.db.delete_data_from_table(table_name, None)  # remove all data
-                self.db.delete_table_from_db(table_name)
-                print(f"{table_name} was deleted!!")
+                self.db.delete_table_from_db(table_name,log_print)
+                if log_print:
+                    print(f"{table_name} was deleted!!")
 
         except Exception as eee:
             print(f"{table_name} was not deleted: {eee}")
@@ -951,7 +956,8 @@ class FileMapper:
         """
         serial_list = []
         for dev in devices:
-            serial_list.append(dev[1])
+            if dev[1]:
+                serial_list.append(dev[1])
         close = difflib.get_close_matches(serial, serial_list, n=3, cutoff=0.9)
         if len(close) > 0:
             return close[0]
