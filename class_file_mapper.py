@@ -33,7 +33,7 @@ MD5_CALC = "***Calculate***"
 MD5_SHALLOW = "***Shallow***"
 DATA_ADVANCE = 50  # gather 50 records before writting to db
 SINGLE_MULTIPLE_SEARCH = 15  # use single search or generalized search limit
-MAP_TYPES_LIST=["Device Map","Selection Map","Backup Map"]
+MAP_TYPES_LIST=["Device Map","Selection Map","Backup Map","Remove","Keep"]
 
 class FileMapper:
     """Class for Mapping functions in a specific database"""
@@ -460,13 +460,32 @@ class FileMapper:
             return False
         return None
 
+    def map_an_id_selection(self,selection_name:str, origin_map:str, id_list:list, map_type:str=None):
+        """Makes a selection map from id list
+
+        Args:
+            selection_name (str): map name
+            origin_map (str): map of the same db where the selection is taken from
+            id_list (list): list of ids in origin_map
+        """
+
+        if self.db.table_exists(origin_map) and id_list:
+            cols=self.db.get_column_list_of_table(origin_map)
+            datasel=str(cols[1:]).replace("[",'').replace("]",'').replace("'",'')
+            map_data=[]
+            for an_id in id_list:
+                data_list=self.db.get_data_from_table(origin_map,datasel,f"id={an_id}")
+                if len(data_list)>0:
+                    map_data.append(data_list[0])
+            self.map_a_selection(selection_name, origin_map, map_data, map_type)
+
     def map_a_selection(self,selection_name:str, origin_map:str, map_data:list, map_type:str=None):
         """Makes a selection map
 
         Args:
             selection_name (str): map name
             origin_map (str): map of the same db where the selection is taken from
-            map_data (list): _description_
+            map_data (list): data to be inserted in map without the id
         """
 
         if self.db.table_exists(origin_map) and map_data:

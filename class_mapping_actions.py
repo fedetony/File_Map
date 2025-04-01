@@ -374,10 +374,35 @@ class MappingActions():
     #             del fs
     #     return fs_list
 
+    def get_size_of_file_selection(self,db_map_pair,id_list:list=None):
+        """Calculates the total size in bytes of a map, or selected ids on the map
 
+        Args:
+            db_map_pair (tuple): database map pair
+            id_list (list, optional): list of ids to use. Defaults to None.
+
+        Returns:
+            int: size in bytes
+        """
+        fm=self.get_file_map(db_map_pair[0])
+        id_size_list=fm.db.get_data_from_table(db_map_pair[1],"id, size",None)
+        use_all=True
+        if isinstance(id_list,list):
+            if len(id_list)>0:
+                use_all=False
+        total_size=0
+        if use_all:
+            for (_,a_size) in id_size_list:
+                if a_size>=0:
+                    total_size=total_size+a_size
+        else:
+            for (an_id,a_size) in id_size_list:
+                if a_size>=0 and an_id in id_list:
+                    total_size=total_size+a_size
+        return total_size
+            
     def remove_file_from_mount_and_map(self,dupli_dict,db_map_pair):   
-        print("$"*50,'\nRemoving->',dupli_dict,' in ',db_map_pair ) 
-        
+        """Removes a file and its map reference"""
         # check mount exist
         fm=self.get_file_map(db_map_pair[0])
         mount, mount_active, mappath_exists=fm.check_if_map_device_active(fm.db,db_map_pair[1],False)
@@ -385,30 +410,23 @@ class MappingActions():
         # get file name and path 
         if mount_active and mappath_exists:
             filepath=os.path.join(mount,dupli_dict['filepath'],dupli_dict['filename'])
-            print(filepath)
+            print(f'Removing File: {filepath} and data in {db_map_pair}')
         else:
-            return 'Cant find {}'
-        # # try to remove file
-        # was_removed=False
-        # if os.path.exists(filepath):
-        #     was_removed=F_M.delete_file(filepath)
-        # #if was removed -> remove from db,map
-        # if was_removed:
-        #     fm.db.delete_data_from_table(db_map_pair[1],f'id={dupli_dict['id']}')
-        # Find in all maps with the file in the same db
-        matching_list=[]
-        for (a_db,a_map) in self.get_all_maps():
-            #if a_map !=db_map_pair[1]:
-                where=f"filepath='{dupli_dict['filepath']}' AND filename='{dupli_dict['filename']}' AND md5='{dupli_dict['md5']}'"
-                matches=fm.db.get_data_from_table(a_map,"*",where)
-                if len(matches)>0:
-                    matching_list.append((a_db,a_map)+matches[0])
-                    # print('match found',a_map,matches)
-        print('match found',matching_list)
+            return f'Mount point {mount} is not available'
+        # try to remove file
+        was_removed=False
+        if os.path.exists(filepath):
+            was_removed=F_M.delete_file(filepath)
+        #if was removed -> remove from db,map
+        if was_removed:
+            fm.db.delete_data_from_table(db_map_pair[1],f"id={dupli_dict['id']}")
+        if not was_removed:
+            return f'[red] ({dupli_dict["id"]}) {filepath} was not Removed!!'
         return ''
 
     @staticmethod
     def get_dict_from_id_in_duplicate(an_id:int,duplicte_list):
+        """Gets dictionary for an id value"""
         for dup_tup in duplicte_list:
             for dupli_dict in dup_tup:
                 if an_id == dupli_dict['id']:

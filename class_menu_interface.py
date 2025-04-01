@@ -800,26 +800,84 @@ class TerminalMenuInterface():
         if answers['map_actions'] == 'Back':
             return ''
         elif answers['map_actions'] == 'Browse/Select Files': 
-            if selection_type=='repeated':
-                selected_items=self.menu_make_selection(d_list,'exlast') #,'none')
+            amount_per_show=1000
+            all_selected=[]
+            if len(d_list)<amount_per_show:
+                if selection_type=='repeated':
+                    selected_items=self.menu_make_selection(d_list,'exlast') #,'none')
+                else:
+                    selected_items=self.menu_make_selection(d_list,'none')
+                if isinstance(selected_items,list):    
+                    all_selected=selected_items
+                else:
+                    return ''
             else:
-                selected_items=self.menu_make_selection(d_list,'none')
-            print(selected_items)
+                lll=int(len(d_list)/amount_per_show) 
+                # rrr=len(d_list) % amount_per_show # remainder
+                for part in range(lll+1):
+                    m_list=self.list_select(d_list,part*amount_per_show,(part+1)*amount_per_show)
+                    if selection_type=='repeated':
+                        selected_items=self.menu_make_selection(m_list,'exlast') #,'none')
+                    else:
+                        selected_items=self.menu_make_selection(m_list,'none')
+                    
+                    if isinstance(selected_items,list):
+                        if len(selected_items)==0:
+                            if not self.ask_confirmation("Continue Selection?",True):
+                                return 'User Cancel'
+                        all_selected.append(selected_items)
+                    else:
+                        return ''
+            
+            all_id_list=self._get_id_list_from_rem_keep_dict(selected_items,d_list,a_key='all')
+            inmap_size=self.cma.get_size_of_file_selection(db_map_pair,all_id_list)
+            print(f"Selected {len(all_selected)} items of {len(all_id_list)}")
+            rem_id_list=self._get_id_list_from_rem_keep_dict(selected_items,d_list,a_key='remove')
+            total_size=self.cma.get_size_of_file_selection(db_map_pair,rem_id_list)
+            print(f"Selected for removal {F_M.get_size_str_formatted(total_size,11,False)} from {F_M.get_size_str_formatted(inmap_size,11,False)}")
             print("Press any key to continue")
             A_C.wait_key_press()
-            # here ask to save map if selected items
-            # save to ma with type selection
+            return self.menu_duplicate_removal_confirmation(all_selected,d_list,db_map_pair)
 
-        # elif answers['map_actions'] == 'Remove Duplicates': 
-        #     selected_items=menu_make_selection(duplicte_list)
-            # if isinstance(selected_items,list):
-            #     if len(selected_items)>0:
-            #         return menu_duplicate_removal_confirmation(selected_items,duplicte_list,db_map_pair)
-            #     else:
-            #         return '[magenta]No duplicates Selected'
-            # else:
-            #     return ''
+    def _get_id_list_from_rem_keep_dict(self,selected_items,d_list,a_key='remove'):
+        """Gets an id list of items in rem,keep dictionary
 
+        Args:
+            selected_items (_type_): selected items
+            d_list (_type_): duplicate list
+            a_key (str, optional): 'remove', 'keep' or 'all'. Defaults to 'remove'.
+
+        Returns:
+            list: id list of items with a_key
+        """
+        rem_keep_dict=self.cma.get_remove_keep_dict(selected_items,d_list)
+        id_list=[]
+        for _,rem_keep in rem_keep_dict.items():
+            id_list=id_list+rem_keep[a_key]
+        return id_list
+
+
+    @staticmethod
+    def list_select(a_list:list,from_item:int=None,to_item:int=None):
+        if not from_item and not to_item:
+            return a_list
+        if from_item and not to_item:
+            return a_list[from_item:]
+        if to_item >= len(a_list):
+            to_item=len(a_list)
+        if to_item and (not from_item or from_item==0):
+            return a_list[:to_item]
+        if from_item>=len(a_list):
+            return []
+        if from_item<0 or to_item<0:
+            return a_list
+        if from_item==to_item and from_item<len(a_list):
+            return [a_list[from_item]]
+        if from_item<len(a_list) and to_item>from_item:
+            return a_list[from_item:to_item]
+        return a_list
+
+    
     def menu_duplicate_removal_confirmation(self,selected_items,duplicte_list,db_map_pair):
         """Confirms removal of selected files
 
@@ -834,9 +892,8 @@ class TerminalMenuInterface():
         rem_keep_dict=self.cma.get_remove_keep_dict(selected_items,duplicte_list)
         while len(rem_keep_dict)>0:
             choices_hints = {
-            "Remove 1 by 1": "No going back",
-            "Skip": "Skip removal",
-            "Remove All":"Prompt only when no files to keep!",
+            "Remove Selected": "No going back",
+            "Selection map Remove/Keep": "Makes a selection map of removed and keep",
             "Cancel": "Cancel"}
             ch=list(choices_hints.keys())
             menu = [inquirer.List(
@@ -849,15 +906,21 @@ class TerminalMenuInterface():
             answers = inquirer.prompt(menu)
             if answers['remove_type'] == 'Cancel':
                 return '[yellow]Removal Cancelled'
-            elif answers['remove_type'] == 'Remove 1 by 1': 
-                selected_items=self.menu_make_selection(duplicte_list,'none')
-                print('Tree') 
-            elif answers['remove_type'] == 'Remove All': 
+            elif answers['remove_type'] == 'Selection map Remove/Keep': 
+                fm=self.cma.get_file_map(db_map_pair[0])
+                name=self.cma.format_new_table_name("%","")
+                rem_id_list=self._get_id_list_from_rem_keep_dict(selected_items,duplicte_list,'remove')
+                if len (rem_id_list)>0:
+                    fm.map_an_id_selection('remove_'+name,db_map_pair[1],rem_id_list,MAP_TYPES_LIST[3])
+                keep_id_list=self._get_id_list_from_rem_keep_dict(selected_items,duplicte_list,'keep')
+                if len (keep_id_list)>0:
+                    fm.map_an_id_selection('keep_'+name,db_map_pair[1],keep_id_list,MAP_TYPES_LIST[4])
+            elif answers['remove_type'] == 'Remove Selected': 
                 for md5,rem_keep in rem_keep_dict.items():
                     rem=True
                     if len(rem_keep['keep'])==0:
                         print('Marked for removal:...')
-                        rem= self.ask_confirmation(f'You aint keeping a copy of any of {len(rem_keep["all"])} files?')
+                        rem= self.ask_confirmation(f'You aint keeping a copy of any of {len(rem_keep["all"])} files, confirm deletion?')
                     if rem:
                         for an_id in rem_keep['remove']:
                             dupli_dict=self.cma.get_dict_from_id_in_duplicate(an_id,duplicte_list)
@@ -885,7 +948,6 @@ class TerminalMenuInterface():
                     default_list.append(f"{dupli_dict['id']}")  
                 elif iii!=0 and mark=='exfirst': # except first one
                     default_list.append(f"{dupli_dict['id']}")  
-
         if len(choice_hints)>0:      
             menu = [
             inquirer.Checkbox(
