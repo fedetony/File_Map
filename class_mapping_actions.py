@@ -653,6 +653,34 @@ class MappingActions():
         fm=self.get_file_map(database)
         return fm.find_duplicates(a_map)
 
+    def browse_file_directories(self,db_map_pair,browse_type='file',where=None):
+        """browse files or directories
+
+        Args:
+            db_map_pair (tuple): database map pair
+            type (srt): Type of browsing 'file', 'dir', 'file_multiple', 'dir_multiple'. Default 'file'
+
+        Returns:
+            str,Treenode,list[TreeNode]: msg or treenode or list of selected treeNodes.
+        """
+        # print('Tree') #db_map_pair)
+        fs=None
+        fs=self.map_to_file_structure(db_map_pair[0],db_map_pair[1],where=where,fields_to_tab=None,sort_by=None,ascending=True)
+        if len(fs)>0:
+            f_e=FileExplorer(None,None,fs)
+            if browse_type=='dir':
+                return f_e.browse_folders(my_style_dir_expand_size,f"Browsing directories of {A_C.add_ansi(db_map_pair[1],'cyan')}")
+            elif browse_type=='file':
+                return f_e.browse_files(my_style_expand_size,True,f"Browsing tree of {A_C.add_ansi(db_map_pair[1],'cyan')}")
+            elif browse_type=='dir_multiple':
+                return f_e.select_multiple_folders(my_style_dir_expand_size,None,f"Browse and select directories from {A_C.add_ansi(db_map_pair[1],'cyan')}")
+            elif browse_type=='file_multiple':
+                return f_e.select_multiple_files(my_style_file_expand_size,None,f"Browse and select files from {A_C.add_ansi(db_map_pair[1],'cyan')}",False)
+            
+        else: 
+            return 'No items in Map'
+        return None
+
     def find_repeated_in_database(self,database,a_map):
         """Returs a list of tuple with the dictionaries of file information of each repeated file.
         Repeated are files with the same md5 sum, in any folder within the map. 

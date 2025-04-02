@@ -701,10 +701,13 @@ class TerminalMenuInterface():
             return ''
         
         choices_hints = {
-        "Print Tree": "Tree",
+        "Browse Tree": "Allows browsing the map's tree",
+        "Browse Directories": "Allows browsing the map's Folders",
         "Find Duplicates": "Duplicates are files with the same md5 sum, in the same folder but with different names.",
         "Find Repeated": "Repeated are files with the same md5 sum, in any folder within the map.",
         "Search Map": "Search for files in the selected Map",
+        "Map Directory Selection": "Make a selection map of selected folders.",
+        "Map Files Selection": "Make a selection map of selected Files.",
         "Back": "Go back"}
         ch=list(choices_hints.keys())
         menu = [inquirer.List(
@@ -719,15 +722,10 @@ class TerminalMenuInterface():
             answers = inquirer.prompt(menu)
             if answers['map_process'] == 'Back':
                 return ''
-            elif answers['map_process'] == 'Print Tree': 
-                print('Tree') #db_map_pair)
-                fs=None
-                fs=self.cma.map_to_file_structure(db_map_pair[0],db_map_pair[1],where=None,fields_to_tab=None,sort_by=None,ascending=True)
-                if len(fs)>0:
-                    f_e=FileExplorer(None,None,fs)
-                    _=f_e.browse_files(my_style_expand_size)
-                else: 
-                    return 'No items in Map'
+            elif answers['map_process'] == 'Browse Tree': 
+                msg=self.cma.browse_file_directories(db_map_pair,'file')
+                if isinstance(msg,str):
+                    return msg
             elif answers['map_process'] == 'Find Duplicates': 
                 duplicte_list=self.cma.find_duplicates_in_database(db_map_pair[0],db_map_pair[1])
                 self.menu_select_from_list_map(duplicte_list,db_map_pair)
@@ -737,6 +735,73 @@ class TerminalMenuInterface():
             elif answers['map_process'] == 'Search Map': 
                 fs_list=self.menu_search_in_maps([db_map_pair],True) #set to false to get the file structure list
                 # menu_select_from_list_map(repeat_list,db_map_pair)
+            elif answers['map_process'] == 'Browse Directories': 
+                msg=self.cma.browse_file_directories(db_map_pair,'dir')
+                if isinstance(msg,str):
+                    return msg
+            elif answers['map_process'] == 'Map Directory Selection': 
+                msg=self.cma.browse_file_directories(db_map_pair,'dir_multiple')
+                if isinstance(msg,str):
+                    return msg
+                elif isinstance(msg,list):
+                    if len(msg)>0:
+                        selection_name=str(datetime.now()).replace(" ","_").replace("-","").replace(":","").replace(".","")
+                        selection_name=selection_name+"_selection"
+            elif answers['map_process'] == 'Map Files Selection': 
+                msg=self.cma.browse_file_directories(db_map_pair,'file_multiple')
+                if isinstance(msg,str):
+                    return msg
+                elif isinstance(msg,list):
+                    pass
+
+    def menu_process_selection_map(self):
+        """Menu for processing a selection map"""
+        os.system('cls' if os.name == 'nt' else 'clear')
+        print(MENU_HEADER)
+        print("Process Selection Map:")
+        print("----------")
+        db_map_pair=self.menu_select_database_map()
+        if not db_map_pair:
+            return ''
+        
+        choices_hints = {
+        "Browse Tree": "Allows browsing the map's tree",
+        "Browse Directories": "Allows browsing the map's Folders",
+        "Search Map": "Search for files in the selected Map",
+        "Add Files to Selection": "You can add files from origin map.",
+        "Remove files in Selection": "You can remove files in Selection map.",
+        "Selection Map Action": "Do Actions to the files in selection maps",
+        "Back": "Go back"}
+        ch=list(choices_hints.keys())
+        menu = [inquirer.List(
+            'map_process',
+            message="Please select",
+            choices=ch,
+            carousel=False,
+            hints=choices_hints,
+            )]
+        while True:
+            print("----------")
+            answers = inquirer.prompt(menu)
+            if answers['map_process'] == 'Back':
+                return ''
+            elif answers['map_process'] == 'Browse Tree': 
+                msg=self.cma.browse_file_directories(db_map_pair,'file')
+                if isinstance(msg,str):
+                    return msg
+            elif answers['map_process'] == 'Find Duplicates': 
+                duplicte_list=self.cma.find_duplicates_in_database(db_map_pair[0],db_map_pair[1])
+                self.menu_select_from_list_map(duplicte_list,db_map_pair)
+            elif answers['map_process'] == 'Find Repeated': 
+                repeat_list=self.cma.find_repeated_in_database(db_map_pair[0],db_map_pair[1])
+                self.menu_select_from_list_map(repeat_list,db_map_pair)
+            elif answers['map_process'] == 'Search Map': 
+                fs_list=self.menu_search_in_maps([db_map_pair],True) #set to false to get the file structure list
+                # menu_select_from_list_map(repeat_list,db_map_pair)
+            elif answers['map_process'] == 'Browse Browse Directories': 
+                msg=self.cma.browse_file_directories(db_map_pair,'dir')
+                if isinstance(msg,str):
+                    return msg
 
     def menu_search_in_maps(self,selected_db_map_pair_list:list=None,explore=True):
         """Search in Maps"""
@@ -764,7 +829,7 @@ class TerminalMenuInterface():
                 if len(fs_list)==0:
                     fs_list=[(f'Nothing Found for {ans_txt}',0)]
                 # selected_db_map_pair, selected_id, data=self.cma.explore_one_file_search(search,fs_list,db_map_list)    
-                selected_db_map_pair, selected_id, data=self.cma.explore_multiple_file_search(search,fs_list,db_map_list)
+                selected_db_map_pair, _, data=self.cma.explore_multiple_file_search(search,fs_list,db_map_list)
                 selection_name=str(datetime.now()).replace(" ","_").replace("-","").replace(":","").replace(".","")
                 selection_name=selection_name+"_selection"
                 selections=self.cma.make_selection_maps(selection_name,selected_db_map_pair,data)

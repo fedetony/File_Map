@@ -32,8 +32,11 @@ class _Getch:
 
     def __init__(self):
         try:
-            self.impl = _GetchWindows()
-        except ImportError:
+            if os.name == 'nt':
+                self.impl = _GetchWindows()
+            else:
+                self.impl = _GetchUnix()
+        except (ImportError,ModuleNotFoundError):
             self.impl = _GetchUnix()
 
     def __call__(self):
