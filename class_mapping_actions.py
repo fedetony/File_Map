@@ -665,11 +665,14 @@ class MappingActions():
             type (srt): Type of browsing 'file', 'dir', 'file_multiple', 'dir_multiple'. Default 'file'
 
         Returns:
-            str,Treenode,list[TreeNode]: msg or treenode or list of selected treeNodes.
+            str,Treenode,list[TreeNode],tuple: msg (str) 
+                                                or treenode
+                                                or list of selected treeNodes.
+                                                or 
         """
         # print('Tree') #db_map_pair)
         fs=None
-        fs=self.map_to_file_structure(db_map_pair[0],db_map_pair[1],where=where,fields_to_tab=None,sort_by=None,ascending=True)
+        fs=self.map_to_file_structure(db_map_pair[0],db_map_pair[1],where=where,fields_to_tab=['id'],sort_by=None,ascending=True)
         if len(fs)>0:
             f_e=FileExplorer(None,None,fs)
             if browse_type=='dir':
@@ -677,9 +680,15 @@ class MappingActions():
             elif browse_type=='file':
                 return f_e.browse_files(my_style_expand_size,True,f"Browsing tree of {A_C.add_ansi(db_map_pair[1],'cyan')}")
             elif browse_type=='dir_multiple':
-                return f_e.select_multiple_folders(my_style_dir_expand_size,None,f"Browse and select directories from {A_C.add_ansi(db_map_pair[1],'cyan')}")
+                node_list=f_e.select_multiple_folders(my_style_dir_expand_size,None,f"Browse and select directories from {A_C.add_ansi(db_map_pair[1],'cyan')}")
+                trace_list=[]
+                for node in node_list:
+                    trace=f_e.t_v.trace_path(node,[0],True)
+                    trace_list.append(os.sep.join(trace))
+                return node_list,trace_list
             elif browse_type=='file_multiple':
-                return f_e.select_multiple_files(my_style_file_expand_size,None,f"Browse and select files from {A_C.add_ansi(db_map_pair[1],'cyan')}",False)
+                return self.explore_multiple_file_search(f"Browse and select files from {A_C.add_ansi(db_map_pair[1],'cyan')}",[fs],[db_map_pair])
+                # return f_e.select_multiple_files(my_style_file_expand_size,None,f"Browse and select files from {A_C.add_ansi(db_map_pair[1],'cyan')}",False)
             
         else: 
             return 'No items in Map'
@@ -778,7 +787,7 @@ class MappingActions():
         selected_id_list=[]
         data=[]
         f_e=FileExplorer(None,None,{search:fs_list})
-        selected_node_list=f_e.select_multiple_files(my_style_file_expand_size,None,prompt="Browse and select a File",allow_dir_selection=False)  
+        selected_node_list=f_e.select_multiple_files(my_style_file_expand_size,None,prompt="Browse and select Files",allow_dir_selection=False)  
         for selected_node in  selected_node_list:
             if selected_node.level not in [0,1]: # search, db_map
                 #  get the db_map_pair and id of selection.

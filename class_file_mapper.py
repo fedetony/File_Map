@@ -370,9 +370,11 @@ class FileMapper:
         df = d_m1.get_selected_df(fields_to_tab=field_list, sort_by=sort_by, ascending=ascending)
         map_list = []
         fi_ma = FileManipulate()
+        df_length=df["filename"].size
         for iii, (filepath, filename, size) in enumerate(zip(df["filepath"], df["filename"], df["size"])):
             # print(f"{filepath} - {filename}, Size: {size}")
             file_tuple = (filename, size)
+            A_C.print_cycle(iii,df_length)
             # Add more info to the tuple
             for field in fields2tab:
                 file_tuple = file_tuple + (df[field][iii],)

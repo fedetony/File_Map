@@ -160,6 +160,35 @@ class TreeViewer:
                 if child.i_am=='dir':
                     return True
         return False
+    
+    def trace_path(self,node:TreeNode,level_except:list=None,reverse:bool=True)->list[str]:
+        """generate trace path list from blodline
+
+        Args:
+            node (TreeNode): node to trace back
+            level_except (list, optional): exception levels. Defaults to None.
+            reverse (bool, optional): False node_name ,node_parent_name ... main_node_name. 
+                                     True reversed order. Defaults to True.
+
+        Returns:
+            list[str]: list of names of nodes in bloodline
+        """
+        bl=node.get_bloodline()
+        trace=[]
+        if not level_except:
+            level_except=[]
+        for node_id in bl:
+            bl_node_list= self.get_nodes_by_attribute('id',node_id)
+            if len(bl_node_list)>0:
+                bl_node=bl_node_list[0]
+                if bl_node.level not in level_except:
+                    trace.append(bl_node.name)
+        if reverse:
+            r_tr=[]
+            for tr in trace:
+                r_tr=[tr]+r_tr
+            trace=r_tr
+        return trace
 
     def _get_nodes(self,fs)->TreeNode:
         """Recursive Node formation from file structure

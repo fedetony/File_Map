@@ -743,17 +743,38 @@ class TerminalMenuInterface():
                 msg=self.cma.browse_file_directories(db_map_pair,'dir_multiple')
                 if isinstance(msg,str):
                     return msg
-                elif isinstance(msg,list):
-                    if len(msg)>0:
+                elif isinstance(msg,tuple):
+                    node_list,trace_list=msg
+                    if len(node_list)>0:
                         selection_name=str(datetime.now()).replace(" ","_").replace("-","").replace(":","").replace(".","")
                         selection_name=selection_name+"_selection"
+                        fm=self.cma.get_file_map(db_map_pair[0])
+                        where=''
+                        for iii,trace in enumerate(trace_list):
+                            if iii==0:
+                                where=f'filepath LIKE "%{trace}%"'
+                            else:
+                                where=where+f' OR filepath LIKE "%{trace}%"'
+                        cols=fm.db.get_column_list_of_table(db_map_pair[1])
+                        datasel=str(cols[1:]).replace("[",'').replace("]",'').replace("'",'')
+                        selected_data=fm.db.get_data_from_table(db_map_pair[1],datasel,where)
+                        if len(selected_data)>0:
+                            fm.map_a_selection(selection_name,db_map_pair[1],selected_data,MAP_TYPES_LIST[1])
+                            return f'[green] Following selection maps built:{selection_name}'
+                        
             elif answers['map_process'] == 'Map Files Selection': 
                 msg=self.cma.browse_file_directories(db_map_pair,'file_multiple')
                 if isinstance(msg,str):
                     return msg
-                elif isinstance(msg,list):
-                    pass
-
+                elif isinstance(msg,tuple):
+                    selected_db_map_pair, _, data=msg
+                    selection_name=str(datetime.now()).replace(" ","_").replace("-","").replace(":","").replace(".","")
+                    selection_name=selection_name+"_selection"
+                    selections=self.cma.make_selection_maps(selection_name,selected_db_map_pair,data)
+                    if selections:
+                        return f'[green] Following selection maps built:{selections}'
+                    
+                        
     def menu_process_selection_map(self):
         """Menu for processing a selection map"""
         os.system('cls' if os.name == 'nt' else 'clear')
