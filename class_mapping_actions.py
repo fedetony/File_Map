@@ -629,9 +629,13 @@ class MappingActions():
                 all_ids.append(dupli_dict['id'])
             the_md5=dup_tup[0]['md5']
             for s_item in selected_items:
-                if int(s_item) in all_ids: 
+                if isinstance(s_item,str): 
                     if int(s_item) in all_ids:
                         remove.append(int(s_item))
+                if isinstance(s_item,list): 
+                    for an_sitem in s_item:
+                        if int(an_sitem) in all_ids:
+                            remove.append(int(an_sitem))
             for kkk in all_ids:
                 if kkk not in remove:
                     keep.append(kkk) 
