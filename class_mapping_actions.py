@@ -590,6 +590,20 @@ class MappingActions():
         # 'dt_file_created'=7	'dt_file_accessed'=8	'dt_file_modified'=9
         # Map info
         # id=0	'dt_map_created'=1	'dt_map_modified'=2	'mappath'=3	'tablename'=4	'mount'=5	'serial'=6	'mapname'=7	'maptype'=8
+        return self.shallow_compare_two_fs(fs_1,fs_2)
+    
+    def shallow_compare_two_fs(self,fs_1,fs_2):
+        """Compare two file structures, just compares formatted size path and filename.
+            Not very precise 
+
+        Args:
+            db_map_pair_1 (_type_): database map pair to compare
+            db_map_pair_2 (_type_): database map pair to compare
+
+        Returns:
+            tuple(dict,str): differences dictionary, message
+            differences={'+':[],'-':[]}
+        """
         f_e_1=FileExplorer(None,None,fs_1)
         f_e_2=FileExplorer(None,None,fs_2)
         text1=f_e_1.get_tree_view_string(None,my_style_size).splitlines(keepends=False)

@@ -33,58 +33,176 @@ class BackupActions():
         """File information on item"""
         return (F_M.extract_filename(src_item),F_M.get_file_size(src_item),F_M.get_accessed_date(src_item),F_M.get_modified_date(src_item),F_M.get_created_date(src_item))
         
-    def map_to_backup(self,db_map_pair,end_path,shallow=True,where=None,keep_changed=True,keep_removed=True):
+    def map_to_backup(self,db_map_pair,end_path,shallow=True,where=None,keep_changed=None,keep_removed=None):
         """ If end_path exists and has information then Makes actual map of end path.
             Compares with Map, Additions are added, Substractions are renamed.
         """
+        scr_is_active,scr_mount = self.verify_map_device_active(db_map_pair)
+        if not scr_is_active or not scr_mount:
+            return "[red] Source Device not available!"
+        path_has_info, _ = self.verify_path_has_information(end_path)
+
+        if not path_has_info:
+            map_info=self.cma.get_map_info(db_map_pair[0],db_map_pair[1])
+            # id=0	'dt_map_created'=1	'dt_map_modified'=2	'mappath'=3	'tablename'=4	'mount'=5	'serial'=6	'mapname'=7	'maptype'=8
+            scr_folder=os.path.join(scr_mount,map_info[0][3])
+            print(f"Copying information from {scr_folder} to {end_path}")
+            was_copied=F_M.copy_folder(scr_folder,end_path,True)
+            if was_copied and self.ask_confirmation("Do you want to map the new Backup?",True):
+                tablename=self.cma.format_new_table_name("%!",db_map_pair[1])
+                fm=self.cma.get_file_map(db_map_pair[0])
+                return fm.map_a_path_to_db(tablename,end_path,True,shallow_map=shallow)
+            return "" 
+        if keep_changed is None:
+            keep_changed=self.ask_confirmation(f"Would you like to {A_C.add_ansi('keep changed files','yellow')}?",True)
+        if keep_removed is None:
+            keep_removed=self.ask_confirmation(f"Would you like to {A_C.add_ansi('keep old deleted files','yellow')}?",True)
+        return self.map_existing_path_compare_do_action(db_map_pair,end_path,keep_changed,keep_removed,shallow,where)
+    
+    def verify_map_device_active(self,db_map_pair):
+        """Verifies the device availability
+        """
+        fm=self.cma.get_file_map(db_map_pair[0])
+        mount, mount_active, mappath_exists =fm.check_if_map_device_active(fm.db,db_map_pair[1],True)
+        if mount_active and mappath_exists:
+            return True, mount
+        return False, None
+    
+    def verify_path_has_information(self,end_path):
+        """Verifies the path has files or folders
+        """
         path_has_info=False
+        fs=None
         if os.path.exists(end_path):
             print("Analyzing end path")
             fs=F_M.get_file_structure_from_active_path(end_path,'Backup',{},True,self._get_file_info,True)
             if len(fs['Backup'])>0:
                 path_has_info=True
                 print(f"Path {end_path} has information!")
+        return path_has_info, fs
 
+    def selection_map_to_backup(self,db_map_pair,end_path,shallow=True,where=None,keep_changed=None,keep_removed=None):
+        """ If end_path exists and has information then Makes actual map of end path.
+            Compares with Map, Additions are added, Substractions are renamed.
+        """
+        scr_is_active,scr_mount = self.verify_map_device_active(db_map_pair)
+        if not scr_is_active or not scr_mount:
+            return "[red] Source Device not available!"
+        path_has_info, fs = self.verify_path_has_information(end_path)
+        fm=self.cma.get_file_map(db_map_pair[0])
         if not path_has_info:
             map_info=self.cma.get_map_info(db_map_pair[0],db_map_pair[1])
+            scr_folder=os.path.join(scr_mount,map_info[0][3])
             # id=0	'dt_map_created'=1	'dt_map_modified'=2	'mappath'=3	'tablename'=4	'mount'=5	'serial'=6	'mapname'=7	'maptype'=8
-            scr_folder=os.path.join(map_info[0][5],map_info[0][3])
+            data_list=fm.db.get_data_from_table(db_map_pair[1],"*",where)
+            if len(data_list)==0:
+                return "No data to backup"
+            field_list=fm.db.get_column_list_of_table(db_map_pair[1])
+            dm=DataManage(data_list,field_list)
             print(f"Copying information from {scr_folder} to {end_path}")
-            was_copied=F_M.copy_folder(scr_folder,end_path,True)
+            was_copied=False
+            for iii,(filepath,filename) in enumerate(zip(dm.df['filepath'],dm.df['filename'])):
+                scr_file = os.path.join(scr_mount,filepath,filename)
+                end_file = scr_file.replace(scr_folder,end_path)
+                if F_M.copy_file(scr_file,end_file):
+                    print(f"{iii} [green]Copied {end_file}[/green] ")
+                else:
+                    print(f"{iii} [red]Could not copy {scr_file}[/red] ")
             if was_copied and self.ask_confirmation("Do you want to map the new Backup?",True):
                 tablename=self.cma.format_new_table_name("%!",db_map_pair[1])
                 fm=self.cma.get_file_map(db_map_pair[0])
                 suc_msg=fm.map_a_path_to_db(tablename,end_path,True,shallow_map=shallow)
-        else:
-            # make new map of end path
-            fm=self.cma.get_file_map(db_map_pair[0])
-            fm.db.create_connection()
-            tablename=self.cma.format_new_table_name("%!",db_map_pair[1])
-            suc_msg=fm.map_a_path_to_db(tablename,end_path,True,shallow_map=shallow,press_to_continue=False)
-            if fm.db.table_exists(tablename) and "Successfully" in suc_msg:
-                # [end_mount,end_path_nm]=F_M.split_filepath_and_mountpoint(end_path)
-                db_map_pair_1=(db_map_pair[0],tablename)
-                db_map_pair_2=db_map_pair
-                _,action_dict=self.identify_differences(db_map_pair_1,db_map_pair_2,where,where)
-                # (index=0, db_map_pair=1, (mappath,mount)=2, identification=3,'+/-'=4, data=5)
-                str_actions=self.show_actions(action_dict,keep_changed,keep_removed)    
-                
-                print('*'*33+'FILE ACTIONS'+'*'*33)
-                print('*'*33+'************'+'*'*33)
-                print(f"[yellow] Following actions will be performed:[/yellow]\n{str_actions}")
-                
-                if self.ask_confirmation(f"Do you want to {A_C.add_ansi('do actions','cyan')}?",False):
-                    if not self.do_actions(action_dict,keep_changed,keep_removed):
-                        suc_msg="Not all actions were performed!!" 
-                # if not self.ask_confirmation(f"Do you want {A_C.add_ansi('to keep',
-                # 'cyan')} the Backup Map {A_C.add_ansi(tablename,'yellow')}?",True):    
-                fm.delete_map(tablename,False)      
-                return suc_msg   
-            else:
                 return suc_msg
-        return ""
+            return ""
+        if keep_changed is None:
+            keep_changed=self.ask_confirmation(f"Would you like to {A_C.add_ansi('keep changed files','yellow')}?",True)
+        if keep_removed is None:
+            keep_removed=self.ask_confirmation(f"Would you like to {A_C.add_ansi('keep old deleted files','yellow')}?",True)
+        return self.map_existing_path_compare_do_action(db_map_pair,end_path,keep_changed,keep_removed,shallow,where)
+        
+    def backup_compare(self,db_map_pair,where=None):
+        """Maps actual base path and compares with backup map"""
+        shallow=False # map needs md5 to calculate actions
+        scr_is_active,scr_mount = self.verify_map_device_active(db_map_pair)
+        if not scr_is_active or not scr_mount:
+            return "[red] Source Device not available!"
+        map_info=self.cma.get_map_info(db_map_pair[0],db_map_pair[1])
+        scr_folder=os.path.join(scr_mount,map_info[0][3])
+        fm=self.cma.get_file_map(db_map_pair[0])
+        fm.db.create_connection()
+        tablename=self.cma.format_new_table_name("%_!",db_map_pair[1])
+        suc_msg=fm.map_a_path_to_db(tablename,scr_folder,True,shallow_map=shallow,press_to_continue=False)
+        if fm.db.table_exists(tablename) and "Successfully" in suc_msg:
+            # [end_mount,end_path_nm]=F_M.split_filepath_and_mountpoint(end_path)
+            db_map_pair_1=(db_map_pair[0],tablename)
+            db_map_pair_2=db_map_pair
+            str_actions,_=self.deep_compare(db_map_pair_1,db_map_pair_2,where,where,show_as_action=False)
+            print(str_actions)
+            if not self.ask_confirmation(f"Do you want to {A_C.add_ansi(f'keep {tablename} map','cyan')}?",False):
+                fm.delete_map(tablename,True)
     
-    def show_actions(self,action_dict:dict,keep_changed:bool,keep_removed:bool) ->str:
+    def deep_compare(self,db_map_pair_1,db_map_pair_2,where1,where2,show_as_action=False):
+        """Makes a deep comparison of the maps"""
+        _,action_dict=self.identify_differences(db_map_pair_1,db_map_pair_2,where1,where2)
+        # (index=0, db_map_pair=1, (mappath,mount)=2, identification=3,'+/-'=4, data=5)
+        str_actions=self.show_actions(action_dict,True,True,show_as_action)
+        return str_actions,action_dict
+
+    def map_existing_path_compare_do_action(self,db_map_pair,end_path,keep_changed,keep_removed,shallow,where=None):
+        """Makes a map of end_path, compares to map in db map pair and performs actions on differences
+
+        Args:
+            db_map_pair (tuple): database map pair
+            end_path (str): path to make backup
+            keep_changed (bool): _description_
+            keep_removed (bool): _description_
+            shallow (bool): _description_
+            where (str, optional): map filter. Defaults to None.
+        """
+         # make new map of end path
+        fm=self.cma.get_file_map(db_map_pair[0])
+        fm.db.create_connection()
+        tablename=self.cma.format_new_table_name("%!",db_map_pair[1])
+        suc_msg=fm.map_a_path_to_db(tablename,end_path,True,shallow_map=shallow,press_to_continue=False)
+        if fm.db.table_exists(tablename) and "Successfully" in suc_msg:
+            # [end_mount,end_path_nm]=F_M.split_filepath_and_mountpoint(end_path)
+            db_map_pair_1=(db_map_pair[0],tablename)
+            db_map_pair_2=db_map_pair
+            str_actions,action_dict=self.deep_compare(db_map_pair_1,db_map_pair_2,where,where,show_as_action=True)
+            
+            print('*'*33+'FILE ACTIONS'+'*'*33)
+            print('*'*33+'************'+'*'*33)
+            print(f"[yellow] Following actions will be performed:[/yellow]\n{str_actions}")
+            
+            if self.ask_confirmation(f"Do you want to {A_C.add_ansi('do actions','cyan')}?",False):
+                if not self.do_actions(action_dict,keep_changed,keep_removed):
+                    suc_msg="Not all actions were performed!!" 
+            # if not self.ask_confirmation(f"Do you want {A_C.add_ansi('to keep',
+            # 'cyan')} the Backup Map {A_C.add_ansi(tablename,'yellow')}?",True):    
+            fm.delete_map(tablename,False)      
+            return suc_msg   
+        return suc_msg
+    
+    def has_file_structure_changed(self,db_map_pair:tuple,file_structure:dict,where:str=None):
+        
+        fs1=self.cma.map_to_file_structure(db_map_pair[0],db_map_pair[1],where,None,None,True)
+        fs2=file_structure
+        differences , _ = self.cma.shallow_compare_two_fs(fs1,fs2)
+        print(differences)
+        if len(differences['+'])>0 or len(differences['-'])>0:
+            return True
+        return False
+        # fm=self.cma.get_file_map(db_map_pair[0])
+        # data_list=fm.db.get_data_from_table(db_map_pair[1],"*",where)
+        # if len(data_list)==0:
+        #     return None
+        # field_list=fm.db.get_column_list_of_table(db_map_pair[1])
+        # dm=DataManage(data_list,field_list)
+        # for iii,(filepath,filename) in enumerate(zip(dm.df['filepath'],dm.df['filename'])):
+        #     pass        
+
+    
+    def show_actions(self,action_dict:dict,keep_changed:bool,keep_removed:bool,show_as_action:bool=True) ->str:
         """Return string of actions to be performed
 
         Args:
@@ -102,30 +220,44 @@ class BackupActions():
                 (from_file,to_file)=act_from_to
                 if action_key in ['file renamed', 'file moved']:
                     # Rename file
-                    str_p=str_p+f'{iii} Move/Rename {from_file} -> {to_file}'+'\n'
+                    if show_as_action:
+                        str_p=str_p+f'{iii} [green]Move/Rename[/green] {from_file} -> {to_file}'+'\n'
+                    else:
+                         str_p=str_p+f'{iii} {from_file} [yellow]was Moved/Renamed to[/yellow] {to_file}'+'\n'
                     iii += 1
                 if action_key == 'added file':
                     # add file
-                    str_p=str_p+f'{iii} Copy {from_file} -> {to_file}'+'\n'
+                    if show_as_action:
+                        str_p=str_p+f'{iii} [green]Copy[/green] {from_file} -> {to_file}'+'\n'
+                    else:
+                        str_p=str_p+f'{iii} {to_file} [green]has been added [/green]'+'\n'
                     iii += 1
                 if action_key == 'data changed':
                     # Data changed
-                    if keep_changed:
-                        fn=F_M.extract_filename(to_file,True)
-                        to_file_mod=to_file.replace(fn,"_old_"+str(datetime.now().date())+fn)
-                        str_p=str_p+f'{iii} Rename {to_file} -> {to_file_mod}'+'\n'
-                        str_p=str_p+f'then copy {from_file} -> {to_file}'+'\n'
-                        iii += 1
+                    if show_as_action:
+                        if keep_changed:
+                            fn=F_M.extract_filename(to_file,True)
+                            to_file_mod=to_file.replace(fn,"_old_"+str(datetime.now().date())+fn)
+                            str_p=str_p+f'{iii} [green]Rename[/green] {to_file} -> {to_file_mod}'+'\n'
+                            str_p=str_p+f'[green]then copy[/green] {from_file} -> {to_file}'+'\n'
+                            iii += 1
+                        else:
+                            str_p=str_p+f'{iii} [magenta]Copy replacing[/magenta] {from_file} -> {to_file}'+'\n'
+                            iii += 1
                     else:
-                        str_p=str_p+f'{iii} Copy replacing {from_file} -> {to_file}'+'\n'
+                        str_p=str_p+f'{iii} {from_file} [magenta] data changed [/magenta] {to_file}'+'\n'
                         iii += 1
                 if action_key == 'removed file':
                     # Rename file
-                    if not keep_removed:
-                        str_p=str_p+f'{iii} Permanently remove {from_file} -> {to_file}'+'\n'
-                        iii += 1
+                    if show_as_action:
+                        if not keep_removed:
+                            str_p=str_p+f'{iii} [red]Permanently remove[/red] {to_file}'+'\n'
+                            iii += 1
+                        else:
+                            str_p=str_p+f'{iii} [green]Keeping[/green] {to_file}'+'\n'
+                            iii += 1
                     else:
-                        str_p=str_p+f'{iii} Keeping {from_file} -> {to_file}'+'\n'
+                        str_p=str_p+f'{iii} {to_file} [red]has been removed [/red] '+'\n'
                         iii += 1
         return str_p
                         
@@ -193,11 +325,14 @@ class BackupActions():
             where_2 (str, optional): filter for db_map_pair_2. Defaults to None.
 
         Returns:
-            list[tuple]: (index, db_map_pair, (mappath,mount), identification,'+/-',data)
+            list[tuple], dict: (index, db_map_pair, (mappath,mount), identification,'+/-',data), action dictionary
         """
         fm1=self.cma.get_file_map(db_map_pair_1[0])
         fm2=self.cma.get_file_map(db_map_pair_2[0])
         differences, msg, diff_info= self.shallow_compare_maps_no_base_path(db_map_pair_1,db_map_pair_2,where_1,where_2,remove_temp=False)
+        if len(differences)==0:
+            print(msg)
+            return [], {}
         ((name_1,mappath_1,mount_1),(name_2,mappath_2,mount_2))=diff_info
         field_list=fm1.db.get_column_list_of_table(db_map_pair_1[1])
         data_list_p = []

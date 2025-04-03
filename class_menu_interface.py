@@ -1052,17 +1052,25 @@ class TerminalMenuInterface():
 
     def menu_backup_functions(self):
         """Interactive menu backups"""
+        choices_hints = {
+            'Backup of Map base': "Maps the actual end directory and ompares it to the backup map and makes changes of differences from actual base directory of the map to the backup.",
+            'Backup of Selection Map': "Makes backup of files in map, unless there are already files in the end directory. If so compares end directory with the map and makes actions",
+            'Backup compare': "Maps actual backup folder and compares to backup map",
+            'Back': "Go back"}
+        ch=list(choices_hints.keys())
         msg=''
-        ch=['Map to Backup','Shallow compare Backups','Back']
         in_name='backup'
         menu = [inquirer.List(
             in_name,
             message="Please select",
             choices=ch,
             carousel=False,
+            hints=choices_hints,
             )]
         
         while True:
+            if len(self.cma.active_databases)==0:
+                return '[magenta]There are no active databases![\magenta]'
             os.system('cls' if os.name == 'nt' else 'clear')
             print(MENU_HEADER)
             print("Backup:")
@@ -1072,18 +1080,22 @@ class TerminalMenuInterface():
                 msg=''
             print("---------------------------------")
             answers = inquirer.prompt(menu)
-            if answers['backup']=='Map to Backup':
-                if len(self.cma.active_databases)==0:
-                    return '[magenta]There are no active databases![\magenta]'
+            if answers['backup'] in ['Backup of Map base','Backup of Selection Map']:
                 db_map_pair=self.menu_select_database_map()
                 if not db_map_pair:
                     return ''
                 print('Select/create a directory to set the map backup:')
                 dir_available, path_user=self.menu_enter_a_directory(True)
                 if (dir_available, path_user)!=(False,''):
-                    msg = self.ba.map_to_backup(db_map_pair,path_user,True,None)
-            elif answers['backup']=='Shallow compare Backups':
-                self.menu_shallow_compare_maps(True)
+                    if answers['backup']=='Backup of Selection Map':
+                        msg = self.ba.selection_map_to_backup(db_map_pair,path_user,True,None,None,None)
+                    else:
+                        msg = self.ba.map_to_backup(db_map_pair,path_user,True,None,None,None)    
+            elif answers['backup']=='Backup compare':
+                db_map_pair=self.menu_select_database_map()
+                if not db_map_pair:
+                    return ''
+                self.ba.backup_compare(db_map_pair)
             elif answers['backup']=='Back':
                 return ''
 
@@ -1091,7 +1103,7 @@ class TerminalMenuInterface():
         """Interactive menu handle databases"""
         msg=''
         ch=['Create New Map', 'Delete Map','Clone Map','Rename Map','Update Map',
-            'Shallow Compare Maps','Deepen Shallow Map','Continue Mapping','Process Map','Search in Maps','Back']
+            'Shallow Compare Maps','Deep Compare Maps','Deepen Shallow Map','Continue Mapping','Process Map','Search in Maps','Back']
         in_name='mapping'
         menu = [inquirer.List(
             in_name,
@@ -1128,6 +1140,8 @@ class TerminalMenuInterface():
                 msg=self.menu_update_maps()
             elif answers['mapping']=='Shallow Compare Maps': 
                 msg=self.menu_shallow_compare_maps()
+            elif answers['mapping']=='Deep Compare Maps': 
+                msg=self.menu_deep_compare_maps()
             elif answers['mapping']=='Deepen Shallow Map': 
                 msg=self.menu_deepen_shallow_map()
             elif answers['mapping']=='Process Map':
@@ -1206,7 +1220,51 @@ class TerminalMenuInterface():
                 return 'Same map selected'
         else:
             return 'No map selected'
-        return ''    
+        return ''  
+
+    def menu_deep_compare_maps(self):
+        """Menu for Deep Compare two maps"""
+        os.system('cls' if os.name == 'nt' else 'clear')
+        print(MENU_HEADER)
+        print("Deep Compare Maps:")
+        print("----------")
+        db_map_pair_1=self.menu_select_database_map()
+        if db_map_pair_1:
+            db_map_pair_2=self.menu_select_database_map()
+            if not db_map_pair_2:
+                return 'No map selected'
+            if db_map_pair_1[0]!=db_map_pair_2[0] or db_map_pair_1[1]!=db_map_pair_2[1]:
+                #field_list=['id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype']
+                
+                map_info_1_dict=self.cma.get_map_info_dict(db_map_pair_1[0],db_map_pair_1[1])
+                map_info_2_dict=self.cma.get_map_info_dict(db_map_pair_2[0],db_map_pair_2[1])
+                mappath1=F_M.fix_path_separators(map_info_1_dict['mappath'][0]) 
+                mappath1=F_M.fix_separator_in_path(mappath1) 
+                mappath2=F_M.fix_path_separators(map_info_2_dict['mappath'][0])
+                mappath2=F_M.fix_separator_in_path(mappath2)
+
+                if mappath1 != mappath2:
+                    if not self.ask_confirmation(f"Map paths are different: {mappath1} != {mappath2}, do you want to continue?",False):
+                        return f"Different map paths! {mappath1} != {mappath2}"
+                # if map_info_1_dict['serial'] != map_info_2_dict['serial']:
+                #     return f"Can't deep compare different map paths! {mappath1} != {mappath2}"
+                where=None
+                if datetime.fromisoformat(map_info_1_dict['dt_map_modified'][0]) <= datetime.fromisoformat(map_info_2_dict['dt_map_modified'][0]):
+                    str_actions,_=self.ba.deep_compare(db_map_pair_1,db_map_pair_2,where,where,show_as_action=False)
+                else:
+                    str_actions,_=self.ba.deep_compare(db_map_pair_2,db_map_pair_1,where,where,show_as_action=False)
+                print("Following differences Found:")
+                print(str_actions) 
+                print('*'*33)
+                print('Press any key to continue ...')
+                print('*'*33)
+                getch()
+                
+            else:
+                return 'Same map selected'
+        else:
+            return 'No map selected'
+        return ''  
 
     def main_menu(self):
         """Interactive menu main"""
