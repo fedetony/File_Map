@@ -228,7 +228,10 @@ class Checkbox(BaseConsoleRender):
                     result.append(EXPAND_KEYWORD+str(getattr(value, "value", value)))
                     raise errors.EndOfInput(result)
         elif pressed == key.CTRL_A:
-            self.selection = [i for i in range(len(self.question.choices))]
+            #self.selection = []
+            for iii in range(len(self.question.choices)):
+                if iii not in self.locked and iii not in self.selection:
+                    self.selection.append(iii)
         elif pressed == key.CTRL_R:
             self.selection = []
         elif pressed == key.CTRL_T:

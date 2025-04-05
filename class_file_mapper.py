@@ -212,8 +212,10 @@ class FileMapper:
         if mount.endswith("\\"):
             mount = mount.replace("\\", "")
             path = path[(len(mount) + 1) :]
-            if path.startswith("\\"):
+            if path.startswith("\\") and len(path)>1:
                 path = path[1:]
+            elif len(path)==0:
+                path="\\"
             return path
         if mount.endswith("/") and len(mount) > 1:
             return path[len(mount) :]
@@ -222,8 +224,10 @@ class FileMapper:
                 return path[(len(mount) + 1) :]
             return path[len(mount) :]
         if mount == "/":
-            if path.startswith("/"):
+            if path.startswith("/") and len(path)>1:
                 path = path[1:]
+            elif len(path)==0:
+                path="/"
             return path
         return path[len(mount) :]
 
@@ -534,8 +538,8 @@ class FileMapper:
 
         Args:
             db (SQLiteDatabase): database
-            table_name (_type_): table to map the path
-            path_to_map (_type_): path to map on the device
+            table_name (str): table to map the path
+            path_to_map (str): path to map on the device
             log_print (bool, optional): print logs. Defaults to True.
             shallow_map (bool, optional): Make shallow map (Does not calculate md5,does not run thread).
             Defaults to False.

@@ -64,7 +64,7 @@ def checkbox_shortcut(message, default_pos=0,process_mode=None,process_list=None
             if len(a_key)==1:
                 to_print.append(f"{a_key}={value.replace('*','')}")
         print(', '.join(to_print))
-    print("ESC: Cancel, ENTER:Selection, ARROWS:Navigate, TAB/SPACE:Select, CTRL+T:Toggle, CTRL+A:Select ALL, CTRL+R:Unselect ALL")
+    print("ESC: Cancel, ENTER:Selection, ARROWS:Navigate, TAB/SPACE:Select, CTRL+T:Toggle, CTRL+A:Select ALL visible, CTRL+R:Unselect ALL")
     # setattr(question,'_current_index',_current_index)
     rrr=render.render(question)
     setattr(question,"current",default_pos)
