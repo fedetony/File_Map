@@ -353,7 +353,7 @@ class SQLiteDatabase:
             print(eee)
         return d_data
 
-    def delete_data_from_table(self, table: str, where: str = None) -> list:
+    def delete_data_from_table(self, table: str, where: str = None):
         """Delete data in the rows
 
         Args:

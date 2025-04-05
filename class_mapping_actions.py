@@ -309,14 +309,14 @@ class MappingActions():
                 map_info_dict=data_manage.df.to_dict()
         return map_info_dict
 
-    def show_maps(self):
+    def show_maps(self,where:str=None):
         """Prints Map information
         """
         for iii,a_db in enumerate(self.active_databases):
             fm=a_db['mapdb']
             if isinstance(fm,FileMapper):
                 print(f"{iii+1}. [yellow]Maps in {a_db['file']}:")
-                table_list=fm.db.get_data_from_table(fm.mapper_reference_table,'*')
+                table_list=fm.db.get_data_from_table(fm.mapper_reference_table,'*',where)
                 table_list_size=[]
                 for table_info in table_list:
                     #field_list=['id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype']
@@ -363,16 +363,28 @@ class MappingActions():
         fm=self.get_file_map(database)
         return fm.db.get_data_from_table(fm.mapper_reference_table,'*',f"tablename='{a_map}'")
 
-    # def search_maps_for(self,selected_db_map_pair_list,column,search):
-    #     fs_list=[]
-    #     for db_map_pair in selected_db_map_pair_list:
-    #         where=f"filename LIKE '%{search}%'"
-    #         fs=self.map_to_file_structure(db_map_pair[0],db_map_pair[1],where=where,fields_to_tab=None,sort_by=None,ascending=True)
-    #         print('here',len(fs))
-    #         if len(fs)>0:
-    #             fs_list.append(fs.copy())
-    #             del fs
-    #     return fs_list
+    def get_maps_by_type(self,type_list=None,in_list=True):
+        """Finds all maps of specific types (or not of specific types) in all loaded databases
+
+        Args:
+            type_list (_type_, optional): list of databases types. Defaults to None.
+            in_list (bool, optional): If true will return types in list, in False returns the inverse types of list. Defaults to True.
+        
+        Returns:
+            list: list of (database,map name)
+        """
+        all_db_map_pair_list=self.get_all_maps()
+        if not type_list:
+            return all_db_map_pair_list
+        output=[]
+        for db_map_pair in all_db_map_pair_list:
+            map_info=self.get_map_info(db_map_pair[0],db_map_pair[1])
+            maptype=map_info[0][8]
+            if maptype in type_list and in_list:
+                output.append(db_map_pair)
+            if maptype not in type_list and not in_list:
+                output.append(db_map_pair)
+        return output
 
     def get_size_of_file_selection(self,db_map_pair,id_list:list=None):
         """Calculates the total size in bytes of a map, or selected ids on the map
@@ -708,6 +720,40 @@ class MappingActions():
             return 'No items in Map'
         return None
 
+    def edit_selection_map(self,database,a_map):
+        map_info=self.get_map_info(database,a_map)
+        if map_info[0][8] in [MAP_TYPES_LIST[0],MAP_TYPES_LIST[2]]:
+            return f"{a_map} is not a selection map!"
+        origin_map=map_info[0][7] 
+        if (database,origin_map) not in self.get_maps_by_type([MAP_TYPES_LIST[0],MAP_TYPES_LIST[2]]):
+            return f"Can't find {(database,origin_map)} origin map!"
+        fm=self.get_file_map(database)
+        fn_fp=fm.db.get_data_from_table(a_map,'filename, filepath')
+        name_list=[]
+        parent_list=[]
+        for d_tup in fn_fp:
+            name_list.append(d_tup[0])
+            parent_list.append(d_tup[1])
+            # # get the last path from the path
+            # parent=os.path.split(d_tup[1])
+            # if parent[1]=='':
+            #     parent=os.path.split(parent[0])
+            # parent_list.append(parent[1])
+        fs=None
+        fs=self.map_to_file_structure(database,origin_map,None,fields_to_tab=['id'],sort_by=None,ascending=True)
+        if len(fs)>0:
+
+            selected_db_map_pair, _, data=self.explore_multiple_file_search(f"Browse and select files from {A_C.add_ansi(a_map,'cyan')}",[fs],[(database,origin_map)],name_list,parent_list)
+            # selection_name=str(datetime.now()).replace(" ","_").replace("-","").replace(":","").replace(".","")
+            if len(selected_db_map_pair)>0:
+                new_data=[]
+                for ddd in data:
+                    new_data=new_data+ddd
+                fm.db.delete_data_from_table(a_map)
+                if fm.db.insert_data_to_table(a_map,new_data):
+                    return f"{a_map} has been edited!"
+        return ""
+
     def find_repeated_in_database(self,database,a_map):
         """Returs a list of tuple with the dictionaries of file information of each repeated file.
         Repeated are files with the same md5 sum, in any folder within the map. 
@@ -785,7 +831,7 @@ class MappingActions():
                 
         return selections
 
-    def explore_multiple_file_search(self,search,fs_list:list,db_map_list:list)->tuple:
+    def explore_multiple_file_search(self,search,fs_list:list,db_map_list:list,name_list:list=None,parent_list:list=None)->tuple:
         """Uses file explorer to select a file from a search.
 
         Args:
@@ -793,6 +839,8 @@ class MappingActions():
             fs_list (list): list of file structures from search. 
                 Id must be included in filestructure! 
             db_map_list (list): correspondant db_map_pair list
+            name_list(list,optional): Preselceted name list, Default None
+            parent_list (list,optional): Preselceted parent list, Default None
 
         Returns:
             tuple[list]: selected_db_map_pair, selected_id, selection data
@@ -801,6 +849,7 @@ class MappingActions():
         selected_id_list=[]
         data=[]
         f_e=FileExplorer(None,None,{search:fs_list})
+        f_e.set_selected_lists(name_list,parent_list,[0,1])
         selected_node_list=f_e.select_multiple_files(my_style_file_expand_size,None,prompt="Browse and select Files",allow_dir_selection=False)  
         for selected_node in  selected_node_list:
             if selected_node.level not in [0,1]: # search, db_map

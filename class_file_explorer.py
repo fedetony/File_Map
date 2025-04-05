@@ -186,9 +186,22 @@ class FileExplorer:
         self.is_base_valid=False
         self.is_base_active=False
         self.is_file_structure=False
+        self.selected_name_list=None
+        self.selected_parent_list=None
         self.t_v=None
         if self.check_path_options():
             self.is_file_structure=self.set_tree_structure()
+
+    def set_selected_lists(self,name_list,parent_list,level_except=None):
+        """Sets selected lists for setting to Treeview objects after reset
+        Args:
+            name_list (list[str]): name of selected files
+            parent_list (list[str]): name of parent of selected files
+            level_except (list[int]): Exceptions of node levels, Default None.
+        """
+        self.selected_name_list=name_list
+        self.selected_parent_list=parent_list
+        self.level_except=level_except
 
     def check_path_options(self):
         """Checks for a valid base path
@@ -555,13 +568,21 @@ class FileExplorer:
         Returns:
             TreeNode: Selected folder node
         """
-        self.reset_t_v() # to change to new style
+        self.reset_t_v() # to change to new style    
         has_expansion = True
         selection_list=None
         nodeid_list=None
         expand_contract_id=None
         # start treeview
         _=self.get_tree_view_list('expand_dir',style)
+        if self.selected_name_list and self.selected_parent_list:
+            self.t_v.set_selected_by_name(self.selected_name_list,self.selected_parent_list,self.level_except)
+            self.selected_name_list=None
+            self.selected_parent_list=None
+            nodeid_list=[]
+            for node in self.t_v.all_nodes:
+                if node.selected:
+                    nodeid_list.append(node.id)
         while has_expansion: #selected_node.i_am=='dir':
             os.system('cls' if os.name == 'nt' else 'clear')
             nodeid_list ,has_expansion, expand_contract_id=self.browse_tree_checkbox('expand',style,nodeid_list,locked_list,prompt, expand_contract_id,allow_dir_selection)

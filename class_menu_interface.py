@@ -626,13 +626,13 @@ class TerminalMenuInterface():
             return selected_db_map_pair_list
         return selected_db_map_pair_list
 
-    def menu_select_database_map(self)->tuple:
+    def menu_select_database_map(self,types_list=None)->tuple:
         """Looks in all databases listed for all maps.
 
         Returns:
             tuple: selecte database,map. None if no selected
         """
-        db_map_pair_list=self.cma.get_all_maps()
+        db_map_pair_list=self.cma.get_maps_by_type(types_list)
         if len(db_map_pair_list)>0:
             field_list=['id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype']
             str_db_map=''
@@ -781,16 +781,19 @@ class TerminalMenuInterface():
         print(MENU_HEADER)
         print("Process Selection Map:")
         print("----------")
-        db_map_pair=self.menu_select_database_map()
+        self.cma.show_maps(f"maptype NOT LIKE '{MAP_TYPES_LIST[0]}' AND maptype NOT LIKE '{MAP_TYPES_LIST[2]}'")
+        map_types=[]
+        for maptype in MAP_TYPES_LIST:
+            if maptype not in [MAP_TYPES_LIST[0],MAP_TYPES_LIST[2]]:
+                map_types.append(maptype)
+        db_map_pair=self.menu_select_database_map(map_types)
         if not db_map_pair:
             return ''
-        
         choices_hints = {
         "Browse Tree": "Allows browsing the map's tree",
         "Browse Directories": "Allows browsing the map's Folders",
         "Search Map": "Search for files in the selected Map",
-        "Add Files to Selection": "You can add files from origin map.",
-        "Remove files in Selection": "You can remove files in Selection map.",
+        "Edit Selection": "You can add,remove files from origin map.",
         "Selection Map Action": "Do Actions to the files in selection maps",
         "Back": "Go back"}
         ch=list(choices_hints.keys())
@@ -819,7 +822,9 @@ class TerminalMenuInterface():
             elif answers['map_process'] == 'Search Map': 
                 fs_list=self.menu_search_in_maps([db_map_pair],True) #set to false to get the file structure list
                 # menu_select_from_list_map(repeat_list,db_map_pair)
-            elif answers['map_process'] == 'Browse Browse Directories': 
+            elif answers['map_process'] == 'Edit Selection': 
+                msg=self.cma.edit_selection_map(db_map_pair[0],db_map_pair[1])
+            elif answers['map_process'] == 'Browse Directories': 
                 msg=self.cma.browse_file_directories(db_map_pair,'dir')
                 if isinstance(msg,str):
                     return msg
@@ -828,7 +833,10 @@ class TerminalMenuInterface():
         """Search in Maps"""
         if not selected_db_map_pair_list:
             selected_db_map_pair_list=self.menu_select_multiple_database_map()
-        print('selected_db_map_pair_list-->',selected_db_map_pair_list)
+        if len(selected_db_map_pair_list)==0:
+            return 'No Database or Map Selected!'
+        else:
+            print('selected_db_map_pair_list-->',selected_db_map_pair_list)
         msg=''
         (ans_txt, msg, is_valid)=A_C.get_sql_input()
         print(f'Searching for:{ans_txt}')
@@ -1269,7 +1277,7 @@ class TerminalMenuInterface():
     def main_menu(self):
         """Interactive menu main"""
         msg=''
-        ch=['About','Rescan Devices','Handle Databases', 'Mapping', 'Backup', 'Exit']
+        ch=['About','Rescan Devices','Handle Databases', 'Mapping', 'Backup', 'Selection', 'Exit']
         menu = [inquirer.List(
             "main_menu",
             message="Please select",
@@ -1291,6 +1299,8 @@ class TerminalMenuInterface():
                 msg=self.menu_mapping_functions()
             elif answers['main_menu']=='Backup':
                 msg=self.menu_backup_functions()
+            elif answers['main_menu']=='Selection':
+                msg=self.menu_process_selection_map()
             elif answers['main_menu']=='Rescan Devices':
                 msg=self.cma.rescan_database_devices()
             elif answers['main_menu']=='About':

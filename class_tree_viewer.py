@@ -476,7 +476,40 @@ class TreeViewer:
                 if node.size:
                     return node.size 
         return 0
-            
+    
+    def set_selected_by_name(self,name_list,parent_list,level_except=None):
+        """Sets selected items with the same name in name list 
+        Args:
+            name_list (list[str]): name of selected file
+            parent_list (list[str]): name of parent of selected file
+        """
+        expand_id_list=[]
+        for name,parent_name in zip(name_list,parent_list):
+            node_list=self.get_nodes_by_attribute("name",name)
+            if len(node_list) ==1:
+                node=node_list[0]
+                node.selected = True
+                expand_id_list += node.get_bloodline()
+                
+            elif len(node_list) >1:
+                for node in node_list:
+                    path_list=self.trace_path(node,level_except,True)
+                    all_in_path=True
+                    for path in path_list[:-1]: # exclude filename
+                        if path not in parent_name:
+                            all_in_path=False
+                            break
+                    if all_in_path:
+                        node.selected = True
+                        expand_id_list += node.get_bloodline()
+        self.set_selected_children(self.main_node)
+        # expand preselected
+        if len(self.all_nodes)<1000:
+            for an_id in set(expand_id_list):
+                node_list=self.get_nodes_by_attribute("id",an_id)
+                if len(node_list) ==1:
+                    node=node_list[0]
+                    node.expand=True
             
 # Example usage
 if __name__ == "__main__":
