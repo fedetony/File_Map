@@ -793,7 +793,7 @@ class TerminalMenuInterface():
         "Browse Tree": "Allows browsing the map's tree",
         "Browse Directories": "Allows browsing the map's Folders",
         "Search Map": "Search for files in the selected Map",
-        "Edit Selection": "You can add,remove files from origin map.",
+        "Edit Selection from Origin": "You can add,remove files from origin map.",
         "Selection Map Action": "Do Actions to the files in selection maps",
         "Back": "Go back"}
         ch=list(choices_hints.keys())
@@ -813,16 +813,12 @@ class TerminalMenuInterface():
                 msg=self.cma.browse_file_directories(db_map_pair,'file')
                 if isinstance(msg,str):
                     return msg
-            elif answers['map_process'] == 'Find Duplicates': 
-                duplicte_list=self.cma.find_duplicates_in_database(db_map_pair[0],db_map_pair[1])
-                self.menu_select_from_list_map(duplicte_list,db_map_pair)
-            elif answers['map_process'] == 'Find Repeated': 
-                repeat_list=self.cma.find_repeated_in_database(db_map_pair[0],db_map_pair[1])
-                self.menu_select_from_list_map(repeat_list,db_map_pair)
+            elif answers['map_process'] == 'Selection Map Action': 
+                self.menu_do_selection_action(db_map_pair)
             elif answers['map_process'] == 'Search Map': 
                 fs_list=self.menu_search_in_maps([db_map_pair],True) #set to false to get the file structure list
                 # menu_select_from_list_map(repeat_list,db_map_pair)
-            elif answers['map_process'] == 'Edit Selection': 
+            elif answers['map_process'] == 'Edit Selection from Origin': 
                 msg=self.cma.edit_selection_map(db_map_pair[0],db_map_pair[1])
             elif answers['map_process'] == 'Browse Directories': 
                 msg=self.cma.browse_file_directories(db_map_pair,'dir')
@@ -868,7 +864,95 @@ class TerminalMenuInterface():
                 return fs_list     
         return msg
     
-    
+    def menu_do_selection_action(self,db_map_pair):
+        """Menu doing actions to files"""
+        os.system('cls' if os.name == 'nt' else 'clear')
+        print(MENU_HEADER)
+        print("Selection Map Actions:")
+        print("----------")
+        default="Sort"
+        msg=''
+        # self.cma.show_maps(f"maptype NOT LIKE '{MAP_TYPES_LIST[0]}' AND maptype NOT LIKE '{MAP_TYPES_LIST[2]}'")
+        # map_types=[]
+        # for maptype in MAP_TYPES_LIST:
+        #     if maptype not in [MAP_TYPES_LIST[0],MAP_TYPES_LIST[2]]:
+        #         map_types.append(maptype)
+        # db_map_pair=self.menu_select_database_map(map_types)
+        if not db_map_pair:
+            return 'No Map Selected'
+        choices_hints = {
+        "Browse Tree": "Allows browsing the Selection map's tree",    
+        "Remove files": "Removes The Files on the Selection and in origin Map",
+        "Remove files keep origin": "Removes The Files on the Selection, empty folders and keep references in origin Map",
+        "Filter files To Remove": "Removes The Files on the Selection matching filter",
+        "Copy files": "Copy files to single destination",
+        "Copy Tree": "Copy directory structure and files to a destination",
+        "Filter Copy Tree": "Copy directory structure and files to a destination matching a filter",
+        "Move files": "Move files to single destination",
+        "Move Tree": "Move directory structure and files to a destination",
+        "Sort": "Move single file to a different directory",
+        "Rename File in Map": "Rename single file",
+        "Rename Directory in Map": "Rename single directory",
+        "Create Directory": "Create directory",
+        "Back": "Go back"}
+        ch=list(choices_hints.keys())
+        while True:
+            menu = [inquirer.List(
+                'do_action',
+                message="Please select",
+                choices=ch,
+                carousel=False,
+                hints=choices_hints,
+                default=default,
+                )]
+            print("[red]WARNING: ALL ACTIONS HERE ARE DONE TO FILES AND ARE NOT REVERSIBLE!")
+            print("-"*33)
+            if msg!='':
+                print(msg)
+                print("-"*33)
+            answers = inquirer.prompt(menu)
+            if answers['do_action'] == 'Back':
+                return ''
+            elif answers['do_action'] == 'Browse Tree': 
+                _=self.cma.browse_file_directories(db_map_pair,'file')
+            elif answers['do_action'] == 'Remove files': 
+                msg=self.ba.remove_selection_files_from_mount(db_map_pair,True,None)
+            elif answers['do_action'] == 'Remove files keep origin': 
+                msg=self.ba.remove_selection_files_from_mount(db_map_pair,False,None)
+            elif answers['do_action'] == 'Filter files To Remove': 
+                print("[cyan]Select Filter:")
+                (ans_txt, msg, is_valid)=A_C.get_sql_input()
+                if is_valid:
+                    msg=self.ba.remove_selection_files_from_mount(db_map_pair,self.ask_confirmation(f"{A_C.add_ansi('Remove in Origin?','magenta')}",True),ans_txt)
+            elif answers['do_action'] == 'Copy files': 
+                msg='Not implemented :P'
+            elif answers['do_action'] == 'Copy Tree': 
+                print("[cyan]Select/create Directory to copy the tree:")
+                dir_available,path_user=self.menu_enter_a_directory(True)
+                if dir_available:
+                    msg = self.ba.selection_map_to_backup(db_map_pair,path_user,True,None,None,None)
+            elif answers['do_action'] == "Filter Copy Tree": 
+                print("[cyan]Select/create Directory to copy the tree:")
+                dir_available,path_user=self.menu_enter_a_directory(True)
+                if dir_available:
+                    (ans_txt, msg, is_valid)=A_C.get_sql_input()
+                    if is_valid:
+                        msg = self.ba.selection_map_to_backup(db_map_pair,path_user,True,ans_txt,None,None)    
+            elif answers['do_action'] == 'Move files': 
+                msg='Not implemented :P'
+            elif answers['do_action'] == 'Move Tree': 
+                msg='Not implemented :P'
+            elif answers['do_action'] == 'Sort': 
+                msg='Not implemented :P'
+            elif answers['do_action'] == 'Rename File in Map': 
+                msg='Not implemented :P'
+            elif answers['do_action'] == 'Rename Directory in Map': 
+                msg='Not implemented :P'
+            elif answers['do_action'] == 'Create Directory': 
+                self.menu_enter_a_directory(True)
+            
+            default=answers['do_action']
+            
 
     def menu_select_from_list_map(self,d_list,db_map_pair,selection_type='repeated'):
         """Menu for Selection

@@ -474,3 +474,49 @@ class BackupActions():
             mod_data.append(tuple(modd_t))
         fm.map_a_selection(table_name,db_map_pair[1],mod_data,MAP_TYPES_LIST[2])
         return mappath, map_info[0][5]
+    
+    def remove_selection_files_from_mount(self,db_map_pair,remove_from_origin:bool=True,where:str=None):   
+        """Removes a file and its map reference"""
+        map_info=self.get_map_info(db_map_pair[0],db_map_pair[1])
+        if map_info[0][8] in [MAP_TYPES_LIST[0],MAP_TYPES_LIST[2]]:
+            return f"{db_map_pair[1]} is not a selection map!"
+        origin_map=map_info[0][7] 
+        if (db_map_pair[0],origin_map) not in self.cma.get_maps_by_type([MAP_TYPES_LIST[0],MAP_TYPES_LIST[2]]):
+            return f"Can't find {(db_map_pair[0],origin_map)} origin map!"
+        # check mount exist
+        fm=self.cma.get_file_map(db_map_pair[0])
+        mount, mount_active, mappath_exists=fm.check_if_map_device_active(fm.db,db_map_pair[1],False)
+        print("Device check result:", mount, mount_active, mappath_exists)
+        data_list=fm.db.get_data_from_table(db_map_pair[1],'*',where)
+        # get file name and path 
+        if len(data_list)==0:
+            return "No data to remove!"
+        if not mount_active or not mappath_exists:
+            return f'Mount point {mount} is not available'
+        msg=''
+        # field list in map
+        # id=0	dt_data_created'=1	'dt_data_modified'=2	'filepath'=3	'filename'=4	'md5'=5	'size'=6	
+        # 'dt_file_created'=7	'dt_file_accessed'=8	'dt_file_modified'=9
+        if not self.ask_confirmation(f"{A_C.add_ansi('Permanently Remove','hred')} {len(data_list)} files?",False):
+            return f'User Cancel'
+        for data in data_list:
+            filepath=os.path.join(mount,data[3],data[4])
+            print(f'Removing File: {filepath} and data in {db_map_pair}')
+            # try to remove file
+            was_removed=False
+            if os.path.exists(filepath):
+                was_removed=F_M.delete_file(filepath)
+            #if was removed -> remove from db,map
+            if was_removed:
+                fm.db.delete_data_from_table(db_map_pair[1],f"id={data[0]}")
+                if remove_from_origin:
+                    wh_ori=f"filename={fm.db.quotes(data[4])} AND md5='{data[5]}' AND size={data[6]} AND filepath LIKE {fm.db.quotes(str(data[3]).replace('\\','%').replace('/','%'))}"
+                    id_list=fm.db.get_data_from_table(origin_map,"id",wh_ori)
+                    if len(id_list)==1:
+                        fm.db.delete_data_from_table(db_map_pair[1],f"id={id_list[0][0]}")
+                    else:
+                        msg=msg+f'[red]\t({wh_ori}) was not Removed in Origin!!\n'
+            if not was_removed:
+                msg=msg + f'[red]\t({data[0]}) {filepath} was not Removed!!\n'
+        return msg
+    
