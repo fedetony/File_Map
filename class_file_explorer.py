@@ -562,6 +562,23 @@ class FileExplorer:
                 
         return selection_list
     
+    def _set_preselected(self):
+        """Sets preselected items to selected in the treeview
+
+        Returns:
+            list: Node_id_list
+        """
+        if self.selected_name_list and self.selected_parent_list:
+            self.t_v.set_selected_by_name(self.selected_name_list,self.selected_parent_list,self.level_except)
+            self.selected_name_list=None
+            self.selected_parent_list=None
+            nodeid_list=[]
+            for node in self.t_v.all_nodes:
+                if node.selected:
+                    nodeid_list.append(node.id)
+            return nodeid_list
+        return None
+
     def select_multiple_files(self,style=my_style_file_expand,locked_list:list=None,prompt:str="Select",allow_dir_selection=True)->list[TreeNode]:
         """Browses through files (Does not show files)
 
@@ -571,18 +588,10 @@ class FileExplorer:
         self.reset_t_v() # to change to new style    
         has_expansion = True
         selection_list=None
-        nodeid_list=None
         expand_contract_id=None
         # start treeview
         _=self.get_tree_view_list('expand_dir',style)
-        if self.selected_name_list and self.selected_parent_list:
-            self.t_v.set_selected_by_name(self.selected_name_list,self.selected_parent_list,self.level_except)
-            self.selected_name_list=None
-            self.selected_parent_list=None
-            nodeid_list=[]
-            for node in self.t_v.all_nodes:
-                if node.selected:
-                    nodeid_list.append(node.id)
+        nodeid_list=self._set_preselected()
         while has_expansion: #selected_node.i_am=='dir':
             os.system('cls' if os.name == 'nt' else 'clear')
             nodeid_list ,has_expansion, expand_contract_id=self.browse_tree_checkbox('expand',style,nodeid_list,locked_list,prompt, expand_contract_id,allow_dir_selection)
@@ -677,7 +686,7 @@ class FileExplorer:
         self.reset_t_v() # to change to new style
         has_expansion = True
         selection_list=None
-        nodeid_list=None
+        nodeid_list=self._set_preselected()
         expand_contract_id=None
         process_list=None
         # locked_list=[0]

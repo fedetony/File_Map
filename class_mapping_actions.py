@@ -715,7 +715,8 @@ class MappingActions():
             elif browse_type=='file_multiple':
                 return self.explore_multiple_file_search(f"Browse and select files from {A_C.add_ansi(db_map_pair[1],'cyan')}",[fs],[db_map_pair])
                 # return f_e.select_multiple_files(my_style_file_expand_size,None,f"Browse and select files from {A_C.add_ansi(db_map_pair[1],'cyan')}",False)
-            
+            elif browse_type=='file_process':
+                return f_e.browse_files_with_process(my_style_dir_expand_size,True,None,f"Process files from {A_C.add_ansi(db_map_pair[1],'cyan')}")
         else: 
             return 'No items in Map'
         return None

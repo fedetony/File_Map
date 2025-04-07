@@ -277,6 +277,21 @@ class TerminalMenuInterface():
         else:
             dir_available=False 
         return dir_available, path_user
+    
+    def menu_enter_path_or_file(self,absolute_path=True,inquire=False):
+        """Asks selection of a directory and returns if the selected path/input is an available directory and the path user input.
+
+        Returns:
+            tuple[bool,str]: file_exist, is_file, path_user
+        """
+        input_path = AutocompletePathFile('return string [cyan]ENTER[/cyan], Autofill path/file [cyan]TAB[/cyan], Cancel [cyan]ESC[/cyan]\nOr type complete directory path: ',
+                                        F_M.get_app_path(),absolute_path=absolute_path,verbose=True,inquire=inquire).get_input
+        path_user = input_path()
+        if path_user in ['',None]:
+            return False, None, path_user
+        path_user=F_M.fix_separator_in_path(path_user)
+        file_exist, is_file = F_M.validate_path_file(path_user)
+        return file_exist, is_file, path_user
 
     def menu_get_a_directory(self,allow_create_dir=False):
         """Gets a directory from user
@@ -943,7 +958,8 @@ class TerminalMenuInterface():
             elif answers['do_action'] == 'Move Tree': 
                 msg='Not implemented :P'
             elif answers['do_action'] == 'Sort': 
-                msg='Not implemented :P'
+                ans=self.cma.browse_file_directories(db_map_pair,'file_process')
+                msg=str(ans)
             elif answers['do_action'] == 'Rename File in Map': 
                 msg='Not implemented :P'
             elif answers['do_action'] == 'Rename Directory in Map': 
@@ -1357,11 +1373,194 @@ class TerminalMenuInterface():
         else:
             return 'No map selected'
         return ''  
+    
+    def menu_sort_files(self):
+        """Interactive menu for sorting files"""
+        msg=''
+        ch=['Select active Files/Directories', 'Select Mapped Files/Directories','Deselect Files/Directories','Process Selection','Back']
+        sel_files=[]
+        while True:
+            os.system('cls' if os.name == 'nt' else 'clear')
+            menu = [inquirer.List(
+            'sorting',
+            message="Please select",
+            choices=ch,
+            carousel=False,
+            )]
+            print(MENU_HEADER)
+            print("Sorting:")
+            print("----------")
+            self.show_selected_files(sel_files)
+            if not msg in ['',None]:
+                print("---------------------------------")
+                print(msg)
+                msg=''
+            print("---------------------------------")
+            answers = inquirer.prompt(menu)
+            if answers['sorting']=='Select active Files/Directories':
+                sel_files=self.menu_select_active_files_directories_sorting(sel_files)
+                
+            elif answers['sorting']=='Select Mapped Files/Directories':
+                if len(self.cma.active_databases)==0:
+                    msg='[magenta]There are no active databases![\magenta]'
+                else:
+                    sel_files=self.menu_select_mapped_files_directories_sorting(sel_files)
+            elif answers['sorting']=='Process Selection':
+                if len(sel_files)==0:
+                    msg = 'Select some Files or directories first'
+                else:
+                    msg=''
+            elif answers['sorting']=='Deselect Files/Directories':
+                sel_files=self.menu_remove_selected_files_directories_sorting(sel_files)
+            elif answers['sorting']=='Back':
+                if len(sel_files)==0:
+                    return ''
+                if self.ask_confirmation(f"Dissmiss {len(sel_files)} selected files?",False):
+                    return ''
+
+    def menu_remove_selected_files_directories_sorting(self,sel_files):
+        """Removes a database from the file_list
+        """
+        if len(sel_files)==0:
+            return sel_files
+        os.system('cls' if os.name == 'nt' else 'clear')
+        print(MENU_HEADER)
+        print("Remove files/Directories from selection:")
+        print("----------")
+        answers={'Selection_name':''}
+        while len(sel_files)>0:
+            ch_hints={}
+            for sf_tup in sel_files:
+                ch_hints.update({sf_tup[0]:str(sf_tup)})
+            ch_hints.update({'Back':'Go Back'})    
+            ch=ch_hints.keys()
+            menu = [inquirer.List(
+                'remove_select',
+                message="Please select",
+                choices=ch,
+                carousel=False,
+                hints=ch_hints,
+                )]
+            answers = inquirer.prompt(menu)
+            if answers['remove_select'] == 'Back':
+                return sel_files
+            if answers['remove_select'] not in ['',None]:
+                selection_name=answers['remove_select']
+                new_selected=[]
+                #remove selection
+                for sf_tup in sel_files:
+                    if sf_tup[0] != selection_name:
+                        new_selected.append(sf_tup)
+                sel_files=new_selected
+
+    @staticmethod
+    def show_selected_files(sel_files:list,max_show:int=10):
+        """Prints information about selected files
+
+        Args:
+            selected_files (list): selected file tuple
+        """
+        if len(sel_files)>0:
+            fields=['Source','Type','Operation','Objective']
+            sf_dm=DataManage(sel_files[:max_show],fields)
+            print(sf_dm.get_tab_separated_fields(fields,None,True,'|'))
+
+
+    def menu_select_mapped_files_directories_sorting(self,sel_files:list)->list:
+        """Adds from maps files and directories to selected files list
+
+        Args:
+            sel_files (list): previously defined selected files
+
+        Returns:
+            list: appends selected files
+        """
+        ch=['Select Directories', 'Select Files','Select Search','Cancel']
+        sel_files=[]
+        db_map_pair=self.menu_select_database_map()
+        scr_is_active,scr_mount = self.ba.verify_map_device_active(db_map_pair)
+        if not scr_is_active:
+            print(f"No active mount for {db_map_pair}")
+            return sel_files
+        os.system('cls' if os.name == 'nt' else 'clear')
+        menu = [inquirer.List(
+        'sorting',
+        message="Please select",
+        choices=ch,
+        carousel=False,
+        )]
+        print(MENU_HEADER)
+        print(f"What to select in Map {db_map_pair}:")
+        print("----------")
+        answers = inquirer.prompt(menu)
+        if answers['sorting']=='Select Directories':
+            _,trace_list=self.cma.browse_file_directories(db_map_pair,'dir_multiple')
+            for trace in trace_list:
+                sel_files.append((os.path.join(scr_mount,trace),'dir','',None)) 
+            # return sel_files
+        elif answers['sorting']=='Select Files':
+            selected_db_map_pair_list, _, data=self.cma.browse_file_directories(db_map_pair,'file_multiple')
+            # data ->filepath'=2	'filename'=3	
+            if len(selected_db_map_pair_list)>0:
+                for ddd in data[0]:
+                    sel_files.append((os.path.join(scr_mount,ddd[2],ddd[3]),'file','',None))
+            # return selected_files
+        elif answers['sorting']=='Select Search':
+            (ans_txt, msg, is_valid)=A_C.get_sql_input()
+            if is_valid:
+                fm=self.cma.get_file_map(db_map_pair[0])
+                data=fm.db.get_data_from_table(db_map_pair[1],'filepath, filename',ans_txt)
+                if len(data)>0:
+                    files_list=[]
+                    for (filepath, filename) in data:
+                        files_list.append(os.path.join(scr_mount,filepath,filename))
+                    if len(files_list)>0:      
+                        menu2 = [
+                        inquirer.Checkbox(
+                            "file_selection",
+                            message="Select files",
+                            choices=files_list,
+                            default=files_list,
+                        )]
+                        answers2 = inquirer.prompt(menu2)
+                        if len(answers2['file_selection'])>0:
+                            for ddd in answers2['file_selection']:
+                                sel_files.append((ddd,'file','',None))
+        # elif answers['sorting']=='Cancel':
+        #     return sel_files
+        return sel_files
+            
+
+    def menu_select_active_files_directories_sorting(self,sel_files:list)->list:
+        """Adds from active paths files and directories to selected files list
+
+        Args:
+            sel_files (list): previously defined selected files
+
+        Returns:
+            list: appends selected files
+        """
+        file_exist, is_file, path_user=self.menu_enter_path_or_file()
+        if file_exist:
+            if is_file:
+                sel_files.append((path_user,'file','',None))
+            else:
+                if self.ask_confirmation(f"{A_C.add_ansi('Yes','yellow')} to Browse and select multiple files in Directory, {A_C.add_ansi('No','yellow')} for adding complete Directory",False):
+                    print(f'Analyzing File structure for {path_user}:')
+                    f_e=FileExplorer(path_user,None,None)
+                    node_list=f_e.select_multiple_files(my_style_file_expand_size,None,"Select Files or Folders")
+                    if len(node_list)>0:
+                        for node in node_list:
+                            trace_list=f_e.t_v.trace_path(node,None,True)    
+                            sel_files.append((os.sep.join(trace_list),node.i_am,'',None))            
+                else:
+                    sel_files.append((path_user,'dir','',None))
+        return sel_files
 
     def main_menu(self):
         """Interactive menu main"""
         msg=''
-        ch=['About','Rescan Devices','Handle Databases', 'Mapping', 'Backup', 'Selection', 'Exit']
+        ch=['About','Rescan Devices','Handle Databases', 'Mapping', 'Backup', 'Selection','Sort', 'Exit']
         menu = [inquirer.List(
             "main_menu",
             message="Please select",
@@ -1385,6 +1584,8 @@ class TerminalMenuInterface():
                 msg=self.menu_backup_functions()
             elif answers['main_menu']=='Selection':
                 msg=self.menu_process_selection_map()
+            elif answers['main_menu']=='Sort':
+                msg=self.menu_sort_files()
             elif answers['main_menu']=='Rescan Devices':
                 msg=self.cma.rescan_database_devices()
             elif answers['main_menu']=='About':

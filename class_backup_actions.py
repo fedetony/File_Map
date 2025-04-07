@@ -510,7 +510,9 @@ class BackupActions():
             if was_removed:
                 fm.db.delete_data_from_table(db_map_pair[1],f"id={data[0]}")
                 if remove_from_origin:
-                    wh_ori=f"filename={fm.db.quotes(data[4])} AND md5='{data[5]}' AND size={data[6]} AND filepath LIKE {fm.db.quotes(str(data[3]).replace('\\','%').replace('/','%'))}"
+                    wh_ori=f"filename={fm.db.quotes(data[4])} AND md5='{data[5]}' AND size={data[6]}"
+                    fipa=fm.db.quotes(str(data[3]).replace('\\','%').replace('/','%'))
+                    wh_ori+=f" AND filepath LIKE {fipa}"
                     id_list=fm.db.get_data_from_table(origin_map,"id",wh_ori)
                     if len(id_list)==1:
                         fm.db.delete_data_from_table(db_map_pair[1],f"id={id_list[0][0]}")
@@ -519,4 +521,4 @@ class BackupActions():
             if not was_removed:
                 msg=msg + f'[red]\t({data[0]}) {filepath} was not Removed!!\n'
         return msg
-    
+      
