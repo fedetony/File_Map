@@ -698,7 +698,7 @@ class MappingActions():
         """
         # print('Tree') #db_map_pair)
         fs=None
-        fs=self.map_to_file_structure(db_map_pair[0],db_map_pair[1],where=where,fields_to_tab=['id'],sort_by=None,ascending=True)
+        fs=self.map_to_file_structure(db_map_pair[0],db_map_pair[1],where=where,fields_to_tab=['id'],sort_by=["filepath"],ascending=True)
         if len(fs)>0:
             f_e=FileExplorer(None,None,fs)
             if browse_type=='dir':

@@ -1478,6 +1478,8 @@ class TerminalMenuInterface():
         ch=['Select Directories', 'Select Files','Select Search','Cancel']
         sel_files=[]
         db_map_pair=self.menu_select_database_map()
+        if not db_map_pair:
+            return sel_files
         scr_is_active,scr_mount = self.ba.verify_map_device_active(db_map_pair)
         if not scr_is_active:
             print(f"No active mount for {db_map_pair}")
@@ -1494,17 +1496,19 @@ class TerminalMenuInterface():
         print("----------")
         answers = inquirer.prompt(menu)
         if answers['sorting']=='Select Directories':
-            _,trace_list=self.cma.browse_file_directories(db_map_pair,'dir_multiple')
-            for trace in trace_list:
-                sel_files.append((os.path.join(scr_mount,trace),'dir','',None)) 
-            # return sel_files
+            ans=self.cma.browse_file_directories(db_map_pair,'dir_multiple')
+            if ans is not None and not isinstance(ans,str):
+                (_,trace_list)=ans
+                for trace in trace_list:
+                    sel_files.append((os.path.join(scr_mount,trace),'dir','',None)) 
         elif answers['sorting']=='Select Files':
-            selected_db_map_pair_list, _, data=self.cma.browse_file_directories(db_map_pair,'file_multiple')
-            # data ->filepath'=2	'filename'=3	
-            if len(selected_db_map_pair_list)>0:
-                for ddd in data[0]:
-                    sel_files.append((os.path.join(scr_mount,ddd[2],ddd[3]),'file','',None))
-            # return selected_files
+            ans=self.cma.browse_file_directories(db_map_pair,'file_multiple')
+            if ans is not None and not isinstance(ans,str):
+                (selected_db_map_pair_list, _, data)=ans
+                # data ->filepath'=2	'filename'=3	
+                if len(selected_db_map_pair_list)>0:
+                    for ddd in data[0]:
+                        sel_files.append((os.path.join(scr_mount,ddd[2],ddd[3]),'file','',None))
         elif answers['sorting']=='Select Search':
             (ans_txt, msg, is_valid)=A_C.get_sql_input()
             if is_valid:

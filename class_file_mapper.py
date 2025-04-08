@@ -371,10 +371,16 @@ class FileMapper:
                 if field not in default and field in field_list:
                     fields2tab.append(field)
         # df = d_m1.get_selected_df(fields_to_tab=fields2tab, sort_by=sort_by, ascending=ascending)
+        mappath=map_info[0][3]
+        
         df = d_m1.get_selected_df(fields_to_tab=field_list, sort_by=sort_by, ascending=ascending)
         map_list = []
         fi_ma = FileManipulate()
         df_length=df["filename"].size
+        in_all_paths, df = self._modify_df_for_filestructure(df,mappath)
+        last_filepath=None
+        is_tup_list=False
+        f_tup_list=[]
         for iii, (filepath, filename, size) in enumerate(zip(df["filepath"], df["filename"], df["size"])):
             # print(f"{filepath} - {filename}, Size: {size}")
             file_tuple = (filename, size)
@@ -389,16 +395,54 @@ class FileMapper:
                 dict2 = fi_ma.path_to_file_structure_dict(filepath, file_tuple)
                 map_list = fi_ma.merge_file_structure_dicts(dict1, dict2)
             else:
-                dict3 = fi_ma.path_to_file_structure_dict(filepath, file_tuple)
-                map_list = fi_ma.merge_file_structure_lists(map_list, [dict3])
+                # same path -> add to list
+                if last_filepath==filepath:
+                    f_tup_list=f_tup_list+[file_tuple]
+                    last_filepath=filepath
+                    is_tup_list=True
+                if last_filepath!=filepath and is_tup_list:
+                    dict3 = fi_ma.path_to_file_structure_dict(last_filepath, f_tup_list, True)
+                    map_list = fi_ma.merge_file_structure_lists(map_list, [dict3])
+                    is_tup_list=False
+                    f_tup_list=[]
+                if last_filepath!=filepath and not is_tup_list:
+                    dict3 = fi_ma.path_to_file_structure_dict(filepath, file_tuple)
+                    map_list = fi_ma.merge_file_structure_lists(map_list, [dict3])
+                    last_filepath=filepath
+                    is_tup_list=False
+                    f_tup_list=[]
+        # add final ones in case same filepath
+        if len(f_tup_list)>0:
+            dict3 = fi_ma.path_to_file_structure_dict(last_filepath, f_tup_list, True)
+            map_list = fi_ma.merge_file_structure_lists(map_list, [dict3])            
+
         # mappath = map_info[0][3]
         # file_struct = {mappath: map_list}
         # return file_struct
+        if in_all_paths:
+            dict1 = fi_ma.path_to_file_structure_dict(mappath,map_list,True)
+            return {map_info[0][3]: [dict1]}        
         return {map_info[0][3]: map_list}
 
     # def file_structure_to_map(self, table_name):
     #     # this may not have sense since lacks information
     #     pass
+
+    @staticmethod
+    def _modify_df_for_filestructure(df,mappath:str): #,fi_ma:FileManipulate):
+        in_all_paths=True
+        # mappath=fi_ma.fix_separator_in_path(fi_ma.fix_path_separators(mappath),True)
+        for filepath in df["filepath"]:
+            if mappath not in filepath:
+                in_all_paths=False
+                break
+        if in_all_paths:
+            def remove_mappath(path:str):
+                """Sets same separator format for comparison"""
+                # path=fi_ma.fix_separator_in_path(fi_ma.fix_path_separators(path),True)
+                return path.replace(mappath,'')
+            df['filepath'] = df['filepath'].apply(remove_mappath)
+        return in_all_paths, df
 
     def remap_map_in_thread_to_db(self, table_name, progress_bar=None, wait_for_key_press=False):
         """Starts a thread that looks inside the table for '***Calculate***' md5.

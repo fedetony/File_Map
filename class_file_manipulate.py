@@ -19,13 +19,14 @@ class FileManipulate:
         self.file = None
 
     @staticmethod
-    def path_to_file_structure_dict(path:str,file_tup):
+    def path_to_file_structure_dict(path:str,file_tup,set_list:bool=False):
         """Converts a path string in filepath of a map into a file structure dictionary
 
         Args:
             path (str): _description_
             file_tup (any): file contents
-            
+            set_list(bool,optional) Set true for replacing the whole file list, and not only the list content.
+                Defaults to False
         Returns:
             dict: Example: path='/path1/path2/path3'
                         file_tup='file.txt'
@@ -36,10 +37,35 @@ class FileManipulate:
             path=path[:-1]
         path_split=os.path.split(path)
         while len(path_split)==2 and path_split[1]!='':
-            f_s={path_split[1]:[file_tup]}
+            if isinstance(file_tup,list) and set_list:
+                f_s={path_split[1]:file_tup}
+            else:    
+                f_s={path_split[1]:[file_tup]}
             file_tup=f_s
             path_split=os.path.split(path_split[0])
         return file_tup
+    
+    @staticmethod
+    def path_to_list(path:str)->list[str]:
+        """Converts a path string in a list 
+
+        Args:
+            path (str): path to make list
+            
+        Returns:
+            list[str]: path as list separated 
+        """
+        if path.endswith((os.sep,'/',"\\")):
+            path=path[:-1]
+        path_split=os.path.split(path)
+        path_list=[]
+        while len(path_split)==2 and path_split[1]!='':
+            path_list.append(path_split[1])
+            path_split=os.path.split(path_split[0])
+        if len(path_list)==0:
+            return [path]
+        path_list.reverse()
+        return path_list
 
     def merge_file_structure_lists(self,list1:list,list2:list)->list:
         """Merges two file structure lists. will not check for repeated items, will just add them.
