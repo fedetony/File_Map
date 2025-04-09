@@ -350,6 +350,19 @@ class MappingActions():
                 pass
         return output
 
+    def get_map_size(self,database,a_map)->int:
+        """Returns the number of items in a map
+
+        Args:
+            database (str): database
+            a_map (str): Table name
+
+        Returns:
+            int: number of rows
+        """
+        fm=self.get_file_map(database)
+        return fm.db.get_number_or_rows_in_table(a_map)
+
     def get_map_info(self,database,a_map):
         """returns the map table information
 
@@ -1011,6 +1024,108 @@ class MappingActions():
             print(f'Something Wrong:{eee}')
             fm.delete_map(new_tablename)
         return msg
+    
+    def create_new_map_from_selected_list(self,sel_files:list,selected_db):
+        """Get sorted map from selection list of files
+
+        Args:
+            sel_files (list[str]): list of files or paths selected
+            selected_db (_type_): database to include the map
+
+        Returns:
+            str: message
+        """
+        # sel_files =list tuple 'Source','Type','Operation','Objective'
+        fm=self.get_file_map(selected_db)
+        def get_mount(path:str):
+            """Gets mount for dataframe"""
+            splited=F_M.split_filepath_and_mountpoint(path)
+            return splited[0]
+        def rm_mount(path:str):
+            """Gets path without mount for dataframe"""
+            splited=F_M.split_filepath_and_mountpoint(path)
+            return splited[1]
+        fields=['Source','Type','Operation','Objective']
+        sf_dm=DataManage(sel_files,fields)
+        sf_dm.df['Operation']=sf_dm.df['Source'].apply(get_mount)
+        sf_dm.df['Objective']=sf_dm.df['Source'].apply(rm_mount)
+        mount_set=set(sf_dm.df['Operation'])
+        shallow=self.ask_confirmation(f"Would you like a {A_C.add_ansi('Shallow','hblue')} map?",False)
+        files_processed=1
+        for a_mount in mount_set:
+            common_path=self._find_common_path(list(sf_dm.df['Source']),a_mount)
+            tablename=self.format_new_table_name('%_!',common_path)
+            # print(f'[green]Selected path:{common_path}')
+            # print(f'[yellow]Replacements: % (Date_Time), # (Date), ? (Time), & (Dir), ! (Full_Path) ')
+            # tablename=self.menu_get_table_name_input(tablename)
+            tablename=self.format_new_table_name(tablename,common_path)
+            for file_or_path,fp_type,mount,dirpath in zip(sf_dm.df['Source'],sf_dm.df['Type'],sf_dm.df['Operation'],sf_dm.df['Objective']):   
+                if fp_type == 'dir' and mount==a_mount:
+                    if tablename not in ['',None]:   
+                        fm.db.create_connection()    
+                        fm.map_a_path_to_db(tablename,file_or_path,True,shallow_map=shallow,press_to_continue=False)
+                        # set map type
+                        fm.db.edit_value_in_table(fm.mapper_reference_table,fm.get_table_id(tablename),'maptype',MAP_TYPES_LIST[5])
+                if fp_type == 'file' and mount==a_mount:
+                    if tablename not in fm.db.tables_in_db():
+                        fm.add_table_to_mapper_index(tablename, os.path.join(mount,common_path),MAP_TYPES_LIST[5])
+                        fm._create_map_in_db(tablename)
+                    if tablename in fm.db.tables_in_db():
+                        dp=F_M.extract_parent_path(file_or_path,False)
+                        if file_or_path[-1:] in ['\\','/',os.sep]:
+                            fff=F_M.extract_filename(file_or_path[:-1],True)
+                        else:
+                            fff=F_M.extract_filename(file_or_path,True)
+                        line_data_tup = fm.get_mapping_info_data_from_file(
+                        mount, dp, fff, True, f"{files_processed}. ", shallow)
+                        files_processed+=1
+                        fm.db.insert_data_to_table(tablename,[line_data_tup])
+        return ''
+    
+    @staticmethod
+    def _find_common_path(file_list,mount=None):
+        if mount:
+            nfl=[]
+            for file in file_list:
+                if mount in file:
+                    nfl.append(file)
+        else:
+            nfl=file_list
+        for iii, filepath in enumerate(nfl):
+            if iii == 0:
+                dict1 = F_M.path_to_file_structure_dict(filepath,"")
+                map_list = [dict1]
+            elif iii == 1:
+                dict2 = F_M.path_to_file_structure_dict(filepath, "")
+                map_list = F_M.merge_file_structure_dicts(dict1, dict2)
+            else:
+                dict3 = F_M.path_to_file_structure_dict(filepath, "")
+                map_list = F_M.merge_file_structure_lists(map_list, [dict3])
+        
+        def _get_depth_level(map_list,level=0):
+            if isinstance(map_list,(list,dict)):
+                if len(map_list)==1:
+                    if isinstance(map_list,list):
+                        return _get_depth_level(map_list[0],level+1)
+                    return _get_depth_level(map_list[list(map_list.keys())[0]],level+1)
+                else:
+                    return level
+            return level
+        def _get_depth_string(map_list,end_level,a_path:list,level=0):
+            if isinstance(map_list,(list,dict)):
+                if len(map_list)==1 and level<=end_level:
+                    if isinstance(map_list,dict):
+                        a_path.append(list(map_list.keys())[0])
+                        return _get_depth_string(map_list[list(map_list.keys())[0]],end_level,a_path,level+1)
+                    return _get_depth_string(map_list[0],end_level,a_path,level+1)
+            return a_path
+        
+        end_level=_get_depth_level(map_list)
+        a_path=_get_depth_string(map_list,end_level,[])
+        if len(a_path)>0:
+            return F_M.fix_separator_in_path(os.sep.join(a_path),False)
+        return os.sep
+
 
 
 if __name__ == '__main__':

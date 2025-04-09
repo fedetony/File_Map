@@ -149,9 +149,16 @@ class FileManipulate:
         dev_mount=self.get_mounted_disks()
         dm_path_list=['',path]
         for dm in dev_mount:
-            if dm[0] in path:
+            dmstr=str(dm[0])
+            if dm[0] in path: 
                 dm_path_list=path.split(dm[0])
                 dm_path_list[0]=dm[0]
+            elif dmstr.upper() in path: 
+                dm_path_list=path.split(dmstr.upper())
+                dm_path_list[0]=dmstr.upper()
+            elif dmstr.lower() in path: 
+                dm_path_list=path.split(dmstr.lower())
+                dm_path_list[0]=dmstr.lower()
             elif dm[1] in path and dm[0]!=dm[1]:
                 dm_path_list=path.split(dm[1])
                 dm_path_list[0]=dm[1]

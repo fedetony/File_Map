@@ -656,15 +656,16 @@ class TerminalMenuInterface():
             end_list=[]
             for database,a_map in db_map_pair_list:
                 map_info=self.cma.get_map_info(database,a_map)
+                num_rows=self.cma.get_map_size(database,a_map)
                 if len(map_info)>0:
-                    end_list.append(map_info[0]+(database,))
+                    end_list.append(map_info[0]+(database,num_rows))
                 else:
                     print(f"Table {a_map} not in Reference table!!")
                     print("Press any key to continue")
                     A_C.wait_key_press()
 
-            d_m1=DataManage(end_list,field_list+["db"])
-            str_db_map=d_m1.get_tabulated_fields(fields_to_tab=['tablename','mount','mappath',"db"],index=False,justify='left',header=False)
+            d_m1=DataManage(end_list,field_list+["db","items"])
+            str_db_map=d_m1.get_tabulated_fields(fields_to_tab=['tablename','mount','mappath',"db","items"],index=False,justify='left',header=False)
             str_list=str_db_map.split('\n')
             map_list=str_list
             #map_list=[]
@@ -1377,7 +1378,7 @@ class TerminalMenuInterface():
     def menu_sort_files(self):
         """Interactive menu for sorting files"""
         msg=''
-        ch=['Select active Files/Directories', 'Select Mapped Files/Directories','Deselect Files/Directories','Process Selection','Back']
+        ch=['Select active Files/Directories', 'Select Mapped Files/Directories','Deselect Files/Directories','Selection to Map','Process Selection','Back']
         sel_files=[]
         while True:
             os.system('cls' if os.name == 'nt' else 'clear')
@@ -1399,12 +1400,11 @@ class TerminalMenuInterface():
             answers = inquirer.prompt(menu)
             if answers['sorting']=='Select active Files/Directories':
                 sel_files=self.menu_select_active_files_directories_sorting(sel_files)
-                
             elif answers['sorting']=='Select Mapped Files/Directories':
                 if len(self.cma.active_databases)==0:
                     msg='[magenta]There are no active databases![\magenta]'
                 else:
-                    sel_files=self.menu_select_mapped_files_directories_sorting(sel_files)
+                    sel_files,msg = self.menu_select_mapped_files_directories_sorting(sel_files)
             elif answers['sorting']=='Process Selection':
                 if len(sel_files)==0:
                     msg = 'Select some Files or directories first'
@@ -1412,11 +1412,25 @@ class TerminalMenuInterface():
                     msg=''
             elif answers['sorting']=='Deselect Files/Directories':
                 sel_files=self.menu_remove_selected_files_directories_sorting(sel_files)
+            elif answers['sorting']=='Selection to Map':
+                msg=self.menu_create_new_map_from_selected_list(sel_files)
             elif answers['sorting']=='Back':
                 if len(sel_files)==0:
                     return ''
                 if self.ask_confirmation(f"Dissmiss {len(sel_files)} selected files?",False):
                     return ''
+
+    def menu_create_new_map_from_selected_list(self,sel_files):
+        """New map from selection"""
+        os.system('cls' if os.name == 'nt' else 'clear')
+        print(MENU_HEADER)
+        print("Create New Map:")
+        print("----------")
+        selected_db=self.menu_select_database(True)
+        if selected_db and selected_db != '': 
+            # sel_files =list tuple 'Source','Type','Operation','Objective'
+            return self.cma.create_new_map_from_selected_list(sel_files,selected_db)
+        return ''
 
     def menu_remove_selected_files_directories_sorting(self,sel_files):
         """Removes a database from the file_list
@@ -1479,11 +1493,11 @@ class TerminalMenuInterface():
         sel_files=[]
         db_map_pair=self.menu_select_database_map()
         if not db_map_pair:
-            return sel_files
+            return sel_files, 'No database or map'
         scr_is_active,scr_mount = self.ba.verify_map_device_active(db_map_pair)
         if not scr_is_active:
-            print(f"No active mount for {db_map_pair}")
-            return sel_files
+            # print(f"No active mount for {db_map_pair}")
+            return sel_files, f"No active mount for {db_map_pair}"
         os.system('cls' if os.name == 'nt' else 'clear')
         menu = [inquirer.List(
         'sorting',
@@ -1532,7 +1546,7 @@ class TerminalMenuInterface():
                                 sel_files.append((ddd,'file','',None))
         # elif answers['sorting']=='Cancel':
         #     return sel_files
-        return sel_files
+        return sel_files, ''
             
 
     def menu_select_active_files_directories_sorting(self,sel_files:list)->list:

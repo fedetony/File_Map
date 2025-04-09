@@ -33,7 +33,7 @@ MD5_CALC = "***Calculate***"
 MD5_SHALLOW = "***Shallow***"
 DATA_ADVANCE = 50  # gather 50 records before writting to db
 SINGLE_MULTIPLE_SEARCH = 15  # use single search or generalized search limit
-MAP_TYPES_LIST=["Device Map","Selection Map","Backup Map","Remove","Keep"]
+MAP_TYPES_LIST=["Device Map","Selection Map","Backup Map","Remove","Keep","Sorted Map"]
 
 class FileMapper:
     """Class for Mapping functions in a specific database"""
@@ -347,6 +347,7 @@ class FileMapper:
         Returns:
             dict: filestruct of map
         """
+        start=datetime.now()
         # field list in map
         # id=0	dt_data_created'=1	'dt_data_modified'=2	'filepath'=3	'filename'=4	'md5'=5	'size'=6
         # 'dt_file_created'=7	'dt_file_accessed'=8	'dt_file_modified'=9
@@ -381,8 +382,9 @@ class FileMapper:
         last_filepath=None
         is_tup_list=False
         f_tup_list=[]
+        # map_list=self.map_to_folder_structure(df) # does not save time
+        print("Mapping Files to file structure:")
         for iii, (filepath, filename, size) in enumerate(zip(df["filepath"], df["filename"], df["size"])):
-            # print(f"{filepath} - {filename}, Size: {size}")
             file_tuple = (filename, size)
             A_C.print_cycle(iii,df_length)
             # Add more info to the tuple
@@ -419,11 +421,43 @@ class FileMapper:
         # mappath = map_info[0][3]
         # file_struct = {mappath: map_list}
         # return file_struct
+        print(f'Time elapsed: {self.calculate_time_elapsed(start,datetime.now())} s')
         if in_all_paths:
             dict1 = fi_ma.path_to_file_structure_dict(mappath,map_list,True)
             return {map_info[0][3]: [dict1]}        
         return {map_info[0][3]: map_list}
 
+    def map_to_folder_structure(self, df) -> list:
+        """Generates a folder only file structure from map information
+
+        Args:
+            df (datafram): dataframe from database manage
+            a_map (str): table in database
+            
+        Returns:
+            list: folder only filestruct of map
+        """
+        map_list = []
+        fi_ma = FileManipulate()
+        path_set=set(list(df["filepath"]))
+        lenpathset=len(path_set)
+        print("Mapping Folders to file structure:")
+        for iii, filepath in enumerate(path_set):
+            # print(f"{filepath} - {filename}, Size: {size}")
+            A_C.print_cycle(iii,lenpathset)
+            # Add more info to the tuple
+            if iii == 0:
+                dict1 = fi_ma.path_to_file_structure_dict(filepath, [], True)
+                map_list = [dict1]
+            elif iii == 1:
+                dict2 = fi_ma.path_to_file_structure_dict(filepath, [], True)
+                map_list = fi_ma.merge_file_structure_dicts(dict1, dict2)
+            else:
+                dict3 = fi_ma.path_to_file_structure_dict(filepath, [], True)
+                map_list = fi_ma.merge_file_structure_lists(map_list, [dict3])
+        # return file_struct
+        return map_list
+    
     # def file_structure_to_map(self, table_name):
     #     # this may not have sense since lacks information
     #     pass
@@ -719,7 +753,7 @@ class FileMapper:
 
         Args:
             mount (str): the mount
-            dirpath (str): the path (no mount)
+            dirpath (str): the path with mount
             file (str): the file
             log_print (bool, optional): If you want to print. Defaults to False.
             count_print (int | str, optional): If you want to print the count. Defaults to ''.
