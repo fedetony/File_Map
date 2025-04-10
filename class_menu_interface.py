@@ -254,7 +254,23 @@ class TerminalMenuInterface():
             if selected_db and selected_db != '': 
                 return self.cma.clone_map(db_map_pair,selected_db)
         return ''
-        
+
+    def menu_enter_file(self):
+        """Asks selection of a file with autocomplete.
+
+        Returns:
+            tuple: file_available, file_user
+        """
+        input_file = AutocompletePathFile('return string [cyan]ENTER[/cyan], Autofill path/file [cyan]TAB[/cyan], Cancel [cyan]ESC[/cyan]\nOr type complete path to file: ',
+                                        F_M.get_app_path(),absolute_path=False,verbose=True).get_input
+        file_user = input_file()
+        if not file_user:
+            return False, file_user
+        file_exist, is_file = F_M.validate_path_file(file_user)
+        file_available=False
+        if file_exist and is_file:
+            file_available=True
+        return file_available, file_user    
 
     def menu_enter_path(self):
         """Asks selection of a directory and returns if the selected path/input is an available directory and the path user input.
@@ -289,7 +305,7 @@ class TerminalMenuInterface():
         path_user = input_path()
         if path_user in ['',None]:
             return False, None, path_user
-        path_user=F_M.fix_separator_in_path(path_user)
+        # path_user=F_M.fix_separator_in_path(path_user)
         file_exist, is_file = F_M.validate_path_file(path_user)
         return file_exist, is_file, path_user
 
@@ -584,11 +600,11 @@ class TerminalMenuInterface():
                         getch()
         return ''
 
-    def menu_get_table_name_input(self,default=None):
+    def menu_get_table_name_input(self,default=None,message="(Leave blank to exit) Type the new table Name"):
         tablename=''
         menu = [inquirer.Text(
                 'table_name',
-                message="(Leave blank to exit) Type the new table Name",
+                message=message,
                 default=default,
                 validate=self.map_validation,
                 )]
@@ -1378,7 +1394,13 @@ class TerminalMenuInterface():
     def menu_sort_files(self):
         """Interactive menu for sorting files"""
         msg=''
-        ch=['Select active Files/Directories', 'Select Mapped Files/Directories','Deselect Files/Directories','Selection to Map','Process Selection','Back']
+        ch=['Select active Files/Directories', 
+            'Select Mapped Files/Directories',
+            'Deselect Files/Directories',
+            'Selection to Map',
+            'Save Selection to File',
+            'Load Selection from File',
+            'Process Selection','Back']
         sel_files=[]
         while True:
             os.system('cls' if os.name == 'nt' else 'clear')
@@ -1414,6 +1436,41 @@ class TerminalMenuInterface():
                 sel_files=self.menu_remove_selected_files_directories_sorting(sel_files)
             elif answers['sorting']=='Selection to Map':
                 msg=self.menu_create_new_map_from_selected_list(sel_files)
+            elif answers['sorting']=='Save Selection to File':
+                print("Please select a Directory to save the file")
+                dir_available,path_user=self.menu_get_a_directory(True)
+                if dir_available:
+                    file=self.menu_get_table_name_input(None,"(Leave blank to exit) Type the new File Name")
+                    file=F_M.clean_filename(file)
+                    pathname=os.path.join(path_user,file)
+                    fn_ne=F_M.extract_filename(pathname,False)
+                    fn_we=F_M.extract_filename(pathname,True)
+                    filename=pathname.replace(fn_we,fn_ne+'.json')
+                    file_exists,is_file=F_M.validate_path_file(filename)
+                    if file_exists and is_file:
+                        if not self.ask_confirmation(f"{filename} already exist, overwrite?"):
+                            msg = f'File {filename} exist. Not Overwriten!'
+                    if not file_exists:    
+                        selfiles_dict={'Selected Files':sel_files}
+                        F_M.save_dict_to_json(filename,selfiles_dict)
+                        msg= f'Successfuly saved File {filename}'
+            elif answers['sorting']=='Load Selection from File':
+                file_available, file_user=self.menu_enter_file()
+                if file_available:
+                    
+                    try:
+                        selfiles_dict=F_M.load_dict_to_json(file_user)
+                        print(f"Loaded {len(selfiles_dict['Selected Files'])} files or directories")
+                        selfiles_dict=F_M.repair_list_tuple_in_file_structure(selfiles_dict)
+                    except (TypeError,KeyError,ValueError):
+                        msg = f'[red]Wrong file Format in {file_user}'
+                    if len(sel_files)>0:
+                        if self.ask_confirmation(f"{A_C.add_ansi('Yes','yellow')} to replace selection, {A_C.add_ansi('No','yellow')} to append files to selection,",False):
+                            sel_files=selfiles_dict['Selected Files']
+                        else:
+                            sel_files+=selfiles_dict['Selected Files']
+                    else:
+                        sel_files+=selfiles_dict['Selected Files']
             elif answers['sorting']=='Back':
                 if len(sel_files)==0:
                     return ''
@@ -1424,7 +1481,7 @@ class TerminalMenuInterface():
         """New map from selection"""
         os.system('cls' if os.name == 'nt' else 'clear')
         print(MENU_HEADER)
-        print("Create New Map:")
+        print("Create New Sorted Map:")
         print("----------")
         selected_db=self.menu_select_database(True)
         if selected_db and selected_db != '': 
@@ -1558,7 +1615,7 @@ class TerminalMenuInterface():
         Returns:
             list: appends selected files
         """
-        file_exist, is_file, path_user=self.menu_enter_path_or_file()
+        file_exist, is_file, path_user=self.menu_enter_path_or_file(False,False)
         if file_exist:
             if is_file:
                 sel_files.append((path_user,'file','',None))

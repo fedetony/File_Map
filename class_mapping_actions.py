@@ -1052,13 +1052,15 @@ class MappingActions():
         mount_set=set(sf_dm.df['Operation'])
         shallow=self.ask_confirmation(f"Would you like a {A_C.add_ansi('Shallow','hblue')} map?",False)
         files_processed=1
-        for a_mount in mount_set:
-            common_path=self._find_common_path(list(sf_dm.df['Source']),a_mount)
-            tablename=self.format_new_table_name('%_!',common_path)
+        selection_name=str(datetime.now()).replace(" ","_").replace("-","").replace(":","").replace(".","")
+        selection_name=selection_name+"_sorting_"
+        for mmm,a_mount in enumerate(mount_set):
+            common_path=self._find_common_path(list(sf_dm.df['Source']),list(sf_dm.df['Type']),a_mount)
+            tablename=self.format_new_table_name(selection_name+str(mmm),common_path)
             # print(f'[green]Selected path:{common_path}')
             # print(f'[yellow]Replacements: % (Date_Time), # (Date), ? (Time), & (Dir), ! (Full_Path) ')
             # tablename=self.menu_get_table_name_input(tablename)
-            tablename=self.format_new_table_name(tablename,common_path)
+            # tablename=self.format_new_table_name(tablename,common_path)
             for file_or_path,fp_type,mount,dirpath in zip(sf_dm.df['Source'],sf_dm.df['Type'],sf_dm.df['Operation'],sf_dm.df['Objective']):   
                 if fp_type == 'dir' and mount==a_mount:
                     if tablename not in ['',None]:   
@@ -1083,23 +1085,31 @@ class MappingActions():
         return ''
     
     @staticmethod
-    def _find_common_path(file_list,mount=None):
+    def _find_common_path(file_list,type_list,mount=None):
         if mount:
             nfl=[]
-            for file in file_list:
+            tfl=[]
+            for file,atype in zip(file_list,type_list):
                 if mount in file:
                     nfl.append(file)
+                    tfl.append(atype)
         else:
             nfl=file_list
-        for iii, filepath in enumerate(nfl):
+            tfl=type_list
+        for iii, (filepath,atype) in enumerate(zip(nfl,tfl)):
+            if tfl=='dir':
+                fn=''
+            else:
+                fn=F_M.extract_filename(filepath,True)
+                filepath=F_M.extract_path(filepath,True)
             if iii == 0:
-                dict1 = F_M.path_to_file_structure_dict(filepath,"")
+                dict1 = F_M.path_to_file_structure_dict(filepath,fn)
                 map_list = [dict1]
             elif iii == 1:
-                dict2 = F_M.path_to_file_structure_dict(filepath, "")
+                dict2 = F_M.path_to_file_structure_dict(filepath, fn)
                 map_list = F_M.merge_file_structure_dicts(dict1, dict2)
             else:
-                dict3 = F_M.path_to_file_structure_dict(filepath, "")
+                dict3 = F_M.path_to_file_structure_dict(filepath, fn)
                 map_list = F_M.merge_file_structure_lists(map_list, [dict3])
         
         def _get_depth_level(map_list,level=0):

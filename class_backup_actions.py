@@ -477,11 +477,13 @@ class BackupActions():
     
     def remove_selection_files_from_mount(self,db_map_pair,remove_from_origin:bool=True,where:str=None):   
         """Removes a file and its map reference"""
-        map_info=self.get_map_info(db_map_pair[0],db_map_pair[1])
+        map_info=self.cma.get_map_info(db_map_pair[0],db_map_pair[1])
         if map_info[0][8] in [MAP_TYPES_LIST[0],MAP_TYPES_LIST[2]]:
             return f"{db_map_pair[1]} is not a selection map!"
         origin_map=map_info[0][7] 
-        if (db_map_pair[0],origin_map) not in self.cma.get_maps_by_type([MAP_TYPES_LIST[0],MAP_TYPES_LIST[2]]):
+        if map_info[0][8]==MAP_TYPES_LIST[5]: # Sorted Maps 
+            origin_map=db_map_pair[1]
+        if (db_map_pair[0],origin_map) not in self.cma.get_maps_by_type([MAP_TYPES_LIST[0],MAP_TYPES_LIST[2],MAP_TYPES_LIST[5]]):
             return f"Can't find {(db_map_pair[0],origin_map)} origin map!"
         # check mount exist
         fm=self.cma.get_file_map(db_map_pair[0])
