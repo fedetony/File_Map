@@ -689,7 +689,8 @@ class FileMapper:
             if press_to_continue:
                 print("@" * 100, "\nPress any Key to continue\n", "@" * 100)
                 getch()
-        return f"[red]Error Mapping: {eee}"
+            return f"[red]Error Mapping: {eee}"
+        return ''
 
     @staticmethod
     def count_files_in_path(path):
