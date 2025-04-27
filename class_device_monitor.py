@@ -222,9 +222,9 @@ class DeviceMonitor:
                 #print(f"Using {disk.device} psutil: {serials}")
                 time.sleep(self.time_delay_s) #windows is slow to query. If asked too fast responds unknown
                 if platform.system() == 'Windows':
-                    devices.append([disk.device,serials])
+                    devices.append([disk.device,str(serials)])
                 elif platform.system() == 'Linux':
-                    devices.append([disk.mountpoint,serials])
+                    devices.append([disk.mountpoint,str(serials)])
         self.devices=devices
         return devices
     
@@ -238,7 +238,7 @@ class DeviceMonitor:
         devices=[]
         for device,serial in self.devices:
             if serial:
-                devices.append([device,serial])
+                devices.append([device,str(serial)])
             else:
 
                 if platform.system() == 'Darwin':  # macOS
@@ -248,7 +248,7 @@ class DeviceMonitor:
                     # Windows
                     time.sleep(self.time_delay_s) #windows is slow to query. If asked too fast responds unknown
                     serial_2=self.get_serial_number(device)  
-                    devices.append([device,serial_2])
+                    devices.append([device,str(serial_2)])
                 self.devices=devices
         return devices
 

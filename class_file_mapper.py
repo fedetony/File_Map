@@ -1062,7 +1062,7 @@ class FileMapper:
         for dev in devices:
             if dev[1]:
                 serial_list.append(dev[1])
-        close = difflib.get_close_matches(serial, serial_list, n=3, cutoff=0.9)
+        close = difflib.get_close_matches(str(serial), serial_list, n=3, cutoff=0.9)
         if len(close) > 0:
             return close[0]
         return None
