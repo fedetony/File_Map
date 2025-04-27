@@ -659,10 +659,12 @@ class MappingActions():
         {'md5sum': {'all': [id1,... idN], 'remove': [id1], 'keep': [id2]}}
         """
         rem_keep_dict={}
-        for dup_tup in duplicte_list:
+        lendlist=len(duplicte_list)
+        for iii, dup_tup in enumerate(duplicte_list):
             remove=[]
             keep=[]
             all_ids=[]
+            A_C.print_cycle(iii,lendlist)
             # add all to keep
             for dupli_dict in dup_tup:
                 all_ids.append(dupli_dict['id'])
@@ -722,7 +724,7 @@ class MappingActions():
                 node_list=f_e.select_multiple_folders(my_style_dir_expand_size,None,f"Browse and select directories from {A_C.add_ansi(db_map_pair[1],'cyan')}")
                 trace_list=[]
                 for node in node_list:
-                    trace=f_e.t_v.trace_path(node,[0],True)
+                    trace=f_e.t_v.trace_path(node,[0,1],True)
                     trace_list.append(os.sep.join(trace))
                 return node_list,trace_list
             elif browse_type=='file_multiple':

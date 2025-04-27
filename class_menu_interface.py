@@ -501,6 +501,7 @@ class TerminalMenuInterface():
         if selected_db and selected_db != '':    
             dir_available, path_to_map = self.menu_enter_path()
             if dir_available and path_to_map:
+                path_to_map=path_to_map.replace('//','/')
                 print(f'[green]Selected path:{path_to_map}')
                 print(f'[yellow]Replacements: % (Date_Time), # (Date), ? (Time), & (Dir), ! (Full_Path) ') 
                 tablename=self.menu_get_table_name_input()
@@ -1027,41 +1028,44 @@ class TerminalMenuInterface():
                 # rrr=len(d_list) % amount_per_show # remainder
                 for part in range(lll+1):
                     m_list=self.list_select(d_list,part*amount_per_show,(part+1)*amount_per_show)
+                    message=f"Select files {A_C.add_ansi(f'{(part)*amount_per_show}-{(part+1)*amount_per_show}','green')} of {A_C.add_ansi(f'{len(d_list)}','hgreen')}"
                     if selection_type=='repeated':
-                        selected_items=self.menu_make_selection(m_list,'exlast') #,'none')
+                        selected_items=self.menu_make_selection(m_list,'exlast',message) #,'none')
                     else:
-                        selected_items=self.menu_make_selection(m_list,'none')
-                    
+                        selected_items=self.menu_make_selection(m_list,'none', message)
+                    if not selected_items:
+                        selected_items=[]
                     if isinstance(selected_items,list):
                         if len(selected_items)==0:
-                            if not self.ask_confirmation("Continue Selection?",True):
+                            if not self.ask_confirmation("No item selected. Continue Selection?",True):
                                 return 'User Cancel'
-                        all_selected.append(selected_items)
+                        all_selected+=selected_items
                     else:
                         return ''
-            
-            all_id_list=self._get_id_list_from_rem_keep_dict(selected_items,d_list,a_key='all')
+            rem_keep_dict=self.cma.get_remove_keep_dict(selected_items,d_list)
+            all_id_list=self._get_id_list_from_rem_keep_dict(selected_items,d_list,a_key='all',rem_keep_dict=rem_keep_dict)
             inmap_size=self.cma.get_size_of_file_selection(db_map_pair,all_id_list)
             print(f"Selected {len(all_selected)} items of {len(all_id_list)}")
-            rem_id_list=self._get_id_list_from_rem_keep_dict(selected_items,d_list,a_key='remove')
+            rem_id_list=self._get_id_list_from_rem_keep_dict(selected_items,d_list,a_key='remove',rem_keep_dict=rem_keep_dict)
             total_size=self.cma.get_size_of_file_selection(db_map_pair,rem_id_list)
             print(f"Selected for removal {F_M.get_size_str_formatted(total_size,11,False)} from {F_M.get_size_str_formatted(inmap_size,11,False)}")
             print("Press any key to continue")
             A_C.wait_key_press()
             return self.menu_duplicate_removal_confirmation(all_selected,d_list,db_map_pair)
 
-    def _get_id_list_from_rem_keep_dict(self,selected_items,d_list,a_key='remove'):
+    def _get_id_list_from_rem_keep_dict(self,selected_items,d_list,a_key='remove',rem_keep_dict=None):
         """Gets an id list of items in rem,keep dictionary
 
         Args:
             selected_items (_type_): selected items
             d_list (_type_): duplicate list
             a_key (str, optional): 'remove', 'keep' or 'all'. Defaults to 'remove'.
-
+            rem_keep_dict (dict,optional): pass the dictionary if it was already calculated.
         Returns:
             list: id list of items with a_key
         """
-        rem_keep_dict=self.cma.get_remove_keep_dict(selected_items,d_list)
+        if not rem_keep_dict:
+            rem_keep_dict=self.cma.get_remove_keep_dict(selected_items,d_list)
         id_list=[]
         for _,rem_keep in rem_keep_dict.items():
             id_list=id_list+rem_keep[a_key]
@@ -1100,6 +1104,7 @@ class TerminalMenuInterface():
         Returns:
             str: message
         """
+        print("Structuring remove/keep Dictionary:")
         rem_keep_dict=self.cma.get_remove_keep_dict(selected_items,duplicte_list)
         while len(rem_keep_dict)>0:
             choices_hints = {
@@ -1120,10 +1125,10 @@ class TerminalMenuInterface():
             elif answers['remove_type'] == 'Selection map Remove/Keep': 
                 fm=self.cma.get_file_map(db_map_pair[0])
                 name=self.cma.format_new_table_name("%","")
-                rem_id_list=self._get_id_list_from_rem_keep_dict(selected_items,duplicte_list,'remove')
+                rem_id_list=self._get_id_list_from_rem_keep_dict(selected_items,duplicte_list,'remove',rem_keep_dict)
                 if len (rem_id_list)>0:
                     fm.map_an_id_selection('remove_'+name,db_map_pair[1],rem_id_list,MAP_TYPES_LIST[3])
-                keep_id_list=self._get_id_list_from_rem_keep_dict(selected_items,duplicte_list,'keep')
+                keep_id_list=self._get_id_list_from_rem_keep_dict(selected_items,duplicte_list,'keep',rem_keep_dict)
                 if len (keep_id_list)>0:
                     fm.map_an_id_selection('keep_'+name,db_map_pair[1],keep_id_list,MAP_TYPES_LIST[4])
             elif answers['remove_type'] == 'Remove Selected': 
@@ -1139,7 +1144,7 @@ class TerminalMenuInterface():
             return ''
 
 
-    def menu_make_selection(self,duplicte_list,mark='exlast'):
+    def menu_make_selection(self,duplicte_list,mark='exlast',message="Select files"):
         """Menu to select duplicate files:
 
         Args:
@@ -1163,12 +1168,14 @@ class TerminalMenuInterface():
             menu = [
             inquirer.Checkbox(
                 "file_selection",
-                message="Select files",
+                message=message,
                 choices=choice_hints.keys(),
                 default=default_list,
                 hints=choice_hints
             )]
             answers = inquirer.prompt(menu)
+            if not answers:
+                return None
             return answers['file_selection']
         else:
             print('[green] There are no duplicates :)')
