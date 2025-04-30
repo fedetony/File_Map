@@ -12,6 +12,8 @@ import psutil
 import json
 from rich.progress import Progress
 
+test_vars=vars
+
 ALLOWED_CHARS = 'áéíóúüöäÜÖÄÁÉÍÓÚçÇabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_ -'
 
 class FileManipulate:
@@ -559,7 +561,7 @@ class FileManipulate:
         try:
             # python dictionary with key value pairs
             # create json object from dictionary
-            js = json.dumps(info_dict, default=vars)
+            js = json.dumps(info_dict, default=test_vars) #vars)
             # open file for writing, "w"
 
             with open(filename, "w", encoding="utf-8") as fff:
@@ -568,8 +570,8 @@ class FileManipulate:
                 # close file
                 fff.close()
             return True
-        except (PermissionError, FileExistsError, FileNotFoundError) as e:
-                    print("Json File :%s was not saved", filename)
+        except (PermissionError, FileExistsError, FileNotFoundError, TypeError) as e:
+                    print(f"Json File :{filename} was not saved")
                     print(e)
         return False
     
@@ -594,7 +596,7 @@ class FileManipulate:
                 print(e)
         return None
     
-    def repair_list_tuple_in_file_structure(self,file_structure:dict)->dict:
+    def repair_list_tuple_in_file_structure(self,file_structure:dict,list_to_tuple=True)->dict:
         """ When file struct is imported from json files, load changes tuples into lists, this 
         routine turns back to tuples the lists. 
 
@@ -605,14 +607,24 @@ class FileManipulate:
         """
         fs=file_structure #.copy()
         for key,value in fs.items():
-            if isinstance(value,list):
-                for pos,item in enumerate(value):
-                    if isinstance(item,list):
-                       file_structure[key][pos]=tuple(item) 
-                    elif isinstance(item,tuple):
-                        pass
-                    elif isinstance(item,dict):
-                        file_structure[key][pos]=self.repair_list_tuple_in_file_structure(item)
+            if list_to_tuple:
+                if isinstance(value,list):
+                    for pos,item in enumerate(value):
+                        if isinstance(item,list):
+                           file_structure[key][pos]=tuple(item) 
+                        elif isinstance(item,tuple):
+                            pass
+                        elif isinstance(item,dict):
+                            file_structure[key][pos]=self.repair_list_tuple_in_file_structure(item,list_to_tuple)
+            else:
+                if isinstance(value,tuple):
+                    for pos,item in enumerate(value):
+                        if isinstance(item,list):
+                           pass 
+                        elif isinstance(item,tuple):
+                           file_structure[key][pos]=list(item)
+                        elif isinstance(item,dict):
+                            file_structure[key][pos]=self.repair_list_tuple_in_file_structure(item,list_to_tuple)
         return file_structure
 
     def get_size_str_formatted(self,file_size,o_size=11,is_left_justified=False):

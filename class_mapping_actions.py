@@ -698,6 +698,86 @@ class MappingActions():
         fm=self.get_file_map(database)
         return fm.find_duplicates(a_map)
 
+    def export_map_file_directories(self,db_map_pair,the_file,export_type,where=None,style=None):
+        """_summary_
+
+        Args:
+            db_map_pair (tuple): database map pair
+            the_file (_type_): _description_
+            export_type (str): Type of export 'file','dir','filestructure','list'
+            where (str, optional): where sql for filter. Defaults to None.
+        """
+        fm=self.get_file_map(db_map_pair[0])
+        field_list = fm.db.get_column_list_of_table(db_map_pair[1])
+        # Map info
+        # id=0 'dt_map_created'=1 'dt_map_modified'=2 'mappath'=3 'tablename'=4 'mount'=5 'serial'=6
+        # 'mapname'=7 'maptype'=8
+        map_info = fm.db.get_data_from_table(fm.mapper_reference_table, "*", f"tablename='{db_map_pair[1]}'")
+        if export_type == 'list':
+            info_field_list = fm.db.get_column_list_of_table(fm.mapper_reference_table)
+            if len(map_info) == 0:
+                return 'Could not find Map!'
+            data = fm.db.get_data_from_table(db_map_pair[1], "*", where)
+            try:
+                d_m1 = DataManage(data, field_list)
+            except ValueError:
+                # No data
+                return 'Map is Empty!'
+            df = d_m1.get_selected_df(fields_to_tab=field_list, sort_by=["filepath"],ascending=True)
+            txt_list=[field+'='+str(txt)+'\n' for txt,field in zip(map_info[0],info_field_list)]
+            self._save_text_to_file(the_file,txt_list)
+            df.to_csv(the_file, sep = '|', header = field_list, mode = 'a',index = False)
+            return f'[green]Successfuly saved File {the_file}'
+        fs=None
+        fs=self.map_to_file_structure(db_map_pair[0],db_map_pair[1],where=where,fields_to_tab=['id'],sort_by=["filepath"],ascending=True)
+        if len(fs)>0:
+            if export_type=='filestructure':
+                mod_fs={os.path.join(map_info[0][5],map_info[0][3])+'@'+map_info[0][6]:fs}
+                mod_fs=F_M.repair_list_tuple_in_file_structure(mod_fs,False)
+                if F_M.save_dict_to_json(the_file,dict(fs)):
+                    return f'[green]Successfuly saved File {the_file}'
+                return f'[red]Could NOT save File {the_file}'
+            f_e=FileExplorer(None,None,fs)
+            # choicekey=['file',"dir","filestructure","list"]
+            export_data=[]
+            if export_type=='dir':
+                # f_e.t_v.expand_all_treenodes(True)
+                export_data=f_e.get_tree_view_list('dir',style)
+            elif export_type=='file':
+                # f_e.t_v.expand_all_treenodes(True)
+                export_data=f_e.get_tree_view_list('',style)
+            mod_e_d=[]
+            for iii in export_data:
+                mod_e_d.append(iii+'\n')
+            if self._save_text_to_file(the_file,mod_e_d) and export_type != 'filestructure':
+                return f'[green]Successfuly saved File {the_file}'
+            return f'[red]Could NOT save File {the_file}'
+
+            
+    def _save_text_to_file(self,filename,info_list):
+        """Saves a list of text to a file returns if file was saved
+
+        Args:
+            a_filename (str): file name with path.
+            info_list (list[str]): Information to be saved
+        """
+        #filename = os.path.join(path, fn)
+        try:
+            
+            # open file for writing, "w"
+
+            with open(filename, "w", encoding="utf-8") as fff:
+                # write json object to file
+                fff.writelines(info_list)
+                # close file
+                fff.close()
+            return True
+        except (PermissionError, FileExistsError, FileNotFoundError) as e:
+                    print(f"File :{filename} was not saved")
+                    print(e)
+        return False        
+        
+
     def browse_file_directories(self,db_map_pair,browse_type='file',where=None):
         """browse files or directories
 
@@ -899,7 +979,7 @@ class MappingActions():
                 new_active=fm.active_devices
             elif isinstance(fm,FileMapper) and iii>0:
                 fm.active_devices=new_active    
-        return '[green]Devices Refreshed'
+        return f'[green]Devices Refreshed, Active devices found {fm.active_devices}'
 
     def clone_map(self,db_map_pair:tuple,selected_db:str,return_pair:bool=False):
         """Clones a map in the database"""

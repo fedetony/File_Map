@@ -741,6 +741,7 @@ class TerminalMenuInterface():
         "Search Map": "Search for files in the selected Map",
         "Map Directory Selection": "Make a selection map of selected folders.",
         "Map Files Selection": "Make a selection map of selected Files.",
+        "Export Map": "Save to a file the Directory Tree, File Tree or File Structure",
         "Back": "Go back"}
         ch=list(choices_hints.keys())
         menu = [inquirer.List(
@@ -806,7 +807,61 @@ class TerminalMenuInterface():
                     selections=self.cma.make_selection_maps(selection_name,selected_db_map_pair,data)
                     if selections:
                         return f'[green] Following selection maps built:{selections}'
-                    
+            elif answers['map_process'] == 'Export Map': 
+                msg=self.menu_export_map_tree(db_map_pair)
+
+    def menu_export_map_tree(self,db_map_pair):    
+        """Menu for exporting map"""    
+        msg=''
+        choices_hints = {
+        "Export Tree": "Export to a text file the Map's Files and Directories Tree structure",
+        "Export Directory": "Export to a text file the Map's Directories Tree structure",
+        "Export File Structure": "Export to json Map's File structure",
+        "Export Data List": "Map Columns to csv file",
+        "Back": "Go back"}
+        ch=list(choices_hints.keys())
+        menu = [inquirer.List(
+            'map_export',
+            message="Please select",
+            choices=ch,
+            carousel=False,
+            hints=choices_hints,
+            )]
+        choice_list=[]
+        for aaa in ch:
+            if aaa !="Back":
+                choice_list.append(aaa)
+        while True:
+            if msg !='':
+                print(msg)
+            print("----------")
+            answers = inquirer.prompt(menu)
+            if answers['map_export'] == 'Back':
+                return ''
+            elif answers['map_export'] in choice_list: 
+                print("Please select a Directory to save the file")
+                dir_available,path_user=self.menu_get_a_directory(True)
+                if dir_available:
+                    file=self.menu_get_table_name_input(None,"(Leave blank to exit) Type the new File Name")
+                    file=F_M.clean_filename(file)
+                    pathname=os.path.join(path_user,file)
+                    fn_ne=F_M.extract_filename(pathname,False)
+                    fn_we=F_M.extract_filename(pathname,True)
+                    choicekey=['file',"dir","filestructure","list"]
+                    extension=['.txt',".txt",".json",".csv"]
+                    for a_key,s_ch,ext in zip(choicekey,choice_list,extension):
+                        if answers['map_export']==s_ch:
+                            filename=pathname.replace(fn_we,fn_ne+ext)
+                            file_exists,is_file=F_M.validate_path_file(filename)
+                            if file_exists and is_file:
+                                if not self.ask_confirmation(f"{filename} already exist, overwrite?",False):
+                                    msg = f'File {filename} exist. Not Overwriten!'
+                                else:
+                                    file_exists=False
+                            if not file_exists:
+                                msg=self.cma.export_map_file_directories(db_map_pair,filename,a_key)
+                                return msg
+          
                         
     def menu_process_selection_map(self):
         """Menu for processing a selection map"""
@@ -1235,7 +1290,8 @@ class TerminalMenuInterface():
         """Interactive menu handle databases"""
         msg=''
         ch=['Create New Map', 'Delete Map','Clone Map','Rename Map','Update Map',
-            'Shallow Compare Maps','Deep Compare Maps','Deepen Shallow Map','Continue Mapping','Process Map','Search in Maps','Back']
+            'Shallow Compare Maps','Deep Compare Maps','Deepen Shallow Map',
+            'Continue Mapping','Process Map','Search in Maps','Back']
         in_name='mapping'
         menu = [inquirer.List(
             in_name,

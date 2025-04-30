@@ -84,5 +84,9 @@ def main_debug():
     
 
 if __name__ == '__main__':
-    #main()
-    main_debug()
+    db_path=os.path.join(F_M.get_app_path(),"db_Files")
+    db_name="test_files_db.db"
+    if os.path.exists(os.path.join(db_path,db_name)):
+        main_debug()
+    else:
+        main()

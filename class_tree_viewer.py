@@ -365,7 +365,7 @@ class TreeViewer:
         str_out='\n'.join(tree_list)
         return str_out
     
-    def treenode_to_string_list(self, node:TreeNode, str_out='', level=0, a_filter=None)->str:
+    def treenode_to_string_list(self, node:TreeNode, str_out='', level=0, a_filter=None)->list:
         """Generates a list of strings with a Tree structure.
 
         Args:
@@ -375,7 +375,7 @@ class TreeViewer:
             a_filter (_type_, optional): Filter only folders with 'dir','expand' checks for expand flag in node. Defaults to None.
 
         Returns:
-            str: File tree string 
+            list: File tree list of string 
         """
         tree_list=[]
         if not str_out:

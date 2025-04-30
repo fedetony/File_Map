@@ -347,7 +347,7 @@ class FileExplorer:
             if style=='':
                 pass
             elif not style:
-                self.t_v.call_style=self.my_style
+                self.t_v.call_style=my_style
             else:
                 self.t_v.call_style=style
         tree_list=self.t_v.treenode_to_string_list(self.t_v.main_node,a_filter=a_filter)      
