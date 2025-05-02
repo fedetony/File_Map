@@ -35,7 +35,7 @@ class FileManipulate:
             returns             
             {'path1': [{'path2': [{'path3': ['file.txt']}]}]}
         """
-        if path.endswith((os.sep,'/',"\\")):
+        if path.endswith((os.sep,'/',"\\")) and len(path)>1:
             path=path[:-1]
         path_split=os.path.split(path)
         while len(path_split)==2 and path_split[1]!='':

@@ -424,7 +424,10 @@ class FileMapper:
         print(f'Time elapsed: {self.calculate_time_elapsed(start,datetime.now())} s')
         if in_all_paths:
             dict1 = fi_ma.path_to_file_structure_dict(mappath,map_list,True)
-            return {map_info[0][3]: [dict1]}        
+            if isinstance(dict1,dict):
+                return {map_info[0][3]: [dict1]}  
+            else:
+                return {map_info[0][3]: dict1}      
         return {map_info[0][3]: map_list}
 
     def map_to_folder_structure(self, df) -> list:
@@ -470,7 +473,7 @@ class FileMapper:
             if mappath not in filepath:
                 in_all_paths=False
                 break
-        if in_all_paths:
+        if in_all_paths and mappath not in ['\\','/',os.sep]:
             def remove_mappath(path:str):
                 """Sets same separator format for comparison"""
                 # path=fi_ma.fix_separator_in_path(fi_ma.fix_path_separators(path),True)
