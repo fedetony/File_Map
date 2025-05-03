@@ -10,9 +10,8 @@ from datetime import datetime
 import shutil
 import psutil
 import json
+import numpy as np
 from rich.progress import Progress
-
-test_vars=vars
 
 ALLOWED_CHARS = 'áéíóúüöäÜÖÄÁÉÍÓÚçÇabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_ -'
 
@@ -558,10 +557,35 @@ class FileManipulate:
             a_filename (str, optional): file name with path.
         """
         #filename = os.path.join(path, fn)
+        def object_hook(obj):
+            if isinstance(obj, dict):
+                return vars(obj) # {k: self.object_hook(v) for k, v in obj.items()}
+            elif isinstance(obj, tuple):
+                 return list(obj)
+            elif isinstance(obj, (np.int_, np.intc, np.intp, np.int8,
+                            np.int16, np.int32, np.int64, np.uint8,
+                            np.uint16, np.uint32, np.uint64)):
+                return int(obj)
+            elif isinstance(obj, (np.float_, np.float16, np.float32, np.float64)):
+                return float(obj)
+            elif isinstance(obj, (np.complex_, np.complex64, np.complex128)):
+                return {'real': obj.real, 'imag': obj.imag}
+
+            elif isinstance(obj, (np.ndarray,)):
+                return obj.tolist()
+
+            elif isinstance(obj, (np.bool_)):
+                return bool(obj)
+
+            elif isinstance(obj, (np.void)): 
+                return None
+
+            return json.JSONEncoder.default(self, obj)
+            
         try:
             # python dictionary with key value pairs
             # create json object from dictionary
-            js = json.dumps(info_dict, default=test_vars) #vars)
+            js = json.dumps(info_dict, default=object_hook) #vars)
             # open file for writing, "w"
 
             with open(filename, "w", encoding="utf-8") as fff:
@@ -571,7 +595,7 @@ class FileManipulate:
                 fff.close()
             return True
         except (PermissionError, FileExistsError, FileNotFoundError, TypeError) as e:
-                    print(f"Json File :{filename} was not saved")
+                    print(f"Json File: {filename} was NOT saved!!")
                     print(e)
         return False
     

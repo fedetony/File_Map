@@ -280,6 +280,21 @@ class FileExplorer:
             tuple: (name, size..., other info)
         """
         return (F_M.extract_filename(src_item),F_M.get_file_size(src_item))
+    
+    def save_file_structure_to_json(self,filename:str)->bool:
+        """Saves filestructure to json file
+
+        Args:
+            filename (str): filename to save
+
+        Returns:
+            bool: true if was saved
+        """
+        fn_ne=F_M.extract_filename(filename,False)
+        fn_we=F_M.extract_filename(filename,True)
+        ext='.json'
+        filename=filename.replace(fn_we,fn_ne+ext)
+        return F_M.save_dict_to_json(filename,self.file_structure)
         
     def set_tree_structure(self)->bool:
         """Sets file structure

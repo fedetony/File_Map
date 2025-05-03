@@ -817,7 +817,7 @@ class TerminalMenuInterface():
         "Export Tree": "Export to a text file the Map's Files and Directories Tree structure",
         "Export Directory": "Export to a text file the Map's Directories Tree structure",
         "Export File Structure": "Export to json Map's File structure",
-        "Export Data List": "Map Columns to csv file",
+        "Export Data List": "Map Columns to csv file (Fast)",
         "Back": "Go back"}
         ch=list(choices_hints.keys())
         menu = [inquirer.List(
@@ -847,9 +847,10 @@ class TerminalMenuInterface():
                     pathname=os.path.join(path_user,file)
                     fn_ne=F_M.extract_filename(pathname,False)
                     fn_we=F_M.extract_filename(pathname,True)
-                    choicekey=['file',"dir","filestructure","list"]
-                    extension=['.txt',".txt",".json",".csv"]
-                    for a_key,s_ch,ext in zip(choicekey,choice_list,extension):
+                    choicekey=['file','dir','filestructure','list']
+                    extension=[".txt",".txt",".json",".csv"]
+                    style=[None,None,None,None]
+                    for a_key,s_ch,ext,sty in zip(choicekey,choice_list,extension,style):
                         if answers['map_export']==s_ch:
                             filename=pathname.replace(fn_we,fn_ne+ext)
                             file_exists,is_file=F_M.validate_path_file(filename)
@@ -859,9 +860,33 @@ class TerminalMenuInterface():
                                 else:
                                     file_exists=False
                             if not file_exists:
-                                msg=self.cma.export_map_file_directories(db_map_pair,filename,a_key)
+                                fields_to_tab=None
+                                if a_key == 'list':
+                                    fields_to_tab=self.menu_get_fields_to_tabulate(db_map_pair)
+                                    if not fields_to_tab:
+                                        return 'No fields Selected!'
+                                elif a_key in ['file','dir']:
+                                    if self.ask_confirmation("Include directory sizes?",False):
+                                        sty=my_style_size
+                                msg=self.cma.export_map_file_directories(db_map_pair,filename,a_key,where=None,style=sty,fields_to_tab=fields_to_tab)
                                 return msg
-          
+
+    def menu_get_fields_to_tabulate(self,db_map_pair)->list:
+        """Menu to get fields to tabulate"""
+        default_list=['filepath','filename','md5','dt_file_modified','size']
+        fm=self.cma.get_file_map(db_map_pair[0])
+        field_list = fm.db.get_column_list_of_table(db_map_pair[1])  
+        menu = [inquirer.Checkbox(
+                'fields_select',
+                message="Select Fields to tabulate",
+                choices=field_list,
+                default=default_list,
+                )]
+        answers = inquirer.prompt(menu)
+        if isinstance( answers['fields_select'],list):
+            if len(answers['fields_select'])>0: 
+                return list(answers['fields_select'])
+        return None
                         
     def menu_process_selection_map(self):
         """Menu for processing a selection map"""

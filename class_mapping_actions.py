@@ -698,12 +698,12 @@ class MappingActions():
         fm=self.get_file_map(database)
         return fm.find_duplicates(a_map)
 
-    def export_map_file_directories(self,db_map_pair,the_file,export_type,where=None,style=None):
+    def export_map_file_directories(self,db_map_pair,the_file,export_type,where=None,style=None,fields_to_tab=None):
         """_summary_
 
         Args:
             db_map_pair (tuple): database map pair
-            the_file (_type_): _description_
+            the_file (_type_): filename
             export_type (str): Type of export 'file','dir','filestructure','list'
             where (str, optional): where sql for filter. Defaults to None.
         """
@@ -723,10 +723,13 @@ class MappingActions():
             except ValueError:
                 # No data
                 return 'Map is Empty!'
-            df = d_m1.get_selected_df(fields_to_tab=field_list, sort_by=["filepath"],ascending=True)
-            txt_list=[field+'='+str(txt)+'\n' for txt,field in zip(map_info[0],info_field_list)]
+            if not fields_to_tab:
+                fields_to_tab=field_list
+            df = d_m1.get_selected_df(fields_to_tab=fields_to_tab, sort_by=["filepath"],ascending=True)
+            txt_list=['database=',db_map_pair[0]]
+            txt_list=txt_list+[field+'='+str(txt)+'\n' for txt,field in zip(map_info[0],info_field_list)]
             self._save_text_to_file(the_file,txt_list)
-            df.to_csv(the_file, sep = '|', header = field_list, mode = 'a',index = False)
+            df.to_csv(the_file, sep = '|', header = fields_to_tab, mode = 'a',index = False)
             return f'[green]Successfuly saved File {the_file}'
         fs=None
         fs=self.map_to_file_structure(db_map_pair[0],db_map_pair[1],where=where,fields_to_tab=['id'],sort_by=["filepath"],ascending=True)
@@ -734,18 +737,22 @@ class MappingActions():
             if export_type=='filestructure':
                 mod_fs={os.path.join(map_info[0][5],map_info[0][3])+'@'+map_info[0][6]:fs}
                 mod_fs=F_M.repair_list_tuple_in_file_structure(mod_fs,False)
-                if F_M.save_dict_to_json(the_file,dict(fs)):
+                if F_M.save_dict_to_json(the_file,mod_fs):
                     return f'[green]Successfuly saved File {the_file}'
                 return f'[red]Could NOT save File {the_file}'
-            f_e=FileExplorer(None,None,fs)
             # choicekey=['file',"dir","filestructure","list"]
+            f_e=FileExplorer(None,None,fs)
             export_data=[]
             if export_type=='dir':
-                # f_e.t_v.expand_all_treenodes(True)
-                export_data=f_e.get_tree_view_list('dir',style)
+                if not self.ask_confirmation("Include directory sizes?",False):
+                    export_data=f_e.get_tree_view_list('dir',style)
+                else:
+                    export_data=f_e.get_tree_view_list('dir',my_style_size)
             elif export_type=='file':
-                # f_e.t_v.expand_all_treenodes(True)
-                export_data=f_e.get_tree_view_list('',style)
+                if not self.ask_confirmation("Include file sizes?",False):
+                    export_data=f_e.get_tree_view_list('',style)
+                else:
+                    export_data=f_e.get_tree_view_list('',my_style_size)
             mod_e_d=[]
             for iii in export_data:
                 mod_e_d.append(iii+'\n')
