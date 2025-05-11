@@ -93,6 +93,7 @@ class TerminalMenuInterface():
                 carousel=False,
                 )]
             answers = inquirer.prompt(menu)
+            self._check_menu_inquirer(answers)
             if answers['activate_menu']=='All':
                 if activate:
                     self.cma.activate_databases(None)
@@ -107,6 +108,11 @@ class TerminalMenuInterface():
                     self.cma.deactivate_databases(answers['activate_menu'])
             else:
                 print("Not a valid choice")
+
+    @staticmethod
+    def _check_menu_inquirer(answers):
+        if isinstance(answers,type(None)):
+            raise KeyboardInterrupt
 
     def menu_handle_databases(self):
         """Interactive menu handle databases"""
@@ -132,6 +138,7 @@ class TerminalMenuInterface():
                 print(msg)
             print("---------------------------------")
             answers = inquirer.prompt(menu)
+            self._check_menu_inquirer(answers)
             if answers['handle_db_menu']=='Create New Database File':
                 msg=self.menu_create_new_database_file()
             elif answers['handle_db_menu']=='Append Database File': 
@@ -178,6 +185,7 @@ class TerminalMenuInterface():
             print("Remove database from list:")
             print("---------------------------------")
             answers = inquirer.prompt(menu)
+            self._check_menu_inquirer(answers)
             if answers['remove_db_menu']=='Select All':
                 if answers['remove_all']:
                     self.cma.deactivate_databases(None)
@@ -341,6 +349,7 @@ class TerminalMenuInterface():
             print("Select Directory:")
             print("----------")
             answers = inquirer.prompt(menu)
+            self._check_menu_inquirer(answers)
             if answers['dir_select'] in path_list:
                 return True, answers['dir_select']
             elif answers['dir_select']=='Enter Path':
@@ -413,6 +422,7 @@ class TerminalMenuInterface():
             print("----------")
             
             answers = inquirer.prompt(menu)
+            self._check_menu_inquirer(answers)
             if answers['file_select'] in database_list:
                 return True, answers['file_select']
             elif answers['file_select']=='Enter File':
@@ -471,6 +481,7 @@ class TerminalMenuInterface():
                 carousel=False,
                 )]
             answers = inquirer.prompt(menu)
+            self._check_menu_inquirer(answers)
             if answers['db_select'] in active_inactive_list:
                 return answers['db_select']
             elif answers['db_select']=='Back':
@@ -539,6 +550,7 @@ class TerminalMenuInterface():
                     hints=ch_hints,
                     )]
                 answers = inquirer.prompt(menu)
+                self._check_menu_inquirer(answers)
                 if answers['map_delete'] == 'Back':
                     return ''
                 if answers['map_delete'] not in ['',None]:
@@ -576,6 +588,7 @@ class TerminalMenuInterface():
                     hints=ch_hints,
                     )]
                 answers = inquirer.prompt(menu)
+                self._check_menu_inquirer(answers)
                 if answers['map_rename'] == 'Back':
                     return ''
                 if answers['map_rename'] not in ['',None]:
@@ -610,6 +623,7 @@ class TerminalMenuInterface():
                 validate=self.map_validation,
                 )]
         answers = inquirer.prompt(menu)
+        self._check_menu_inquirer(answers)
         if str(answers['table_name']).strip() not in ['',None]:
             tablename=answers['table_name']
         return tablename
@@ -649,6 +663,7 @@ class TerminalMenuInterface():
                 hints=choice_hints,
                 )]
             answers = inquirer.prompt(menu)
+            self._check_menu_inquirer(answers)
             # print('got->',answers,'compare to:',map_list)
             for answ_txt in answers['db_map_select']: 
                 if answ_txt in map_list:
@@ -696,6 +711,7 @@ class TerminalMenuInterface():
                 carousel=False,
                 )]
             answers = inquirer.prompt(menu)
+            self._check_menu_inquirer(answers)
             if answers['db_map_select'] == 'Back':
                 return None       
             elif answers['db_map_select'] in map_list:
@@ -754,6 +770,7 @@ class TerminalMenuInterface():
         while True:
             print("----------")
             answers = inquirer.prompt(menu)
+            self._check_menu_inquirer(answers)
             if answers['map_process'] == 'Back':
                 return ''
             elif answers['map_process'] == 'Browse Tree': 
@@ -836,6 +853,7 @@ class TerminalMenuInterface():
                 print(msg)
             print("----------")
             answers = inquirer.prompt(menu)
+            self._check_menu_inquirer(answers)
             if answers['map_export'] == 'Back':
                 return ''
             elif answers['map_export'] in choice_list: 
@@ -883,6 +901,7 @@ class TerminalMenuInterface():
                 default=default_list,
                 )]
         answers = inquirer.prompt(menu)
+        self._check_menu_inquirer(answers)
         if isinstance( answers['fields_select'],list):
             if len(answers['fields_select'])>0: 
                 return list(answers['fields_select'])
@@ -920,6 +939,7 @@ class TerminalMenuInterface():
         while True:
             print("----------")
             answers = inquirer.prompt(menu)
+            self._check_menu_inquirer(answers)
             if answers['map_process'] == 'Back':
                 return ''
             elif answers['map_process'] == 'Browse Tree': 
@@ -1024,6 +1044,7 @@ class TerminalMenuInterface():
                 print(msg)
                 print("-"*33)
             answers = inquirer.prompt(menu)
+            self._check_menu_inquirer(answers)
             if answers['do_action'] == 'Back':
                 return ''
             elif answers['do_action'] == 'Browse Tree': 
@@ -1089,6 +1110,7 @@ class TerminalMenuInterface():
             hints=choices_hints,
             )]
         answers = inquirer.prompt(menu)
+        self._check_menu_inquirer(answers)
         if answers['map_actions'] == 'Back':
             return ''
         elif answers['map_actions'] == 'Browse/Select Files': 
@@ -1200,6 +1222,7 @@ class TerminalMenuInterface():
                 hints=choices_hints,
                 )]
             answers = inquirer.prompt(menu)
+            self._check_menu_inquirer(answers)
             if answers['remove_type'] == 'Cancel':
                 return '[yellow]Removal Cancelled'
             elif answers['remove_type'] == 'Selection map Remove/Keep': 
@@ -1292,6 +1315,7 @@ class TerminalMenuInterface():
                 msg=''
             print("---------------------------------")
             answers = inquirer.prompt(menu)
+            self._check_menu_inquirer(answers)
             if answers['backup'] in ['Backup of Map base','Backup of Selection Map']:
                 db_map_pair=self.menu_select_database_map()
                 if not db_map_pair:
@@ -1339,6 +1363,7 @@ class TerminalMenuInterface():
                 msg=''
             print("---------------------------------")
             answers = inquirer.prompt(menu)
+            self._check_menu_inquirer(answers)
             if answers['mapping']=='Create New Map':
                 msg=self.menu_create_new_map()
             elif answers['mapping']=='Delete Map': 
@@ -1508,6 +1533,7 @@ class TerminalMenuInterface():
                 msg=''
             print("---------------------------------")
             answers = inquirer.prompt(menu)
+            self._check_menu_inquirer(answers)
             if answers['sorting']=='Select active Files/Directories':
                 sel_files=self.menu_select_active_files_directories_sorting(sel_files)
             elif answers['sorting']=='Select Mapped Files/Directories':
@@ -1601,6 +1627,7 @@ class TerminalMenuInterface():
                 hints=ch_hints,
                 )]
             answers = inquirer.prompt(menu)
+            self._check_menu_inquirer(answers)
             if answers['remove_select'] == 'Back':
                 return sel_files
             if answers['remove_select'] not in ['',None]:
@@ -1654,6 +1681,7 @@ class TerminalMenuInterface():
         print(f"What to select in Map {db_map_pair}:")
         print("----------")
         answers = inquirer.prompt(menu)
+        self._check_menu_inquirer(answers)
         if answers['sorting']=='Select Directories':
             ans=self.cma.browse_file_directories(db_map_pair,'dir_multiple')
             if ans is not None and not isinstance(ans,str):
@@ -1739,6 +1767,7 @@ class TerminalMenuInterface():
             print("Main Menu:")
             print("----------")
             answers = inquirer.prompt(menu)
+            self._check_menu_inquirer(answers)
             if answers['main_menu']=='Handle Databases':
                 msg=self.menu_handle_databases()
             elif answers['main_menu']=='Mapping':
