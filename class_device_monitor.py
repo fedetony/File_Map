@@ -3,7 +3,39 @@ import psutil
 import subprocess
 import platform
 import time
+import threading
 
+if platform.system() == 'Windows':
+    # Initialize COM
+    import pythoncom
+    import wmi
+elif platform.system() == 'Darwin':
+    import io
+
+
+class TimeoutException(Exception): pass
+
+class TimerThread(threading.Thread):
+    def __init__(self, target, timeout_seconds=10):
+        super().__init__()
+        self.target = target
+        self.timeout_seconds = timeout_seconds
+
+    def run(self):
+        start_time = time.time()
+        while True:
+            try:
+                result = self.target()
+                if isinstance(result, Exception):  # If an exception was raised in the target function
+                    raise result
+                return result
+            except (KeyboardInterrupt, SystemExit):
+                raise
+            finally:
+                elapsed_time = time.time() - start_time
+                if elapsed_time > self.timeout_seconds:
+                    print(f"Timeout after {self.timeout_seconds} seconds")
+                    return 'Timeout'
 
 
 class DeviceMonitor:
@@ -11,6 +43,8 @@ class DeviceMonitor:
         self.devices = []
         self.time_delay_s=time_delay_s
         self.log_print=log_print
+        self.timer_thread=None
+        result = None
         self.monitor_devices()
 
 
@@ -107,8 +141,9 @@ class DeviceMonitor:
         """
         # on linux generates error if you import wmi outside. Does not find the dependencies.
         if platform.system() == 'Windows':
-            import wmi
+            # import wmi
             try:
+                pythoncom.CoInitialize()
                 c = wmi.WMI()
                 logical_disk = c.Win32_LogicalDisk(Caption=drive_letter)[0]
                 partition = logical_disk.associators()[1]
@@ -140,8 +175,9 @@ class DeviceMonitor:
         """
         # on linux generates error if you import wmi outside. Does not find the dependencies.
         if platform.system() == 'Windows':
-            import wmi
+            # import wmi
             try:
+                pythoncom.CoInitialize()
                 c = wmi.WMI()
                 logical_disk = c.Win32_LogicalDisk(Caption=drive_letter)[0]
                 partition = logical_disk.associators()[1]
@@ -202,29 +238,60 @@ class DeviceMonitor:
         return None
 
     def monitor_devices(self):
+        # Create a timer thread to call get_devices function with 10-second timeout
+        self.timer_thread = TimerThread(self._monitor_devices, timeout_seconds=33)
+        result = None
+    
+        try:
+            self.timer_thread.start()
+            if not self.timer_thread.is_alive(): 
+                print("Operation timed out")
+                return self.devices
+            
+            # Wait for the thread to finish and get its return value
+            result = self.timer_thread.join(timeout=10)  # Wait for up to 5 seconds before giving up
+            
+        except TimeoutException:
+            print("Operation timed out")
+            return 'Timeout'
+
+        if isinstance(result, Exception): 
+            print(f"Error: {result}")
+        
+        else:
+            print(result)
+            # devices = result
+            
+
+    def _monitor_devices(self):
         """Search connected devices and list their serial numbers
 
         Returns:
             list[list]: list of [device,serial] pairs
         """
         devices=[]
-        if platform.system() == 'Darwin':  # macOS
-            # macOS (using iokit)
-            # Not tested! could be ioreg -lp IOUSB, ioreg -l
-            import io
-            output = subprocess.check_output(['ioctl', '-k', '/dev/disk0', 'iomgr'])
-            devices=list(output.decode().strip())
-        else:
-            # Linux
-            # Windows
-            for disk in psutil.disk_partitions():
-                serials=self.get_serial_number(disk.device)
-                #print(f"Using {disk.device} psutil: {serials}")
-                time.sleep(self.time_delay_s) #windows is slow to query. If asked too fast responds unknown
-                if platform.system() == 'Windows':
-                    devices.append([disk.device,str(serials)])
-                elif platform.system() == 'Linux':
-                    devices.append([disk.mountpoint,str(serials)])
+        try:
+            if platform.system() == 'Darwin':  # macOS
+                # macOS (using iokit)
+                # Not tested! could be ioreg -lp IOUSB, ioreg -l
+                # import io
+                output = subprocess.check_output(['ioctl', '-k', '/dev/disk0', 'iomgr'])
+                devices=list(output.decode().strip())
+                self.devices=devices
+            else:
+                # Linux
+                # Windows
+                for disk in psutil.disk_partitions():
+                    serials=self.get_serial_number(disk.device)
+                    #print(f"Using {disk.device} psutil: {serials}")
+                    time.sleep(self.time_delay_s) #windows is slow to query. If asked too fast responds unknown
+                    if platform.system() == 'Windows':
+                        devices.append([disk.device,str(serials)])
+                    elif platform.system() == 'Linux':
+                        devices.append([disk.mountpoint,str(serials)])
+                    self.devices=devices
+        except Exception as eee:
+            print(f"[red] Error monitoring device: {eee}")
         self.devices=devices
         return devices
     

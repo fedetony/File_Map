@@ -562,6 +562,77 @@ class TerminalMenuInterface():
                     if self.ask_confirmation(f"Sure to {A_C.add_ansi('delete','hred')} Map {tablename} with {count} elements?"):
                         fm.delete_map(tablename)
 
+    def menu_edit_device_serial_of_map(self):
+        """Edit map's serial and mountpoint"""
+        os.system('cls' if os.name == 'nt' else 'clear')
+        print(MENU_HEADER)
+        print("Edit map's serial and mountpoint:")
+        print("----------")
+        answers={'table_name':''}
+        selected_db=self.menu_select_database(True)
+        if selected_db and selected_db != '':
+            while True:
+                map_list=self.cma.get_maps_in_db(selected_db)
+                if len(map_list)==0:
+                    return '[yellow] No maps to edit serial and mountpoint!'
+                ch_hints={}
+                for a_map in map_list:
+                    ch_hints.update({(a_map,a_map):self.cma.get_map_info_text(selected_db,a_map)})
+                ch_hints.update({'Back':'Go Back'})    
+                ch=ch_hints.keys()
+                menu = [inquirer.List(
+                    'map_edit_serial',
+                    message="Please select",
+                    choices=ch,
+                    carousel=False,
+                    hints=ch_hints,
+                    )]
+                answers = inquirer.prompt(menu)
+                self._check_menu_inquirer(answers)
+                if answers['map_edit_serial'] == 'Back':
+                    return ''
+                if answers['map_edit_serial'] not in ['',None]:
+                    tablename=answers['map_edit_serial']
+                    # path_to_map="D:\Downloads"
+                    fm=self.cma.get_file_map(selected_db)
+                    self.cma.rescan_database_devices()
+                    data=fm.db.get_data_from_table(fm.mapper_reference_table,'*',f"tablename='{tablename}'")
+                    #field_list=['id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype']
+                    path_to_map=os.path.join(data[0][5],data[0][3])
+                    device=self.menu_select_device(fm.active_devices)
+                    if not device:
+                        return '[yellow]Device Serial/Mount Not changed!'
+                    was_changed,msg=fm.re_serialize_map(tablename,device[1],device[0])
+                    if not was_changed:
+                       return f'[yellow]Device Serial/Mount Not changed: {msg}' 
+                    return f'[green]Device Serial/Mount of {tablename} changed to {device}'
+                        
+        return ''
+
+    def menu_select_device(self,active_devices):
+        if len(active_devices)==0:
+            return None,
+        ch_hints={}
+        for iii,a_device in enumerate(active_devices):
+            ch_hints.update({(a_device[0],iii):str(a_device)})
+        ch_hints.update({'Back':'Go Back'})    
+        ch=ch_hints.keys()
+        menu = [inquirer.List(
+            'map_device',
+            message="Please select",
+            choices=ch,
+            carousel=False,
+            hints=ch_hints,
+            )]    
+        answers = inquirer.prompt(menu)
+        self._check_menu_inquirer(answers)
+        if answers['map_device'] == 'Back':
+            return None  
+        if answers['map_device'] not in ['',None]:  
+           item=answers['map_device']
+           return  active_devices[item]
+        return None
+        
     def menu_rename_map(self):
         """rename map"""
         os.system('cls' if os.name == 'nt' else 'clear')
@@ -1340,7 +1411,7 @@ class TerminalMenuInterface():
         msg=''
         ch=['Create New Map', 'Delete Map','Clone Map','Rename Map','Update Map',
             'Shallow Compare Maps','Deep Compare Maps','Deepen Shallow Map',
-            'Continue Mapping','Process Map','Search in Maps','Back']
+            'Continue Mapping','Process Map','Edit Serial/Mount of a Map','Search in Maps','Back']
         in_name='mapping'
         menu = [inquirer.List(
             in_name,
@@ -1386,6 +1457,8 @@ class TerminalMenuInterface():
                 msg=self.menu_process_map()
             elif answers['mapping']=='Search in Maps': 
                 msg=self.menu_search_in_maps()
+            elif answers['mapping']=='Edit Serial/Mount of a Map': 
+                msg=self.menu_edit_device_serial_of_map()
             elif answers['mapping']=='Back':
                 return ''
 

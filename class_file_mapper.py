@@ -65,7 +65,7 @@ class FileMapper:
         """Looks for devices mounted sets the device, serial list to active_devices"""
         md = DeviceMonitor(log_print=True)
         for _, serial in md.devices:
-            if not serial:
+            if not serial or serial == 'None':
                 md.check_none_devices()
         self.active_devices = md.devices
         print(f"Found devices: {self.active_devices}")
@@ -898,6 +898,47 @@ class FileMapper:
         if new_table_name in tables:
             return False
         return True
+
+    def re_serialize_map(self, table_name: str, new_serial: str, new_mount: str):
+        """Reset the serial and mount of a map
+
+        Args:
+            table_name (str): table name
+            new_serial (str): new serial
+            new_mount (str): new mount point
+
+        Returns:
+            tuple: True if it was re serialized,message
+        """
+        if new_serial in ['',None,'None'] or table_name == "" or new_mount in ['',None,'None']:
+            return False, 'None device serial/mount'
+        tables = self.db.tables_in_db()
+        if table_name in tables:
+            db_result = DBResult(self.db.describe_table_in_db(self.mapper_reference_table))
+            db_result.set_values(
+                self.db.get_data_from_table(self.mapper_reference_table, "*", f"tablename='{table_name}'")
+            )
+            if len(db_result.dbr) > 0:
+                # 'id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype'
+                an_id = getattr(db_result.dbr[0], "id")
+            else:
+                return False, 'Table not found'
+            old_mount = getattr(db_result.dbr[0], "mount")
+            old_serial = getattr(db_result.dbr[0], "serial")
+            
+            if old_mount==new_mount and old_serial==new_serial:
+                return False,f'Mount/Serial is already {str([new_mount,new_serial])}'
+            mappath = getattr(db_result.dbr[0], "mappath")
+            f_m = FileManipulate()
+            file_exist, is_file=f_m.validate_path_file(os.path.join(new_mount,mappath))
+            if file_exist and not is_file:
+                print(f"Editing table {table_name}")
+                self.db.edit_value_in_table(self.mapper_reference_table, an_id, "dt_map_modified", datetime.now())
+                self.db.edit_value_in_table(self.mapper_reference_table, an_id, "mount", new_mount)
+                self.db.edit_value_in_table(self.mapper_reference_table, an_id, "serial", new_serial)
+                return True,''
+            return False,f'{os.path.join(new_mount,mappath)} is not existing in selected Device'
+        return False,''
 
     def rename_map(self, table_name: str, new_table_name: str) -> bool:
         """Renames a map
