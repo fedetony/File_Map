@@ -142,12 +142,11 @@ class FileMapper:
             # time.sleep(0.01) # cant write to db so fast
             return MD5_CALC
         try:
-            with open(file_path, "rb") as f:
-                md5 = hashlib.md5()
-                while chunk := f.read(4096):
+            md5 = hashlib.md5()
+            with open(file_path, 'rb') as f:           
+                for chunk in iter(lambda: f.read(4096), b""):
                     md5.update(chunk)
-                return md5.hexdigest()
-
+            return md5.hexdigest()
         except FileNotFoundError:
             print(f"File {file_path} not found.")
             sys.exit(1)

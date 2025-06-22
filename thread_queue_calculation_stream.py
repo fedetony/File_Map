@@ -70,11 +70,11 @@ class QueueCalcStream(threading.Thread):
             str: The MD5 sum as a hexadecimal string.
         """
         try:
-            with open(file_path, 'rb') as f:
-                md5 = hashlib.md5()
-                while chunk := f.read(4096):
-                    md5.update(chunk)
-                return md5.hexdigest()
+            md5 = hashlib.md5()
+            with open(file_path, 'rb') as f:           
+                for chunk in iter(lambda: f.read(4096), b""):
+                    md5.update(chunk)  
+            return md5.hexdigest()
         except (PermissionError):
             return ':::NoPermission:::'
         except (FileNotFoundError):
