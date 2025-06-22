@@ -665,7 +665,7 @@ class FileManipulate:
             return self.get_string_justified(str(None),is_left_justified,o_size)
         # import math
         if not isinstance(file_size, (int, float)):
-            raise ValueError("Invalid input")
+            raise ValueError(f"Invalid file size input: {file_size}")
         if file_size < 0:
             return f'{file_size} ER'
         # Define a list of unit names and their corresponding sizes in bytes

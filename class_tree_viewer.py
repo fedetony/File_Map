@@ -222,8 +222,11 @@ class TreeViewer:
                     node = TreeNode(a_f)
                     node.i_am='file'
                     node.info=a_file # add all info to the node
-                    if a_size:
+                    if isinstance(a_size,(int,float)):
                         node.size=a_size
+                    if isinstance(a_size,(tuple,list)):
+                        if len(a_size)>self.size_index:
+                            node.size=a_size[self.size_index]
                     node_list.append(node)
                     self.all_nodes.append(node)
             return node_list
@@ -474,7 +477,11 @@ class TreeViewer:
                 return size
             if node.i_am=='file':
                 if node.size:
-                    return node.size 
+                    if isinstance(node.size,(int,float)):
+                        return node.size 
+                    if isinstance(node.size,(tuple,list)):
+                        if len(node.size)>self.size_index:
+                            return node.size[self.size_index]
         return 0
     
     def set_selected_by_name(self,name_list,parent_list,level_except=None):

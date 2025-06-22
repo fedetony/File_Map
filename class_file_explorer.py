@@ -415,7 +415,8 @@ class FileExplorer:
         elif EXPAND_KEYWORD in ans:
             ans=ans.replace(EXPAND_KEYWORD,'')
             is_expand=True
-        node=self.t_v.filtered_nodes[int(ans)]
+        if ans!='':
+            node=self.t_v.filtered_nodes[int(ans)]
         if is_expand is not None:
             setattr(node,'expand',is_expand)
         return node.id ,is_expand
