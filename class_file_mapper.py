@@ -376,64 +376,13 @@ class FileMapper:
         mappath=map_info[0][3]
         
         df = d_m1.get_selected_df(fields_to_tab=field_list, sort_by=sort_by, ascending=ascending)
-        # in_all_paths, df = self._modify_df_for_filestructure(df,mappath)
         FS=FileStructurer(df)
         map_list=FS.get_file_structure()
+        # print(df)
+        # print("-"*33)
+        # print(map_list)
         # map_list=self.map_to_file_structure_concurrent(df)
-        return {map_info[0][3]: map_list}
-    
-        # map_list=self.map_to_folder_structure(df) # does not save time
-        print(map_list)
-        map_list = []
-        fi_ma = FileManipulate()
-        df_length=df["filename"].size
-        in_all_paths, df = self._modify_df_for_filestructure(df,mappath)
-        last_filepath=None
-        is_tup_list=False
-        f_tup_list=[]
-        # map_list=self.map_to_folder_structure(df) # does not save time
-        print("Mapping Files to file structure:")
-        for iii, (filepath, filename, size) in enumerate(zip(df["filepath"], df["filename"], df["size"])):
-            file_tuple = (filename, size)
-            A_C.print_cycle(iii,df_length)
-            # Add more info to the tuple
-            for field in fields2tab:
-                file_tuple = file_tuple + (df[field][iii],)
-            if iii == 0:
-                dict1 = fi_ma.path_to_file_structure_dict(filepath, file_tuple)
-                map_list = [dict1]
-            elif iii == 1:
-                dict2 = fi_ma.path_to_file_structure_dict(filepath, file_tuple)
-                map_list = fi_ma.merge_file_structure_dicts(dict1, dict2)
-            else:
-                # same path -> add to list
-                if last_filepath==filepath:
-                    f_tup_list=f_tup_list+[file_tuple]
-                    last_filepath=filepath
-                    is_tup_list=True
-                if last_filepath!=filepath and is_tup_list:
-                    dict3 = fi_ma.path_to_file_structure_dict(last_filepath, f_tup_list, True)
-                    map_list = fi_ma.merge_file_structure_lists(map_list, [dict3])
-                    is_tup_list=False
-                    f_tup_list=[]
-                if last_filepath!=filepath and not is_tup_list:
-                    dict3 = fi_ma.path_to_file_structure_dict(filepath, file_tuple)
-                    map_list = fi_ma.merge_file_structure_lists(map_list, [dict3])
-                    last_filepath=filepath
-                    is_tup_list=False
-                    f_tup_list=[]
-        # add final ones in case same filepath
-        if len(f_tup_list)>0:
-            dict3 = fi_ma.path_to_file_structure_dict(last_filepath, f_tup_list, True)
-            map_list = fi_ma.merge_file_structure_lists(map_list, [dict3])            
-        print(map_list)
         print(f'Time elapsed: {self.calculate_time_elapsed(start,datetime.now())} s')
-        if in_all_paths:
-            dict1 = fi_ma.path_to_file_structure_dict(mappath,map_list,True)
-            if isinstance(dict1,dict):
-                return {map_info[0][3]: [dict1]}  
-            else:
-                return {map_info[0][3]: dict1}      
         return {map_info[0][3]: map_list}
     
     def map_to_file_structure_concurrent(self, df) -> list:
@@ -482,125 +431,68 @@ class FileMapper:
             A_C.print_cycle(iii,df_length)
             merged_list=fi_ma.merge_file_structure_lists(merged_list, file_list)
         return merged_list
-
+    
     # def map_to_folder_structure(self, df) -> list:
     #     """Generates a folder only file structure from map information
-
+        
     #     Args:
-    #         df (datafram): dataframe from database manage
-    #         a_map (str): table in database
+    #         df (dataframe): DataFrame from database management
             
     #     Returns:
-    #         list: folder only filestruct of map
+    #         list: Folder-only file structure of maps
     #     """
-    #     map_list = []
     #     fi_ma = FileManipulate()
-    #     path_set=set(list(df["filepath"]))
-    #     lenpathset=len(path_set)
-    #     print("Mapping Folders to file structure:")
-    #     for iii, filepath in enumerate(path_set):
-    #         # print(f"{filepath} - {filename}, Size: {size}")
-    #         A_C.print_cycle(iii,lenpathset)
-    #         # Add more info to the tuple
-    #         if iii == 0:
-    #             dict1 = fi_ma.path_to_file_structure_dict(filepath, [], True)
-    #             map_list = [dict1]
-    #         elif iii == 1:
-    #             dict2 = fi_ma.path_to_file_structure_dict(filepath, [], True)
-    #             map_list = fi_ma.merge_file_structure_dicts(dict1, dict2)
-    #         else:
-    #             dict3 = fi_ma.path_to_file_structure_dict(filepath, [], True)
-    #             map_list = fi_ma.merge_file_structure_lists(map_list, [dict3])
-    #     # return file_struct
-    #     return map_list
-    
-    def map_to_folder_structure(self, df) -> list:
-        """Generates a folder only file structure from map information
-        
-        Args:
-            df (dataframe): DataFrame from database management
+    #     def process_path(path):
+    #         """Process a single path and return its corresponding folder structure"""
+    #         result_dict = {}
+    #         filepath = df.loc[df["filepath"] == path, "filepath"].iloc[0]
+    #         # file_tuple = (df.loc[df["id"] == an_id, "filename"].iloc[0], 
+    #         #             df.loc[df["id"] == an_id, "size"].iloc[0])
+    #         result_dict = fi_ma.path_to_file_structure_dict(filepath, [],True)
             
-        Returns:
-            list: Folder-only file structure of maps
-        """
-        fi_ma = FileManipulate()
-        def process_path(path):
-            """Process a single path and return its corresponding folder structure"""
-            result_dict = {}
-            filepath = df.loc[df["filepath"] == path, "filepath"].iloc[0]
-            # file_tuple = (df.loc[df["id"] == an_id, "filename"].iloc[0], 
-            #             df.loc[df["id"] == an_id, "size"].iloc[0])
-            result_dict = fi_ma.path_to_file_structure_dict(filepath, [],True)
+    #         # Recursively process subdirectories
+    #         for key in list(result_dict.keys()):
+    #             if isinstance(result_dict[key], dict):
+    #                 new_key = os.sep.join(key.split(os.sep[:-1]))
+    #                 if new_key not in result_dict:
+    #                     result_dict[new_key] = []
+    #                 self.map_to_file_structure_concurrent(df, df.loc[df["filepath"] == new_key, "filepath"].iloc[0])
             
-            # Recursively process subdirectories
-            for key in list(result_dict.keys()):
-                if isinstance(result_dict[key], dict):
-                    new_key = os.sep.join(key.split(os.sep[:-1]))
-                    if new_key not in result_dict:
-                        result_dict[new_key] = []
-                    self.map_to_file_structure_concurrent(df, df.loc[df["filepath"] == new_key, "filepath"].iloc[0])
-            
-            return [result_dict]
+    #         return [result_dict]
 
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            # Submit tasks to the thread pool
-            futures = {executor.submit(process_path, path): path for path in df["filepath"].unique()}             
-            # Collect results from the future objects using a list comprehension
-            result_list = [future.result() for future in concurrent.futures.as_completed(futures)]
-        map_list=[item[0] if isinstance(item, dict) else item for item in result_list]   
-        print(map_list)
-        merged_list=[]
-        df_length=len(map_list)
-        for iii,file_list in enumerate(map_list):
-            A_C.print_cycle(iii,df_length)
-            merged_list=fi_ma.merge_file_structure_lists(merged_list, file_list)
-        return merged_list
-        # Create an instance of FileManipulate once and reuse it
-        fi_ma = FileManipulate()
-        
-        result_dict = {}
-        
-        def process_path(path):
-            """Process a single path and return its corresponding folder structure"""
-            
-            filepath = df.loc[df["filepath"] == path, "filepath"].iloc[0]
-            file_tup = fi_ma.path_to_file_structure_dict(filepath, [], True)
-            
-            # Use set to avoid duplicate keys
-            key_set = set(result_dict.keys())
-            if not key_set:
-                result_dict[path] = [file_tup]
-            else:
-                for k in key_set:
-                    result_dict[k].append(file_tup)
-        
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            # Submit tasks to the thread pool
-            futures = {executor.submit(process_path, path): path for path in df["filepath"].unique()}            
-            # Collect results from the future objects using a list comprehension
-            result_list = [future.result() for future in concurrent.futures.as_completed(futures)]
-    
-        return [item[0] if isinstance(item, dict) else item for item in result_list]
+    #     with concurrent.futures.ThreadPoolExecutor() as executor:
+    #         # Submit tasks to the thread pool
+    #         futures = {executor.submit(process_path, path): path for path in df["filepath"].unique()}             
+    #         # Collect results from the future objects using a list comprehension
+    #         result_list = [future.result() for future in concurrent.futures.as_completed(futures)]
+    #     map_list=[item[0] if isinstance(item, dict) else item for item in result_list]   
+    #     print(map_list)
+    #     merged_list=[]
+    #     df_length=len(map_list)
+    #     for iii,file_list in enumerate(map_list):
+    #         A_C.print_cycle(iii,df_length)
+    #         merged_list=fi_ma.merge_file_structure_lists(merged_list, file_list)
+    #     return merged_list
     
     # def file_structure_to_map(self, table_name):
     #     # this may not have sense since lacks information
     #     pass
 
-    @staticmethod
-    def _modify_df_for_filestructure(df,mappath:str): #,fi_ma:FileManipulate):
-        in_all_paths=True
-        # mappath=fi_ma.fix_separator_in_path(fi_ma.fix_path_separators(mappath),True)
-        for filepath in df["filepath"]:
-            if mappath not in filepath:
-                in_all_paths=False
-                break
-        if in_all_paths and mappath not in ['\\','/',os.sep]:
-            def remove_mappath(path:str):
-                """Sets same separator format for comparison"""
-                # path=fi_ma.fix_separator_in_path(fi_ma.fix_path_separators(path),True)
-                return path.replace(mappath,'')
-            df['filepath'] = df['filepath'].apply(remove_mappath)
-        return in_all_paths, df
+    # @staticmethod
+    # def _modify_df_for_filestructure(df,mappath:str): #,fi_ma:FileManipulate):
+    #     in_all_paths=True
+    #     # mappath=fi_ma.fix_separator_in_path(fi_ma.fix_path_separators(mappath),True)
+    #     for filepath in df["filepath"]:
+    #         if mappath not in filepath:
+    #             in_all_paths=False
+    #             break
+    #     if in_all_paths and mappath not in ['\\','/',os.sep]:
+    #         def remove_mappath(path:str):
+    #             """Sets same separator format for comparison"""
+    #             # path=fi_ma.fix_separator_in_path(fi_ma.fix_path_separators(path),True)
+    #             return path.replace(mappath,'')
+    #         df['filepath'] = df['filepath'].apply(remove_mappath)
+    #     return in_all_paths, df
 
     def remap_map_in_thread_to_db(self, table_name, progress_bar=None, wait_for_key_press=False):
         """Starts a thread that looks inside the table for '***Calculate***' md5.

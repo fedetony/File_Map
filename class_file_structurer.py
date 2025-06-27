@@ -133,6 +133,7 @@ class FileStructurer():
         def set_standard_path(path):
             if not path or path.strip() == "":
                 return ''
+            path=str(path).replace('\\\\',"/").replace("//","/")
             if not str(path).startswith(('\\',"/",os.sep)):
                 path="/"+path
             return path.replace('\\',"/").replace(os.sep,"/")
@@ -170,8 +171,8 @@ class FileStructurer():
                 if isinstance(item, tuple):
                     result.append(item)
                 elif isinstance(item, dict):
-                    result.insert(0,item) # put dictionaries first
-                    #result.append(item)
+                    #result.insert(0,item) # put dictionaries first
+                    result.append(item)
                 elif isinstance(item, list):
                     result.extend(item)
                 else:
@@ -250,6 +251,7 @@ class FileStructurer():
             
             iii+=1
         # Last Compression
+        # if max_depth>0:
         df = self.compress_nth_file_structure(df)
         return df
     
@@ -265,7 +267,7 @@ class FileStructurer():
         if df['file_tuple'].size==1:
             if df['filepath'][0]=='':
                 return df['file_tuple'][0]
-            return [{df['filepath'][0]:[df['file_tuple'][0]]}]
+            return [{df['filepath'][0]:df['file_tuple'][0]}]
         df=self.get_grouped_df(df)
         return df['file_tuple'].to_list()
     
