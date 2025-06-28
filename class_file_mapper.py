@@ -912,7 +912,7 @@ class FileMapper:
             return False
         return True
 
-    def re_serialize_map(self, table_name: str, new_serial: str, new_mount: str):
+    def re_serialize_map(self, table_name: str, new_serial: str, new_mount: str,allow_none=False):
         """Reset the serial and mount of a map
 
         Args:
@@ -923,8 +923,12 @@ class FileMapper:
         Returns:
             tuple: True if it was re serialized,message
         """
-        if new_serial in ['',None,'None'] or table_name == "" or new_mount in ['',None,'None']:
-            return False, 'None device serial/mount'
+        if table_name == "" :
+            return False, 'No table name'
+        if new_mount in ['',None,'None']:
+            return False, 'None device mount'
+        if new_serial in ['',None,'None'] and not allow_none:
+            return False, 'None device serial'
         tables = self.db.tables_in_db()
         if table_name in tables:
             db_result = DBResult(self.db.describe_table_in_db(self.mapper_reference_table))
@@ -1164,6 +1168,11 @@ class FileMapper:
                 for a_mount, a_serial in self.active_devices:
                     if self.serial_close_match(serial, self.active_devices) == a_serial:
                         device_present = True
+                    if (serial in ['',None,'None'] and a_serial in ['',None,'None']) and (a_mount.lower() == mp_mount.lower() or a_mount.lower() in mappath.lower()):
+                        device_present = True
+                        mount_active = True
+                        mount=mp_mount
+                        break
                     if mp_mount.lower() == a_mount.lower() and device_present:
                         mount = a_mount
                         mount_active = True

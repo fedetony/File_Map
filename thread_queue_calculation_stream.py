@@ -37,7 +37,7 @@ class QueueCalcStream(threading.Thread):
     """
         A thread class to buffer and deliver the Gcode for streaming
     """                  
-    def __init__(self,db_info:dict,table:str,mount:str,cycle_time:float,kill_event:threading.Event,Pbar_Stream=None):
+    def __init__(self,db_info:dict,table:str,mount:str,cycle_time:float,kill_event:threading.Event,Pbar_Stream=None,table_column='md5'):
         threading.Thread.__init__(self, name="Stream Calculate thread")        
         
         self.db = SQLiteDatabase(db_info["name"],db_info["encrypt"],db_info["key"],db_info["pwd"])
@@ -56,6 +56,7 @@ class QueueCalcStream(threading.Thread):
         self.calculation_finished=False    
         self.items_total=0
         self.processing_file=''
+        self.table_column=table_column
 
     
     @staticmethod
@@ -176,8 +177,18 @@ class QueueCalcStream(threading.Thread):
             size_str=F_M.get_size_str_formatted(size)
             if size > 349175808:
                 print(f"[yellow]Calculating... {size_str} {line}")
-            md5=self.calculate_md5(line)
-            self.db.edit_value_in_table(self.table,an_id,'md5',md5)
+            if self.table_column=='md5':
+                md5=self.calculate_md5(line)
+                self.db.edit_value_in_table(self.table,an_id,'md5',md5)
+            elif self.table_column=='sha1':
+                md5=self.calculate_sha1(line)
+                self.db.edit_value_in_table(self.table,an_id,'sha1',md5)
+            elif self.table_column=='sha256':
+                md5=self.calculate_sha256(line)
+                self.db.edit_value_in_table(self.table,an_id,'sha256',md5)
+            else:
+                md5=self.calculate_md5(line)
+                self.db.edit_value_in_table(self.table,an_id,'md5',md5)
             if not self.pbar_stream:
                 print(f"{self.items_total-self.queue_id.qsize()}/{self.items_total} ({md5}) ({an_id}) {size_str} {line}")
             else:

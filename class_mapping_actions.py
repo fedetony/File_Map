@@ -987,6 +987,17 @@ class MappingActions():
             elif isinstance(fm,FileMapper) and iii>0:
                 fm.active_devices=new_active    
         return f'[green]Devices Refreshed, Active devices found {fm.active_devices}'
+    
+    def show_database_devices(self):
+        """scans for devices when you have a drive connected or disconnected
+
+        Returns:
+            str: message
+        """
+        for iii,a_db in enumerate(self.active_databases):
+            fm=a_db['mapdb']
+            if isinstance(fm,FileMapper):    
+                return f'[green]Devices Active devices found {fm.active_devices}'
 
     def clone_map(self,db_map_pair:tuple,selected_db:str,return_pair:bool=False):
         """Clones a map in the database"""

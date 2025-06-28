@@ -595,14 +595,18 @@ class TerminalMenuInterface():
                     tablename=answers['map_edit_serial']
                     # path_to_map="D:\Downloads"
                     fm=self.cma.get_file_map(selected_db)
-                    self.cma.rescan_database_devices()
+                    while self.ask_confirmation(f"Active devices \033[33m{fm.active_devices}\033[0m  Rescan Devices",False):
+                        print(self.cma.rescan_database_devices())
                     data=fm.db.get_data_from_table(fm.mapper_reference_table,'*',f"tablename='{tablename}'")
                     #field_list=['id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype']
                     path_to_map=os.path.join(data[0][5],data[0][3])
                     device=self.menu_select_device(fm.active_devices)
                     if not device:
                         return '[yellow]Device Serial/Mount Not changed!'
-                    was_changed,msg=fm.re_serialize_map(tablename,device[1],device[0])
+                    was_changed,msg=fm.re_serialize_map(tablename,device[1],device[0],False)
+                    if msg=='None device serial':
+                        if self.ask_confirmation("Set a None device",True):
+                            was_changed,msg=fm.re_serialize_map(tablename,device[1],device[0],True)
                     if not was_changed:
                        return f'[yellow]Device Serial/Mount Not changed: {msg}' 
                     return f'[green]Device Serial/Mount of {tablename} changed to {device}'
@@ -1824,7 +1828,7 @@ class TerminalMenuInterface():
     def main_menu(self):
         """Interactive menu main"""
         msg=''
-        ch=['About','Rescan Devices','Handle Databases', 'Mapping', 'Backup', 'Selection','Sort', 'Exit']
+        ch=['About','Show Devices','Rescan Devices','Handle Databases', 'Mapping', 'Backup', 'Selection','Sort', 'Exit']
         menu = [inquirer.List(
             "main_menu",
             message="Please select",
@@ -1853,6 +1857,8 @@ class TerminalMenuInterface():
                 msg=self.menu_sort_files()
             elif answers['main_menu']=='Rescan Devices':
                 msg=self.cma.rescan_database_devices()
+            elif answers['main_menu']=='Show Devices':
+                msg=self.cma.show_database_devices()
             elif answers['main_menu']=='About':
                 os.system('cls' if os.name == 'nt' else 'clear')
                 print(FILE_MAP_LOGO)
