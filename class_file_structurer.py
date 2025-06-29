@@ -9,7 +9,18 @@ import pandas as pd
 import os
 
 class FileStructurer():
-    def __init__(self,df:pd.DataFrame,additional_columns=None):
+    """Class to form a file structure from a dataframe, must contain "id", "filepath", "filename", "size" in dataframe columns. 
+    """
+    def __init__(self,df:pd.DataFrame,additional_columns:list=None):
+        """Converts df to filestructure
+
+        Args:
+            df (pd.DataFrame): dataframe
+            additional_columns (list[str], optional): additional columns to be included in tuples (filename,size,additional). Defaults to None and forms (filename,size).
+
+        Raises:
+            AssertionError: when missing "id", "filepath", "filename" or "size" in dataframe
+        """
         if not self.check_df_cols_is_ok(df):
             raise AssertionError('Missing columns "id", "filepath", "filename", "size" in dataframe')
         self.df=self._fix_paths_in_df(df)
