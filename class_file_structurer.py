@@ -9,10 +9,11 @@ import pandas as pd
 import os
 
 class FileStructurer():
-    def __init__(self,df:pd.DataFrame):
+    def __init__(self,df:pd.DataFrame,additional_columns=None):
         if not self.check_df_cols_is_ok(df):
             raise AssertionError('Missing columns "id", "filepath", "filename", "size" in dataframe')
         self.df=self._fix_paths_in_df(df)
+        self.additional_columns=additional_columns
     
     @staticmethod
     def check_df_cols_is_ok(df:pd.DataFrame):
@@ -60,8 +61,7 @@ class FileStructurer():
             the_min=df['path_depth'].min()
         return int(the_min)
     
-    @staticmethod
-    def create_file_tuple_df(df:pd.DataFrame)->pd.DataFrame:
+    def create_file_tuple_df(self,df:pd.DataFrame)->pd.DataFrame:
         """Add 'file_tuple' column to dataframe with (filename,size) tuples when there is no 'file_tuple' column.
 
         Args:
@@ -76,12 +76,17 @@ class FileStructurer():
         df_cols=list(df.columns)
         if 'file_tuple' in df_cols:
             return df
-        req_cols=["filename", "size"]
+        if isinstance(self.additional_columns,list):
+            req_cols=["filename", "size"]+self.additional_columns
+        else:    
+            req_cols=["filename", "size"]
         for col in req_cols:
             if col not in df_cols:
-                raise KeyError('missing Filename or size columns')
+                raise KeyError(f'missing {col} required column in dataframe!')
         # Create a new column with (filename, size) tuples
-        df['file_tuple'] = df.apply(lambda row: (row['filename'], row['size']), axis=1)
+        def get_tuple_formed(column_list,row):
+            return tuple([row[col] for col in column_list])
+        df['file_tuple'] = df.apply(lambda row: get_tuple_formed(req_cols,row), axis=1)
         return df
 
     def compress_nth_file_structure(self,df:pd.DataFrame)->pd.DataFrame:
@@ -130,6 +135,12 @@ class FileStructurer():
     
     @staticmethod
     def _fix_paths_in_df(df:pd.DataFrame):
+        """Converts path strings to a standard form for making fast splitting
+            All paths are separatted with single "/", and start with "/".
+
+        Args:
+            df (pd.DataFrame): df with standard filepath format
+        """
         def set_standard_path(path):
             if not path or path.strip() == "":
                 return ''
@@ -144,6 +155,15 @@ class FileStructurer():
 
     @staticmethod
     def add_splitted_path_n_df(df:pd.DataFrame,max_depth):
+        """Separates the path in the the start of path and last path folder 
+
+        Args:
+            df (pd.DataFrame): dataframe
+            max_depth (str): depth to separate path
+
+        Returns:
+            pd.DataFrame: with filepath parent_path, and path_n separation at depth n
+        """
         # Step 2–3: For rows at max depth, extract path_n and truncate filepath
         def split_path(path, current_depth, max_depth):
             if current_depth != max_depth:
@@ -163,7 +183,15 @@ class FileStructurer():
 
     @staticmethod
     def group_and_aggregate_df(df: pd.DataFrame):
-        from collections.abc import Iterable
+        """Compress the shared filepath and path_n into lists. Add to the list the different types of data, if list extend it. 
+
+        Args:
+            df (pd.DataFrame): dataframe
+
+        Returns:
+            pd.DataFrame: Compressed filepath and path_n
+        """
+        # from collections.abc import Iterable
 
         def smart_aggregate(series):
             result = []
@@ -189,6 +217,14 @@ class FileStructurer():
 
     @staticmethod
     def get_grouped_df(df:pd.DataFrame):
+        """Forms dictionary with filepath and path_n compressed. sets the dictionary in file_tuple column 
+
+        Args:
+            df (pd.DataFrame): dataframe
+
+        Returns:
+            pd.DataFrame: Compressed df with file_tuple dictionary
+        """
         # Filter out non-NaN 'path_n' rows
         filtered = df[df['path_n'].notna()]
         # Drop 'path_n' and 'file_tuple' duplicates for safety
@@ -228,7 +264,7 @@ class FileStructurer():
         direct_files_df = df[df['path_n'].isna()].copy()
         direct_files_df.drop(columns='path_n', inplace=True)
         # Merge with grouped dict-style folders
-        final_df = pd.concat([grouped, direct_files_df], ignore_index=True)
+        final_df = pd.concat([grouped, direct_files_df], ignore_index=True) #sets dictionaries first
         #return final_df
 
         # Reorder columns if needed
@@ -244,14 +280,10 @@ class FileStructurer():
         while max_depth > min_depth:
             print(f'{iii} Compressing {max_depth} to {min_depth}, {df["path_depth"].size} elements left')
             df = self.compress_nth_file_structure(df)
-            max_depth=self.get_max_depth(df)
-            # print(str(iii)+'-'*33)
-            # print(df)
-            # print('-'*33)
-            
+            max_depth=self.get_max_depth(df)            
             iii+=1
         # Last Compression
-        # if max_depth>0:
+        print(f'{iii} Compressing {max_depth} to {min_depth}, {df["path_depth"].size} elements left')
         df = self.compress_nth_file_structure(df)
         return df
     
