@@ -16,7 +16,7 @@ class FileStructurer():
         self.additional_columns=additional_columns
     
     @staticmethod
-    def check_df_cols_is_ok(df:pd.DataFrame):
+    def check_df_cols_is_ok(df:pd.DataFrame)->bool:
         """Check "id", "filepath", "filename", "size" are in dataframe
 
         Returns:
@@ -134,7 +134,7 @@ class FileStructurer():
         return df
     
     @staticmethod
-    def _fix_paths_in_df(df:pd.DataFrame):
+    def _fix_paths_in_df(df:pd.DataFrame)->pd.DataFrame:
         """Converts path strings to a standard form for making fast splitting
             All paths are separatted with single "/", and start with "/".
 
@@ -154,7 +154,7 @@ class FileStructurer():
 
 
     @staticmethod
-    def add_splitted_path_n_df(df:pd.DataFrame,max_depth):
+    def add_splitted_path_n_df(df:pd.DataFrame,max_depth)->pd.DataFrame:
         """Separates the path in the the start of path and last path folder 
 
         Args:
@@ -182,7 +182,7 @@ class FileStructurer():
         return df
 
     @staticmethod
-    def group_and_aggregate_df(df: pd.DataFrame):
+    def group_and_aggregate_df(df: pd.DataFrame)->pd.DataFrame:
         """Compress the shared filepath and path_n into lists. Add to the list the different types of data, if list extend it. 
 
         Args:
@@ -216,7 +216,7 @@ class FileStructurer():
 
 
     @staticmethod
-    def get_grouped_df(df:pd.DataFrame):
+    def get_grouped_df(df:pd.DataFrame)->pd.DataFrame:
         """Forms dictionary with filepath and path_n compressed. sets the dictionary in file_tuple column 
 
         Args:
@@ -250,7 +250,7 @@ class FileStructurer():
         
 
     @staticmethod
-    def merge_grouped_df(df:pd.DataFrame,grouped:pd.DataFrame):
+    def merge_grouped_df(df:pd.DataFrame,grouped:pd.DataFrame)->pd.DataFrame:
         """Merge the df and grouped dataframes keeping order
 
         Args:
@@ -272,7 +272,12 @@ class FileStructurer():
         remaining_cols = [col for col in final_df.columns if col not in preferred_order]
         return final_df[preferred_order + remaining_cols]
     
-    def fully_compress(self):
+    def fully_compress(self)->pd.DataFrame:
+        """Compress the dataframe Iteratevily until max compression depth.
+
+        Returns:
+            pd.DataFrame: max compressed dataframe
+        """
         df = self.add_depth_to_df(self.df)
         max_depth=self.get_max_depth(df)
         min_depth=self.get_min_depth(df)
