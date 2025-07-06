@@ -941,6 +941,32 @@ class FileManipulate:
             print(f"Error Glob: {eee}")
             return []
 
+    def get_possible_file_list(self, path, joker='*'):
+        """Use glob to find files or directories with patterns
+
+        Args:
+            path (str): path as pattern
+            joker ('*'): wildcard character
+
+        Returns:
+            list: list of paths found
+        """
+        try:
+            file_exist, is_file = self.validate_path_file(path)
+            
+            if file_exist and not is_file:
+                # Use glob to find files with the specified extension in the directory or its subdirectories
+                pattern = f"{path}/**/{joker}"
+                return [file for file in gb.glob(pattern)]
+                
+            elif file_exist and is_file: 
+                return [path]
+                
+            else:
+                return []
+        except Exception as eee:
+            print(f"Error Glob: {eee}")
+            return []
     
     def validate_path_file(self,pathfile: str) -> tuple[bool]:
         """

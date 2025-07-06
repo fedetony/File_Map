@@ -708,6 +708,109 @@ class FileMapper:
             return f"[red]Error Mapping: {eee}"
         return ''
 
+    def map_a_list_of_paths_to_db(
+        self,
+        table_name,
+        path_list_to_map,  # pylint: disable=too-many-locals
+        log_print=True,
+        progress_bar=None,
+        shallow_map=False,
+        press_to_continue=True,
+    ):
+        """Maps a path in a device into a table in the database.
+
+        Args:
+            db (SQLiteDatabase): database
+            table_name (str): table to map the path
+            path_to_map (str): path to map on the device
+            log_print (bool, optional): print logs. Defaults to True.
+            shallow_map (bool, optional): Make shallow map (Does not calculate md5,does not run thread).
+            Defaults to False.
+        """
+        db = self.db
+        if not isinstance(path_list_to_map,list):
+            return None
+        f_m=FileManipulate()
+        try:
+            data = []
+            iii = 0
+            files_processed = 0
+            start_datetime = datetime.now()
+            fp_list=[]
+            n_total=0
+            for filepath in path_list_to_map:
+                file_exist, is_file= f_m.validate_path_file(filepath)
+                if not file_exist:
+                    iii = iii + 1 # keeps index with lists
+                    continue
+                if is_file:
+                    path_to_map=f_m.extract_path(filepath)
+                    file_to_map=f_m.extract_filename(filepath,True) 
+                else:
+                    path_to_map=filepath
+                    file_to_map=None
+                mount, _ = self.find_mount_serial_of_path(path_to_map)
+                self.add_table_to_mapper_index(table_name+"_FP_"+str(iii), path_to_map)
+                self._create_map_in_db(table_name+"_FP_"+str(iii))
+                fp_list.append(table_name+"_FP_"+str(iii))
+                num_files, num_folders = self.count_files_in_path(path_to_map)
+                with Progress() as progress:
+                    exit_key = "ctrl+c"
+                    if os.name == "nt":
+                        exit_key = "F12"
+                    task1 = progress.add_task(f"[blue]Initial Mapping [red]({exit_key} to Exit)", total=num_files)
+                    delta = datetime.now() - start_datetime
+                    print(f"Counted: {num_files} files and {num_folders} folders in {delta.total_seconds()} sec")
+                    if not file_to_map:
+                        for dirpath, _, filenames in os.walk(path_to_map):
+                            # Get the data for each file
+                            for file in filenames:
+                                line_data_tup = self.get_mapping_info_data_from_file(
+                                    mount, dirpath, file, log_print, f"{files_processed}. ", shallow_map
+                                )
+                                data.append(line_data_tup)
+                                
+                                files_processed = files_processed + 1
+                                progress.update(task1, advance=DATA_ADVANCE)
+                    else:
+                        line_data_tup = self.get_mapping_info_data_from_file(
+                                    mount, path_to_map, file_to_map, log_print, f"{files_processed}. ", shallow_map
+                                )
+                        data.append(line_data_tup)
+                        progress.update(task1, advance=DATA_ADVANCE)
+                        files_processed = files_processed + 1
+                    db.insert_data_to_table(table_name+"_FP_"+str(iii), data)
+                    iii = iii + 1
+                progress.update(task1, completed=num_files)
+                time.sleep(0.333)
+                # db.print_all_rows(table_name)
+                if not shallow_map:
+                    for t_n in fp_list:
+                        self.remap_map_in_thread_to_db(t_n, progress_bar, False)
+                if log_print:
+                    # time_elapsed = (datetime.now() - start_datetime).total_seconds()
+                    delta = datetime.now() - start_datetime
+                    print("+" * 33)
+                    n_r=0
+                    for t_n in fp_list:
+                        n_r += db.get_number_or_rows_in_table(t_n)
+                    print(f'[green]Successfully Mapped {n_r} files in {str(delta).split(".", maxsplit=1)[0]}')
+                    n_total=n_total+n_r
+            delta = datetime.now() - start_datetime        
+            return f'[green]Successfully Mapped {n_total} files in {str(delta).split(".", maxsplit=1)[0]}'
+        except KeyboardInterrupt:
+            print("[magenta]User cancel")
+            print("@" * 100, "\nPress any Key to continue\n", "@" * 100)
+            return "[red] User Interrupt"
+        except Exception as eee:  # pylint: disable=broad-exception-caught
+            print(f"[red]Error Mapping: {eee}")
+            print(type(eee), line_data_tup)
+            if press_to_continue:
+                print("@" * 100, "\nPress any Key to continue\n", "@" * 100)
+                getch()
+            return f"[red]Error Mapping: {eee}"
+        return ''
+
     @staticmethod
     def count_files_in_path(path):
         """Calculate the number of files and folders in a path.
