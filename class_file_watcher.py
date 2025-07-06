@@ -1,8 +1,8 @@
 """
 File watching functions 
 ########################
-# F.garcia
-# creation: 05.02.2025
+# F.Garcia
+# creation: 06.07.2025
 ########################
 """
 
@@ -20,20 +20,31 @@ from class_database_result import DBResult
 
 FM=FileManipulate()
 
-
 class FileWatcher():
     """Class for watching files and paths using mapping functions"""
 
-    def __init__(self):
-        files_watch=FM.get_possible_file_list(FM.get_app_path(),"*file_watch*.json")
+    def __init__(self,watch_fullpath:str=None):
+        """will use json file if not given will search for *file_watch*.json file 
+        in all directories under the application file.
+
+        Args:
+            watch_fullpath (str, optional): json file. Defaults to None.
+        """
+        if watch_fullpath:
+            files_watch=watch_fullpath
+        else:
+            files_watch=FM.get_possible_file_list(FM.get_app_path(),"*file_watch*.json")
+        
         self.file_watch_paths=None
+        self.active_watch=False
         if len(files_watch)>0:
             self.file_watch_paths=files_watch
             self.watch_db_path=FM.extract_path(self.file_watch_paths[0])
             self.watch_db_file=FM.extract_filename(self.file_watch_paths[0],False)+".db"
             self.fm=FileMapper(os.path.join(self.watch_db_path,self.watch_db_file),None,None)
             # self.ba=BackupActions(os.path.join(self.watch_db_path,self.watch_db_file),None,None,ask_confirmation)
-        print(self.file_watch_paths)
+            self.active_watch=True
+        print(f"Found {self.file_watch_paths} watches!")
 
     def get_watch_tables(self,watch_name:str)->list:
         """Gets a list of tables for the watch_name
@@ -45,6 +56,8 @@ class FileWatcher():
             list: watch table names {watch_name}_FP_{index} for each path in list. 
             Index is congruent to position in "file_list" and "file_list_types" in "watch_name" key.
         """
+        if not self.active_watch:
+            return []
         db_tables=self.fm.db.tables_in_db()
         watch_tables=[]
         for table_name in db_tables:
@@ -88,6 +101,8 @@ class FileWatcher():
             prompt_if_changed (bool, optional): when changes are found in a watch prompt. Defaults to True.
             onlymap (bool, optional): When True, generate only in db, else generate in db and in json file. Defaults to True.
         """
+        if not self.active_watch:
+            return
         self.fm.map_a_list_of_paths_to_db(watch_name,file_list,True,None,False,False)
         watch_tables=self.get_watch_tables(watch_name)
         watch_dict={}
