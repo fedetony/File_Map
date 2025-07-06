@@ -22,10 +22,9 @@ FM=FileManipulate()
 
 
 class FileWatcher():
-    """Class for Mapping functions in a specific database"""
+    """Class for watching files and paths using mapping functions"""
 
     def __init__(self):
-        
         files_watch=FM.get_possible_file_list(FM.get_app_path(),"*file_watch*.json")
         self.file_watch_paths=None
         if len(files_watch)>0:
@@ -36,7 +35,16 @@ class FileWatcher():
             # self.ba=BackupActions(os.path.join(self.watch_db_path,self.watch_db_file),None,None,ask_confirmation)
         print(self.file_watch_paths)
 
-    def get_watch_tables(self,watch_name):
+    def get_watch_tables(self,watch_name:str)->list:
+        """Gets a list of tables for the watch_name
+
+        Args:
+            watch_name (str): watch
+
+        Returns:
+            list: watch table names {watch_name}_FP_{index} for each path in list. 
+            Index is congruent to position in "file_list" and "file_list_types" in "watch_name" key.
+        """
         db_tables=self.fm.db.tables_in_db()
         watch_tables=[]
         for table_name in db_tables:
@@ -70,6 +78,16 @@ class FileWatcher():
         return file_list_types
 
     def make_watch_maps(self,watch_name,file_list,repeat_period_h=24,prompt_if_changed=True,onlymap=True):
+        """makes maps for each path/file in file_list in db. If onlymap=False will overwrite the json map with the watch.
+            If maps for the same watch exist in db will append the new founded files. 
+
+        Args:
+            watch_name (_type_): watch
+            file_list (list): list with files or paths to watch
+            repeat_period_h (int, optional): set value for checking after, set -1 to check in every run. Defaults to 24.
+            prompt_if_changed (bool, optional): when changes are found in a watch prompt. Defaults to True.
+            onlymap (bool, optional): When True, generate only in db, else generate in db and in json file. Defaults to True.
+        """
         self.fm.map_a_list_of_paths_to_db(watch_name,file_list,True,None,False,False)
         watch_tables=self.get_watch_tables(watch_name)
         watch_dict={}
@@ -118,6 +136,20 @@ class FileWatcher():
             FM.save_dict_to_json(self.file_watch_paths[0],watch_dict)
     
     def get_watch_active_paths(self,watch_name,log_print=False):
+        """gets list active_watch_paths,active_watch_index,for active maps 
+            file_list with the correct mount if mount has changed
+
+        Args:
+            watch_name (str): watch
+            log_print (bool, optional): print not found device. Defaults to False.
+
+        Returns:
+            tuple: active_watch_paths,active_watch_index,file_list.
+            active_watch_paths->list of paths found active.
+            file_list-> 
+            active_watch_index contins the index in watch table names {watch_name}_FP_{index}. 
+            Index is congruent to position in "file_list".
+        """
         watch_tables=self.get_watch_tables(watch_name)
         if len(watch_tables)==0:
             return [],[]
@@ -162,7 +194,7 @@ class FileWatcher():
         for watch_table in watch_tables:
             self.fm.delete_map(watch_table)
 
-    def run_watch_comparison(self,watch_name):
+    def run_watch_comparison(self,watch_name,onlymap=False):
         """makes a check map of the watched files, compares the files with the check maps and sets events if changes found. 
            Removes the check map before exit.
 
@@ -246,7 +278,7 @@ class FileWatcher():
                         watch_dict=self.add_event_to_watch_dict(watch_dict,watch_name,[str(datetime.now()),watch,'filepath',f'{dbr.filepath} deleted|moved'])
                         watch_dict=self.set_item_watch_dict(watch_dict,watch,'has_changed',True) 
                         has_changed=True
-                    if has_changed:
+                    if has_changed and not onlymap:
                         if not FM.save_dict_to_json(self.file_watch_paths[0],watch_dict):
                             print(f'[red]Error: {self.file_watch_paths[0]} could not be saved!')
                     # file_info=self.fm.get_mapping_info_data_from_file(mount,dbr.filepath,dbr.filename,False,"",False)
