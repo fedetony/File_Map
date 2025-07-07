@@ -316,8 +316,11 @@ class FileStructurer():
             if df['filepath'][0]=='':
                 return df['file_tuple'][0]
             return [{df['filepath'][0]:df['file_tuple'][0]}]
+        #add the path_n
+        df=self.add_splitted_path_n_df(df,1)
+        #form a 1 item list of dictionaries with all levels
         df=self.get_grouped_df(df)
-        return df['file_tuple'].to_list()
+        return  df['file_tuple'][0] 
     
     def get_file_structure_dict(self,name:str)->dict:
         """Returns the file structure of the compressed dataframe
