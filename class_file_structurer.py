@@ -236,16 +236,6 @@ class FileStructurer():
         Returns:
             pd.DataFrame: Compressed df with file_tuple dictionary
         """
-        # Filter out non-NaN 'path_n' rows
-        filtered = df[df['path_n'].notna()]
-        # Drop 'path_n' and 'file_tuple' duplicates for safety
-        filtered = filtered[['filepath', 'path_n', 'file_tuple']].copy()
-        # Build nested dictionary by explicitly excluding grouping columns
-        grouped = (
-            filtered.groupby('filepath')
-                    .apply(lambda g: pd.Series({'file_tuple': dict(zip(g['path_n'], g['file_tuple']))}))#,include_groups=False)
-                    .reset_index()
-        )
         def convert_list(f_t):
             if isinstance(f_t,dict):
                 f_list=[]
@@ -254,7 +244,17 @@ class FileStructurer():
                 return f_list
             else:
                 return f_t
-
+        # Filter out non-NaN 'path_n' rows
+        filtered = df[df['path_n'].notna()]
+        # Drop 'path_n' and 'file_tuple' duplicates for safety
+        filtered = filtered[['filepath', 'path_n', 'file_tuple']].copy()
+        # Build nested dictionary by explicitly excluding grouping columns
+        grouped = (
+            filtered.groupby('filepath', group_keys=False)
+                    .apply(lambda g: pd.Series({'file_tuple': dict(zip(g['path_n'], g['file_tuple']))}))#,include_groups=False)
+                    .reset_index()
+        )
+                
         grouped['file_tuple']=grouped['file_tuple'].apply(lambda row: convert_list(row))
         
         return grouped
@@ -291,7 +291,7 @@ class FileStructurer():
         """
         df = self.add_depth_to_df(self.df)
         max_depth=self.get_max_depth(df)
-        min_depth=self.get_min_depth(df)
+        min_depth=1 # self.get_min_depth(df)
         iii=1
         while max_depth > min_depth:
             print(f'{iii} Compressing {max_depth} to {min_depth}, {df["path_depth"].size} elements left')
