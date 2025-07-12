@@ -7,6 +7,7 @@ File Mapping from dataframes to File structure
 """
 import pandas as pd
 import os
+from rich import print
 
 class FileStructurer():
     """Class to form a file structure from a dataframe, must contain "id", "filepath", "filename", "size" in dataframe columns. 
@@ -283,7 +284,7 @@ class FileStructurer():
         remaining_cols = [col for col in final_df.columns if col not in preferred_order]
         return final_df[preferred_order + remaining_cols]
     
-    def fully_compress(self)->pd.DataFrame:
+    def fully_compress(self,min_depth=1)->pd.DataFrame:
         """Compress the dataframe Iteratevily until max compression depth.
 
         Returns:
@@ -291,7 +292,7 @@ class FileStructurer():
         """
         df = self.add_depth_to_df(self.df)
         max_depth=self.get_max_depth(df)
-        min_depth=1 # self.get_min_depth(df)
+        # min_depth=1 # self.get_min_depth(df)
         iii=1
         while max_depth > min_depth:
             print(f'{iii} Compressing {max_depth} to {min_depth}, {df["path_depth"].size} elements left')
@@ -309,17 +310,27 @@ class FileStructurer():
         Returns:
             list: File structure list
         """
-        df=self.fully_compress()
+        df=self.fully_compress(1)
         if df['file_tuple'].size==0:
             return []
         if df['file_tuple'].size==1:
             if df['filepath'][0]=='':
                 return df['file_tuple'][0]
             return [{df['filepath'][0]:df['file_tuple'][0]}]
-        #add the path_n
-        df=self.add_splitted_path_n_df(df,1)
-        #form a 1 item list of dictionaries with all levels
-        df=self.get_grouped_df(df)
+        else:
+            end_list=[]
+            for file_tup in df['file_tuple']:
+                if isinstance(file_tup,list):
+                    end_list.extend(file_tup)
+                else:
+                    end_list.append(file_tup)
+            return end_list
+        #     self.df=df
+        #     df=self.fully_compress(0)
+        # # #add the path_n
+        # df=self.add_splitted_path_n_df(df,1)
+        # #form a 1 item list of dictionaries with all levels
+        # df=self.get_grouped_df(df)
         return  df['file_tuple'][0] 
     
     def get_file_structure_dict(self,name:str)->dict:
