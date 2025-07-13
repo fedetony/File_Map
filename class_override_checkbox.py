@@ -157,7 +157,8 @@ class Checkbox(BaseConsoleRender):
                 or (is_in_beginning and index == self.current)
                 or (is_in_end and end_index == self.current)
             ):
-                selector = self.theme.Checkbox.selection_icon
+                selector = '\033[3m'+self.theme.Checkbox.selection_icon #italic selection
+                #selector = '\033[4m'+self.theme.Checkbox.selection_icon #underline selection
                 color = self.theme.Checkbox.selection_color
 
             if choice in self.locked:
