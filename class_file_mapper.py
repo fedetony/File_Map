@@ -376,14 +376,17 @@ class FileMapper:
         mappath=map_info[0][3]
         
         df = d_m1.get_selected_df(fields_to_tab=field_list, sort_by=sort_by, ascending=ascending)
-        FS=FileStructurer(df)
+        if len(fields2tab)==0:
+            FS=FileStructurer(df)
+        else:
+            FS=FileStructurer(df,fields2tab)
         map_list=FS.get_file_structure()
         # print(df)
         # print("-"*33)
         # print(map_list)
         # map_list=self.map_to_file_structure_concurrent(df)
         print(f'Time elapsed: {self.calculate_time_elapsed(start,datetime.now())} s')
-        return {map_info[0][3]: map_list}
+        return {mappath: map_list}
     
     def map_to_file_structure_concurrent(self, df) -> list:
         """
