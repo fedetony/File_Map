@@ -15,6 +15,7 @@ from class_mapping_actions import *
 from class_file_mapper import *
 # from class_data_manage import DataManage
 # from class_file_explorer import *
+from class_dataframe_compare import DataFrameCompare
 
 
 #F_M=FileManipulate()
@@ -523,4 +524,37 @@ class BackupActions():
             if not was_removed:
                 msg=msg + f'[red]\t({data[0]}) {filepath} was not Removed!!\n'
         return msg
-      
+
+    def compare_two_maps(self,db_map_pair_1,db_map_pair_2,where1=None,where2=None,show_statistic=False): 
+        """compares two maps or parts of the maps
+
+        Args:
+            db_map_pair_1 (tuple): db map pair 1
+            db_map_pair_2 (tuple): db map pair 2
+            where1 (_type_, optional): filter for map 1. Defaults to None.
+            where2 (_type_, optional): filter for map 2. Defaults to None.
+            show_statistic (bool, optional):Print statistics dictionary. Defaults to False.
+
+        Returns:
+            tuple(pd.Dataframe,dict): Datafame with unique "md5","ids_on_a","ids_on_b":list of ids, Source: "A","B" or "A&B", 'num_ids_a','num_ids_b': Number of ids in each.
+                                        and statistic dictionary. 
+        """
+        fm1=self.cma.get_file_map(db_map_pair_1[0])
+        data_list1=fm1.db.get_data_from_table(db_map_pair_1[1],"*",where1)
+        if len(data_list1)==0:
+            return None,None
+        fm2=self.cma.get_file_map(db_map_pair_2[0])
+        data_list2=fm2.db.get_data_from_table(db_map_pair_2[1],"*",where2)
+        if len(data_list2)==0:
+            return None,None
+        field_list=fm1.db.get_column_list_of_table(db_map_pair_1[1])
+        dm1=DataManage(data_list1,field_list)
+        dm2=DataManage(data_list2,field_list)
+        #pass only md5 for speed
+        fields=["id", "md5"]
+        md5_c=DataFrameCompare(dm1.get_selected_df(fields),dm2.get_selected_df(fields))
+        df_compare=md5_c.compare_a_b("md5")
+        statistic=md5_c.generate_comparison_stats(df_compare)
+        if show_statistic:
+            print(statistic)
+        return df_compare,statistic
