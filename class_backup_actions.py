@@ -538,6 +538,7 @@ class BackupActions():
         Returns:
             tuple(pd.Dataframe,dict): Datafame with unique "md5","ids_on_a","ids_on_b":list of ids, Source: "A","B" or "A&B", 'num_ids_a','num_ids_b': Number of ids in each.
                                         and statistic dictionary. 
+                                        md5_c class.
         """
         fm1=self.cma.get_file_map(db_map_pair_1[0])
         data_list1=fm1.db.get_data_from_table(db_map_pair_1[1],"*",where1)
@@ -557,4 +558,7 @@ class BackupActions():
         statistic=md5_c.generate_comparison_stats(df_compare)
         if show_statistic:
             print(statistic)
-        return df_compare,statistic
+        return df_compare,statistic,md5_c
+    
+        
+

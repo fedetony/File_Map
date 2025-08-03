@@ -54,7 +54,72 @@ class DataFrameCompare:
         return md5_comparison
 
     @staticmethod
-    def generate_comparison_stats(md5_comparison: pd.DataFrame) -> dict:
+    def get_df_of_a_source(source:str,md5_comparison: pd.DataFrame)->pd.DataFrame:
+        """Gets the df of filtered 'A','B' or 'A&B'.
+
+        Args:
+            source (str): 'A','B' or 'A&B'
+            md5_comparison (pd.DataFrame): comparison df
+
+        Returns:
+            pd.DataFrame: filtered df
+        """
+        return md5_comparison.loc[md5_comparison['source'] == source]
+    
+    @staticmethod
+    def get_df_of_repeated(source:str,md5_comparison: pd.DataFrame)->pd.DataFrame:
+        """Returnd the df of the md5 items that have more than 1 item in their lists
+
+        Args:
+            source (str): 'A','B' or 'A&B'
+            md5_comparison (pd.DataFrame): comparison df
+
+        Returns:
+            pd.DataFrame: more than 1 item in df
+        """
+        if source == 'A':
+            return md5_comparison.loc[(md5_comparison['source'] == source) & (md5_comparison['num_ids_a'] > 1)] 
+        if source == 'B':
+            return md5_comparison.loc[(md5_comparison['source'] == source) & (md5_comparison['num_ids_b'] > 1)] 
+        
+        return md5_comparison.loc[(md5_comparison['num_ids_a'] > 1) | (md5_comparison['num_ids_b'] > 1)]
+
+    @staticmethod
+    def get_df_of_unique(source:str,md5_comparison: pd.DataFrame)->pd.DataFrame:
+        """Returnd the df of the md5 items that have only 1 item in their lists
+
+        Args:
+            source (str): 'A','B' or 'A&B'
+            md5_comparison (pd.DataFrame): comparison df
+
+        Returns:
+            pd.DataFrame: more than 1 item in df
+        """
+        if source == 'A':
+            return md5_comparison.loc[(md5_comparison['source'] == source) & (md5_comparison['num_ids_a'] == 1)]
+        if source == 'B':
+            return md5_comparison.loc[(md5_comparison['source'] == source) & (md5_comparison['num_ids_b'] == 1)]
+        return md5_comparison.loc[(md5_comparison['num_ids_a'] == 1) & (md5_comparison['num_ids_a'] == 1)] 
+    
+    
+    @staticmethod
+    def get_df_of_deleted_created(source:str,md5_comparison: pd.DataFrame)->pd.DataFrame:
+        """Returnd the df of the md5 items that have 0 items in their lists
+
+        Args:
+            source (str): 'A','B' or 'A&B'
+            md5_comparison (pd.DataFrame): comparison df
+
+        Returns:
+            pd.DataFrame: with 0 items
+        """
+        if source == 'A':
+            return md5_comparison.loc[(md5_comparison['source'] == source) & (md5_comparison['num_ids_a'] == 0)]
+        if source == 'B':
+            return md5_comparison.loc[(md5_comparison['source'] == source) & (md5_comparison['num_ids_b'] == 0)]
+        return md5_comparison.loc[(md5_comparison['num_ids_a'] == 0) | (md5_comparison['num_ids_a'] == 0)]
+
+    def generate_comparison_stats(self,md5_comparison: pd.DataFrame) -> dict:
         """Make statistics of the comparison
 
         Args:
@@ -64,9 +129,9 @@ class DataFrameCompare:
             dict: some statistics
         """
         total_unique_md5 = len(md5_comparison)
-        a_and_b = md5_comparison[md5_comparison['source'] == 'A&B']
-        only_a = md5_comparison[md5_comparison['source'] == 'A']
-        only_b = md5_comparison[md5_comparison['source'] == 'B']
+        a_and_b = self.get_df_of_a_source('A&B',md5_comparison)
+        only_a = self.get_df_of_a_source('A',md5_comparison)
+        only_b = self.get_df_of_a_source('B',md5_comparison)
 
         return {
             'total_unique_md5': total_unique_md5,
@@ -78,6 +143,21 @@ class DataFrameCompare:
             'percent_only_b': len(only_b) / total_unique_md5 * 100,
         }
     
+    @staticmethod
+    def merge_id_columns(df_sorted:pd.DataFrame,merged_name='ids_list',ids_a_name:str='ids_on_a',ids_b_name:str='ids_on_b'):
+        """Merge id_on_a with ids_on_b into a single list"""
+        def mergecols(col1,col2):
+            if isinstance(col1,list) and isinstance(col2,list):
+                return col1+col2
+            elif isinstance(col1,list) and not isinstance(col2,list):
+                return col1
+            elif not isinstance(col1,list) and isinstance(col2,list):
+                return col2    
+            return None
+
+        df_sorted[merged_name]=df_sorted.apply(mergecols(df_sorted[ids_a_name],df_sorted[ids_b_name]),axis=1)
+        return  df_sorted
+
     @staticmethod
     def make_summary_ids(df_sorted:pd.DataFrame,ids_column_name:str='ids_list',column_name='md5'):
         """Group df_sorted by 'md5' and collect the 'id's into a list.
@@ -122,11 +202,16 @@ class DataFrameCompare:
 
         # Define the status for each md5 row
         def label_md5_source(row):
-            if pd.notna(row[id_list_a_name]) and pd.notna(row[id_list_b_name]):
+            a_val=row[id_list_a_name]
+            b_val=row[id_list_b_name]
+            if isinstance(a_val,list) and isinstance(b_val,list): 
+            #if pd.notna(row[id_list_a_name]) and pd.notna(row[id_list_b_name]):
                 return 'A&B'
-            elif pd.notna(row[id_list_a_name]):
+            elif isinstance(a_val,list) and not isinstance(b_val,list):
+            #elif pd.notna(row[id_list_a_name]):
                 return 'A'
-            elif pd.notna(row[id_list_b_name]):
+            elif not isinstance(a_val,list) and isinstance(b_val,list):
+            #elif pd.notna(row[id_list_b_name]):
                 return 'B'
             else:
                 return 'Unknown'

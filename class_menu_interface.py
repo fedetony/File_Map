@@ -995,7 +995,7 @@ class TerminalMenuInterface():
                 map_types.append(maptype)
         db_map_pair=self.menu_select_database_map(map_types)
         if not db_map_pair:
-            return ''
+            return 'No Selection Map chosen'
         choices_hints = {
         "Browse Tree": "Allows browsing the map's tree",
         "Browse Directories": "Allows browsing the map's Folders",
@@ -1363,7 +1363,8 @@ class TerminalMenuInterface():
     def menu_backup_functions(self):
         """Interactive menu backups"""
         choices_hints = {
-            'Backup of Map base': "Maps the actual end directory and ompares it to the backup map and makes changes of differences from actual base directory of the map to the backup.",
+            'Map A 2 Map B compare':'Compares two maps to find which files are present in A, in B and A&B',
+            'Backup of Map base': "Maps the actual end directory and compares it to the backup map and makes changes of differences from actual base directory of the map to the backup.",
             'Backup of Selection Map': "Makes backup of files in map, unless there are already files in the end directory. If so compares end directory with the map and makes actions",
             'Backup compare': "Maps actual backup folder and compares to backup map",
             'Back': "Go back"}
@@ -1407,8 +1408,202 @@ class TerminalMenuInterface():
                 if not db_map_pair:
                     return ''
                 self.ba.backup_compare(db_map_pair)
+            elif answers['backup']=='Map A 2 Map B compare':
+                return self.selection_of_2maps_to_compare()
             elif answers['backup']=='Back':
                 return ''
+    
+    def get_filter_for_map(self,db_map_pair):
+        """Select a filter for a map. Will check if filtered map has elements
+
+        Args:
+            db_map_pair (_type_): db Map pair
+
+        Returns:
+            str: valid filter or None
+        """
+        ans_txt='any'
+        where1=None
+        while ans_txt not in ['',None]:
+            (ans_txt, msg, is_valid)=A_C.get_sql_input()
+            print(f'Checking filter:{ans_txt}')
+            if ans_txt not in ['',None] and is_valid:
+                where1=ans_txt
+                fm=self.cma.get_file_map(db_map_pair[0])
+                data=fm.db.get_data_from_table(db_map_pair[1],"*",where1)
+                if len(data) == 0:
+                    print(f'[red]Map {db_map_pair[1]} has No files with {ans_txt} filter!')
+                else:
+                    print(f'[green]Map {db_map_pair[1]} has {len(data)} files after filtering!')
+                    return where1
+            else:
+                print(f'[red]Not valid filter {ans_txt} filter!')
+        return where1
+
+    def selection_of_2maps_to_compare(self):
+        """Selects the maps to compare and makes comparison"""
+        msg=''
+        print("[magenta]Please select map A:")
+        db_map_pair1=self.menu_select_database_map()
+        if not db_map_pair1:
+            return ''
+        if self.ask_confirmation("Add Filter to selection",False):
+            where1=self.get_filter_for_map(db_map_pair1)
+        else:
+            print(f'[yellow]Map {db_map_pair1[1]} has No filter!')
+            where1=None
+            
+        print("[magenta]Please select map B:")
+        db_map_pair2=self.menu_select_database_map()
+        if not db_map_pair2:
+            return ''
+        if self.ask_confirmation("Add Filter to selection",False):
+            if where1:
+                if self.ask_confirmation("Use same filter as A",False):
+                    where2=where1
+                else:
+                    where2=self.get_filter_for_map(db_map_pair2)
+            else:
+                where2=self.get_filter_for_map(db_map_pair2)
+        else:
+            print(f'[yellow]Map {db_map_pair2[1]} has No filter!')
+            where2=None
+        comparison,_,md5_c=self.ba.compare_two_maps(db_map_pair1,db_map_pair2,where1,where2,True)  
+        return self.menu_explore_compare(db_map_pair1,db_map_pair2,comparison,md5_c)  
+
+    def menu_explore_compare(self,db_map_pair1,db_map_pair2,comparison,md5_c):
+        choices_hints = {
+            'Browse Repeated A':'Browse files more than 1 time present in A',
+            'Browse Repeated B':'Browse files more than 1 time present in B',
+            'Browse Repeated A&B':'Browse files more than 1 time present in A or B',
+            'Browse Created':'Browse files not in A, but in B',
+            'Browse Deleted':'Browse files not in B, but in A',
+            'Browse Present in A&B':'Browse files in A and also in B',
+            'Back': "Go back"}
+        ch=list(choices_hints.keys())
+        msg=''
+        in_name='map2mapcompare'
+        menu = [inquirer.List(
+            in_name,
+            message="Please select",
+            choices=ch,
+            carousel=False,
+            hints=choices_hints,
+            )]
+        fm1=self.cma.get_file_map(db_map_pair1[0])
+        fm2=self.cma.get_file_map(db_map_pair2[0])
+        while True:
+            if len(comparison)==0:
+                return '[magenta]There is No comparison![\magenta]'
+            os.system('cls' if os.name == 'nt' else 'clear')
+            print(MENU_HEADER)
+            print("Map A comparison Map B:")
+            if not msg in ['',None]:
+                print("---------------------------------")
+                print(msg)
+                msg=''
+            print("---------------------------------")
+            answers = inquirer.prompt(menu)
+            self._check_menu_inquirer(answers)
+            fields2tab=['id','md5']
+            if answers['map2mapcompare'] in ['Browse Repeated A','Browse Repeated B','Browse Repeated A&B']:
+                if answers['map2mapcompare'] == 'Browse Repeated A':
+                    df=md5_c.get_df_of_repeated("A",comparison)
+                    where=self._get_id_list_where(df,'ids_on_a')
+                    show_f_e = (where!='')
+                    f_s1=self.cma.map_to_file_structure(db_map_pair1[0],db_map_pair1[1],where,fields2tab)
+                    fs_list=[f_s1]
+                    db_map_list=[db_map_pair1]
+                    name_list=[f'In A:{db_map_pair1[1]}']
+                elif answers['map2mapcompare'] == 'Browse Repeated B':
+                    df=md5_c.get_df_of_repeated("B",comparison)
+                    where=self._get_id_list_where(df,'ids_on_b')
+                    show_f_e = (where!='')
+                    f_s2=self.cma.map_to_file_structure(db_map_pair2[0],db_map_pair2[1],where,fields2tab)
+                    fs_list=[f_s2]
+                    db_map_list=[db_map_pair2]
+                    name_list=[f'In A:{db_map_pair2[1]}']
+                else:
+                    df=md5_c.get_df_of_repeated("A&B",comparison)
+                    where=self._get_id_list_where(df,'ids_on_a')
+                    show_f_e = (where!='')
+                    f_s1=self.cma.map_to_file_structure(db_map_pair1[0],db_map_pair1[1],where,fields2tab)
+                    where=self._get_id_list_where(df,'ids_on_b')
+                    show_f_e = show_f_e and (where!='')
+                    f_s2=self.cma.map_to_file_structure(db_map_pair2[0],db_map_pair2[1],where,fields2tab)
+                    fs_list=[f_s1,f_s2]
+                    db_map_list=[db_map_pair1,db_map_pair2]
+                    name_list=[f'In A:{db_map_pair1[1]}',f'In A:{db_map_pair2[1]}']
+                if show_f_e:
+                    sss=answers['map2mapcompare']
+                    self.cma.explore_multiple_file_search(sss,fs_list,db_map_list,name_list)
+                else:
+                    msg=f'[green]No Repeated Files[/green]\n{str(md5_c.generate_comparison_stats(comparison))}'
+            if answers['map2mapcompare'] in ['Browse Created','Browse Deleted']:
+                if answers['map2mapcompare'] == 'Browse Deleted':
+                    df=md5_c.get_df_of_deleted_created("B",comparison)
+                    where=self._get_id_list_where(df,'ids_on_a')
+                    show_f_e = (where!='')
+                    f_s1=self.cma.map_to_file_structure(db_map_pair1[0],db_map_pair1[1],where,fields2tab)
+                    fs_list=[f_s1]
+                    db_map_list=[db_map_pair1]
+                    name_list=[f'In A and not in B:{db_map_pair1[1]}']
+                elif answers['map2mapcompare'] == 'Browse Created':
+                    df=md5_c.get_df_of_deleted_created("A",comparison)
+                    where=self._get_id_list_where(df,'ids_on_b')
+                    show_f_e = (where!='')
+                    f_s2=self.cma.map_to_file_structure(db_map_pair2[0],db_map_pair2[1],where,fields2tab)
+                    fs_list=[f_s2]
+                    db_map_list=[db_map_pair2]
+                    name_list=[f'In B and not in A:{db_map_pair2[1]}']    
+                if show_f_e:
+                    sss=answers['map2mapcompare']
+                    self.cma.explore_multiple_file_search(sss,fs_list,db_map_list,name_list)
+                else:
+                    msg=f'[yellow]No Created/Deleted Files[/yellow]\n{str(md5_c.generate_comparison_stats(comparison))}'
+            if answers['map2mapcompare']=='Browse Present in A&B':
+                df=md5_c.get_df_of_a_source("A&B",comparison)
+                where=self._get_id_list_where(df,'ids_on_a')
+                show_f_e = (where!='')
+                f_s1=self.cma.map_to_file_structure(db_map_pair1[0],db_map_pair1[1],where,fields2tab)
+                where=self._get_id_list_where(df,'ids_on_b')
+                show_f_e = show_f_e and (where!='')
+                f_s2=self.cma.map_to_file_structure(db_map_pair2[0],db_map_pair2[1],where,fields2tab)
+                fs_list=[f_s1,f_s2]
+                db_map_list=[db_map_pair1,db_map_pair2]
+                name_list=[f'In A:{db_map_pair1[1]}',f'In A:{db_map_pair2[1]}']
+                if show_f_e :
+                    sss=answers['map2mapcompare']
+                    self.cma.explore_multiple_file_search(sss,fs_list,db_map_list,name_list)
+                else:
+                    msg=f'[yellow]No Files present in both A and B[/yellow]\n{str(md5_c.generate_comparison_stats(comparison))}'
+            if answers['map2mapcompare'] in ['Back']:
+                return md5_c.generate_comparison_stats(comparison)
+
+    @staticmethod                
+    def _get_id_list_where(df,id_col='id'):
+        """gets a where string for a list of lists of ids in the dataframe
+
+        Args:
+            df (Dataframe): dataframe
+            id_col (str, optional):list of ids column in df. Defaults to 'id'.
+
+        Returns:
+            string: where string 
+        """
+        id_list=[]
+        for id_l in df[id_col].tolist():
+            if isinstance(id_l,list):
+                id_list.extend(id_l)
+            else:
+                id_list.append(id_l)
+        where = ''
+        for iii,an_id in enumerate(id_list):
+            if iii==0:
+                where=f'id == {an_id}'
+            else:
+                where=where+f' OR id == {an_id}'            
+        return where    
 
     def menu_mapping_functions(self):
         """Interactive menu handle databases"""
