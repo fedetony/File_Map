@@ -1490,8 +1490,8 @@ class TerminalMenuInterface():
             carousel=False,
             hints=choices_hints,
             )]
-        fm1=self.cma.get_file_map(db_map_pair1[0])
-        fm2=self.cma.get_file_map(db_map_pair2[0])
+        # fm1=self.cma.get_file_map(db_map_pair1[0])
+        # fm2=self.cma.get_file_map(db_map_pair2[0])
         while True:
             if len(comparison)==0:
                 return '[magenta]There is No comparison![\magenta]'
@@ -1502,6 +1502,11 @@ class TerminalMenuInterface():
                 print("---------------------------------")
                 print(msg)
                 msg=''
+            else:
+                msg=f'[yellow]A:{db_map_pair1[1]} B:{db_map_pair2[1]} Comparison Result[/yellow]\n{str(md5_c.generate_comparison_stats(comparison))}'
+                print("---------------------------------")
+                print(msg)
+                msg=''
             print("---------------------------------")
             answers = inquirer.prompt(menu)
             self._check_menu_inquirer(answers)
@@ -1509,33 +1514,32 @@ class TerminalMenuInterface():
             if answers['map2mapcompare'] in ['Browse Repeated A','Browse Repeated B','Browse Repeated A&B']:
                 if answers['map2mapcompare'] == 'Browse Repeated A':
                     df=md5_c.get_df_of_repeated("A",comparison)
-                    where=self._get_id_list_where(df,'ids_on_a')
-                    show_f_e = (where!='')
-                    f_s1=self.cma.map_to_file_structure(db_map_pair1[0],db_map_pair1[1],where,fields2tab)
-                    show_f_e = show_f_e and (len(f_s1)>0)
-                    fs_list=[f_s1]
+                    dfa=md5_c.get_df_x_all_from_df_comp(df,'md5','ids_on_a')
+                    # fs_list=fm1.map_to_file_structure_concurrent(dfa)
+                    fs_list=[self.ba.get_file_structure_from_df(dfa,['id'],f"A » {db_map_pair1[1]} »")]
+                    show_f_e = (len(fs_list)>0)
                     db_map_list=[db_map_pair1]
                     name_list=[f'In A:{db_map_pair1[1]}']
                 elif answers['map2mapcompare'] == 'Browse Repeated B':
                     df=md5_c.get_df_of_repeated("B",comparison)
-                    where=self._get_id_list_where(df,'ids_on_b')
-                    show_f_e = (where!='')
-                    f_s2=self.cma.map_to_file_structure(db_map_pair2[0],db_map_pair2[1],where,fields2tab)
-                    show_f_e = show_f_e and (len(f_s2)>0)
-                    fs_list=[f_s2]
+                    dfb=md5_c.get_df_x_all_from_df_comp(df,'md5','ids_on_b')
+                    # fs_list=fm2.map_to_file_structure_concurrent(dfb)
+                    fs_list=[self.ba.get_file_structure_from_df(dfb,['id'],f"B » {db_map_pair2[1]} »")]
+                    show_f_e = (len(fs_list)>0)
                     db_map_list=[db_map_pair2]
                     name_list=[f'In A:{db_map_pair2[1]}']
                 else:
                     df=md5_c.get_df_of_repeated("A&B",comparison)
-                    where=self._get_id_list_where(df,'ids_on_a')
-                    show_f_e = (where!='')
-                    f_s1=self.cma.map_to_file_structure(db_map_pair1[0],db_map_pair1[1],where,fields2tab)
-                    show_f_e = show_f_e and (len(f_s1)>0)
-                    where=self._get_id_list_where(df,'ids_on_b')
-                    show_f_e = show_f_e and (where!='')
-                    f_s2=self.cma.map_to_file_structure(db_map_pair2[0],db_map_pair2[1],where,fields2tab)
-                    show_f_e = show_f_e and (len(f_s2)>0)
-                    fs_list=[f_s1,f_s2]
+                    dfa=md5_c.get_df_x_all_from_df_comp(df,'md5','ids_on_a')
+                    # fs_list=fm1.map_to_file_structure_concurrent(dfa)
+                    fs_list=[self.ba.get_file_structure_from_df(dfa,['id'],f"A » {db_map_pair1[1]} »")]
+                    if len(fs_list)>0:
+                        dfb=md5_c.get_df_x_all_from_df_comp(df,'md5','ids_on_b')
+                        # fs_list.extend(fm2.map_to_file_structure_concurrent(dfb))
+                        fs_list.extend([self.ba.get_file_structure_from_df(dfb,['id'],f"B » {db_map_pair2[1]} »")])
+                        show_f_e = (len(fs_list)>0)
+                    else:
+                        show_f_e = False
                     db_map_list=[db_map_pair1,db_map_pair2]
                     name_list=[f'In A:{db_map_pair1[1]}',f'In B:{db_map_pair2[1]}']
                 if show_f_e:
@@ -1546,20 +1550,18 @@ class TerminalMenuInterface():
             if answers['map2mapcompare'] in ['Browse Created','Browse Deleted']:
                 if answers['map2mapcompare'] == 'Browse Deleted':
                     df=md5_c.get_df_of_deleted_created("B",comparison)
-                    where=self._get_id_list_where(df,'ids_on_a')
-                    show_f_e = (where!='')
-                    f_s1=self.cma.map_to_file_structure(db_map_pair1[0],db_map_pair1[1],where,fields2tab)
-                    show_f_e = show_f_e and (len(f_s1)>0)
-                    fs_list=[f_s1]
+                    dfa=md5_c.get_df_x_all_from_df_comp(df,'md5','ids_on_b')
+                    fs_list=[self.ba.get_file_structure_from_df(dfa,['id'],f"A » {db_map_pair1[1]} »")]
+                    #fs_list=fm1.map_to_file_structure_concurrent(dfa)
+                    show_f_e = (len(fs_list)>0)
                     db_map_list=[db_map_pair1]
                     name_list=[f'In A and not in B:{db_map_pair1[1]}']
                 elif answers['map2mapcompare'] == 'Browse Created':
                     df=md5_c.get_df_of_deleted_created("A",comparison)
-                    where=self._get_id_list_where(df,'ids_on_b')
-                    show_f_e = (where!='')
-                    f_s2=self.cma.map_to_file_structure(db_map_pair2[0],db_map_pair2[1],where,fields2tab)
-                    show_f_e = show_f_e and (len(f_s2)>0)
-                    fs_list=[f_s2]
+                    dfb=md5_c.get_df_x_all_from_df_comp(df,'md5','ids_on_a')
+                    fs_list=[self.ba.get_file_structure_from_df(dfb,['id'],f"B » {db_map_pair2[1]} »")]
+                    #fs_list=fm2.map_to_file_structure_concurrent(dfb)
+                    show_f_e = (len(fs_list)>0)
                     db_map_list=[db_map_pair2]
                     name_list=[f'In B and not in A:{db_map_pair2[1]}']    
                 if show_f_e:
@@ -1569,15 +1571,16 @@ class TerminalMenuInterface():
                     msg=f'[yellow]No Created/Deleted Files[/yellow]\n{str(md5_c.generate_comparison_stats(comparison))}'
             if answers['map2mapcompare']=='Browse Present in A&B':
                 df=md5_c.get_df_of_a_source("A&B",comparison)
-                where=self._get_id_list_where(df,'ids_on_a')
-                show_f_e = (where!='')
-                f_s1=self.cma.map_to_file_structure(db_map_pair1[0],db_map_pair1[1],where,fields2tab)
-                show_f_e = show_f_e and (len(f_s1)>0)
-                where=self._get_id_list_where(df,'ids_on_b')
-                show_f_e = show_f_e and (where!='')
-                f_s2=self.cma.map_to_file_structure(db_map_pair2[0],db_map_pair2[1],where,fields2tab)
-                show_f_e = show_f_e and (len(f_s2)>0)
-                fs_list=[f_s1,f_s2]
+                dfa=md5_c.get_df_x_all_from_df_comp(df,'md5','ids_on_a')
+                # fs_list=fm1.map_to_file_structure_concurrent(dfa)
+                fs_list=[self.ba.get_file_structure_from_df(dfa,['id'],f"A » {db_map_pair1[1]} »")]
+                if len(fs_list)>0:
+                    dfb=md5_c.get_df_x_all_from_df_comp(df,'md5','ids_on_b')
+                    # fs_list.extend(fm2.map_to_file_structure_concurrent(dfb))
+                    fs_list.extend([self.ba.get_file_structure_from_df(dfb,['id'],f"B » {db_map_pair2[1]} »")])
+                    show_f_e = (len(fs_list)>0)
+                else:
+                    show_f_e = False
                 db_map_list=[db_map_pair1,db_map_pair2]
                 name_list=[f'In A:{db_map_pair1[1]}',f'In A:{db_map_pair2[1]}']
                 if show_f_e :

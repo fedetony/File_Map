@@ -5,6 +5,7 @@
 from __future__ import print_function, unicode_literals
 
 import os
+import pandas as pd
 # import getpass
 
 # from datetime import datetime
@@ -16,6 +17,7 @@ from class_file_mapper import *
 # from class_data_manage import DataManage
 # from class_file_explorer import *
 from class_dataframe_compare import DataFrameCompare
+from class_file_structurer import FileStructurer
 
 
 #F_M=FileManipulate()
@@ -551,14 +553,36 @@ class BackupActions():
         field_list=fm1.db.get_column_list_of_table(db_map_pair_1[1])
         dm1=DataManage(data_list1,field_list)
         dm2=DataManage(data_list2,field_list)
-        #pass only md5 for speed
-        fields=["id", "md5"]
-        md5_c=DataFrameCompare(dm1.get_selected_df(fields),dm2.get_selected_df(fields))
+        md5_c=DataFrameCompare(dm1.get_selected_df(field_list),dm2.get_selected_df(field_list),'md5')
         df_compare=md5_c.compare_a_b("md5")
         statistic=md5_c.generate_comparison_stats(df_compare)
         if show_statistic:
             print(statistic)
         return df_compare,statistic,md5_c
+    
+    @staticmethod
+    def get_file_structure_from_df(df:pd.DataFrame,fields2tab:list[str],fs_base:str=None):
+        """Uses FileStructurer to form a file structure from a df
+
+        Args:
+            df (pd.DataFrame): dataframe
+            fields2tab (list[str]): fields additional to 'filename','size'
+            fs_base (str, optional): will return {fs_base: map_list} dictionary. Defaults to None returns map_list
+
+        Returns:
+            dict/list: File structure of df
+        """
+        if not isinstance(fields2tab,list):
+            FS=FileStructurer(df)
+        else:
+            if len(fields2tab)==0:
+                FS=FileStructurer(df)
+            else:
+                FS=FileStructurer(df,fields2tab)
+        map_list=FS.get_file_structure()
+        if not fs_base:
+            return map_list
+        return {fs_base: map_list}
     
         
 

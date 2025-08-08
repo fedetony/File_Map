@@ -22,9 +22,9 @@ class DataFrameCompare:
         required_columns = ['id', column_name]
         
         for col in required_columns:
-            if col not in df_a.columns:
+            if col not in list(df_a.columns):
                 raise ValueError(f"df_a is missing required column: '{col}'")
-            if col not in df_b.columns:
+            if col not in list(df_b.columns):
                 raise ValueError(f"df_b is missing required column: '{col}'")
 
 
@@ -124,10 +124,10 @@ class DataFrameCompare:
             pd.DataFrame: with 0 items
         """
         if source == 'A':
-            return md5_comparison.loc[(md5_comparison['source'] == source) & (md5_comparison['num_ids_a'] == 0)]
-        if source == 'B':
             return md5_comparison.loc[(md5_comparison['source'] == source) & (md5_comparison['num_ids_b'] == 0)]
-        return md5_comparison.loc[(md5_comparison['num_ids_a'] == 0) | (md5_comparison['num_ids_a'] == 0)]
+        if source == 'B':
+            return md5_comparison.loc[(md5_comparison['source'] == source) & (md5_comparison['num_ids_a'] == 0)]
+        return md5_comparison.loc[(md5_comparison['num_ids_a'] == 0) | (md5_comparison['num_ids_b'] == 0)]
 
     def generate_comparison_stats(self,md5_comparison: pd.DataFrame) -> dict:
         """Make statistics of the comparison
@@ -146,11 +146,11 @@ class DataFrameCompare:
         return {
             'total_unique_md5': total_unique_md5,
             'count_a_and_b': len(a_and_b),
-            'percent_a_and_b': len(a_and_b) / total_unique_md5 * 100,
+            'percent_a_and_b': round(len(a_and_b) / total_unique_md5 * 100,2),
             'count_only_a': len(only_a),
-            'percent_only_a': len(only_a) / total_unique_md5 * 100,
+            'percent_only_a': round(len(only_a) / total_unique_md5 * 100,2),
             'count_only_b': len(only_b),
-            'percent_only_b': len(only_b) / total_unique_md5 * 100,
+            'percent_only_b': round(len(only_b) / total_unique_md5 * 100,2),
         }
     
     @staticmethod
@@ -262,7 +262,14 @@ class DataFrameCompare:
         Returns:
             pd.DataFrame: selected df
         """
-        selected_df_x = self.df_a_all.loc[(self.df_a_all['id'].isin(df_comp[ids_x_name])) & (self.df_a_all[column_name] == df_comp[column_name])]
+        id_list=[]
+        for id_l in df_comp[ids_x_name].tolist():
+            if isinstance(id_l,list):
+                id_list.extend(id_l)
+            else:
+                id_list.append(id_l)
+        selected_df_x = self.df_a_all.loc[(self.df_a_all['id'].isin(id_list))]
+        # selected_df_x = self.df_a_all.loc[(self.df_a_all['id'].isin(df_comp[ids_x_name])) & (self.df_a_all[column_name] == df_comp[column_name])]
         return selected_df_x
 
 

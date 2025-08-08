@@ -9,6 +9,8 @@ import pandas as pd
 import os
 from rich import print
 
+pd.options.mode.copy_on_write = True
+
 class FileStructurer():
     """Class to form a file structure from a dataframe, must contain "id", "filepath", "filename", "size" in dataframe columns. 
     """
@@ -290,6 +292,8 @@ class FileStructurer():
         Returns:
             pd.DataFrame: max compressed dataframe
         """
+        if self.df['filepath'].size==0:
+            return self.df
         df = self.add_depth_to_df(self.df)
         max_depth=self.get_max_depth(df)
         # min_depth=1 # self.get_min_depth(df)
@@ -311,7 +315,11 @@ class FileStructurer():
             list: File structure list
         """
         df=self.fully_compress(1)
-        if df['file_tuple'].size==0:
+        try:
+            if df['file_tuple'].size==0:
+                return []
+        except KeyError:
+            # Empty df case
             return []
         if df['file_tuple'].size==1:
             if df['filepath'][0]=='':
