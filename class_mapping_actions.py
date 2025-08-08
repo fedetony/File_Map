@@ -474,9 +474,9 @@ class MappingActions():
         if a_map in self.get_maps_in_db(database):
             fm=self.get_file_map(database)
             table_size=fm.db.get_number_or_rows_in_table(a_map)
-            if table_size > 10000:
+            if table_size > 33333:
                 print(f'[red]Map {a_map} has {table_size} items, is too big to load into a single file structure!')
-                if not self.ask_confirmation("This may take a while, You want to continue?"):
+                if not self.ask_confirmation("This may take a while, You want to continue?",True):
                     return {}
             return fm.map_to_file_structure(a_map,where,fields_to_tab,sort_by,ascending)
         return {}

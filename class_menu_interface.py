@@ -1053,7 +1053,7 @@ class TerminalMenuInterface():
                 where=ans_txt #f"filename LIKE '%{ans_txt}%'"
                 # including Id is important
                 fs=self.cma.map_to_file_structure(db_map_pair[0],db_map_pair[1],where=where,fields_to_tab=['id'],sort_by=None,ascending=True)
-                print(f'Found {len(fs)} in {db_map_pair[1]}')
+                print(f'Found {len(fs)==1} in {db_map_pair[1]}')
                 if len(fs)>0:
                     fs_list.append(fs.copy())
                     db_map_list.append(db_map_pair)
