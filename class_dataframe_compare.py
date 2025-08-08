@@ -78,9 +78,9 @@ class DataFrameCompare:
             pd.DataFrame: more than 1 item in df
         """
         if source == 'A':
-            return md5_comparison.loc[(md5_comparison['source'] == source) & (md5_comparison['num_ids_a'] > 1)] 
+            return md5_comparison.loc[((md5_comparison['source']=='A&B') | (md5_comparison['source']=='A')) & (md5_comparison['num_ids_a'] > 1)] 
         if source == 'B':
-            return md5_comparison.loc[(md5_comparison['source'] == source) & (md5_comparison['num_ids_b'] > 1)] 
+            return md5_comparison.loc[((md5_comparison['source']=='A&B') | (md5_comparison['source']=='B')) & (md5_comparison['num_ids_b'] > 1)] 
         
         return md5_comparison.loc[(md5_comparison['num_ids_a'] > 1) | (md5_comparison['num_ids_b'] > 1)]
 

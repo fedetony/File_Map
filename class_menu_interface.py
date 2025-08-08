@@ -1512,6 +1512,7 @@ class TerminalMenuInterface():
                     where=self._get_id_list_where(df,'ids_on_a')
                     show_f_e = (where!='')
                     f_s1=self.cma.map_to_file_structure(db_map_pair1[0],db_map_pair1[1],where,fields2tab)
+                    show_f_e = show_f_e and (len(f_s1)>0)
                     fs_list=[f_s1]
                     db_map_list=[db_map_pair1]
                     name_list=[f'In A:{db_map_pair1[1]}']
@@ -1520,6 +1521,7 @@ class TerminalMenuInterface():
                     where=self._get_id_list_where(df,'ids_on_b')
                     show_f_e = (where!='')
                     f_s2=self.cma.map_to_file_structure(db_map_pair2[0],db_map_pair2[1],where,fields2tab)
+                    show_f_e = show_f_e and (len(f_s2)>0)
                     fs_list=[f_s2]
                     db_map_list=[db_map_pair2]
                     name_list=[f'In A:{db_map_pair2[1]}']
@@ -1528,12 +1530,14 @@ class TerminalMenuInterface():
                     where=self._get_id_list_where(df,'ids_on_a')
                     show_f_e = (where!='')
                     f_s1=self.cma.map_to_file_structure(db_map_pair1[0],db_map_pair1[1],where,fields2tab)
+                    show_f_e = show_f_e and (len(f_s1)>0)
                     where=self._get_id_list_where(df,'ids_on_b')
                     show_f_e = show_f_e and (where!='')
                     f_s2=self.cma.map_to_file_structure(db_map_pair2[0],db_map_pair2[1],where,fields2tab)
+                    show_f_e = show_f_e and (len(f_s2)>0)
                     fs_list=[f_s1,f_s2]
                     db_map_list=[db_map_pair1,db_map_pair2]
-                    name_list=[f'In A:{db_map_pair1[1]}',f'In A:{db_map_pair2[1]}']
+                    name_list=[f'In A:{db_map_pair1[1]}',f'In B:{db_map_pair2[1]}']
                 if show_f_e:
                     sss=answers['map2mapcompare']
                     self.cma.explore_multiple_file_search(sss,fs_list,db_map_list,name_list)
@@ -1545,6 +1549,7 @@ class TerminalMenuInterface():
                     where=self._get_id_list_where(df,'ids_on_a')
                     show_f_e = (where!='')
                     f_s1=self.cma.map_to_file_structure(db_map_pair1[0],db_map_pair1[1],where,fields2tab)
+                    show_f_e = show_f_e and (len(f_s1)>0)
                     fs_list=[f_s1]
                     db_map_list=[db_map_pair1]
                     name_list=[f'In A and not in B:{db_map_pair1[1]}']
@@ -1553,6 +1558,7 @@ class TerminalMenuInterface():
                     where=self._get_id_list_where(df,'ids_on_b')
                     show_f_e = (where!='')
                     f_s2=self.cma.map_to_file_structure(db_map_pair2[0],db_map_pair2[1],where,fields2tab)
+                    show_f_e = show_f_e and (len(f_s2)>0)
                     fs_list=[f_s2]
                     db_map_list=[db_map_pair2]
                     name_list=[f'In B and not in A:{db_map_pair2[1]}']    
@@ -1566,9 +1572,11 @@ class TerminalMenuInterface():
                 where=self._get_id_list_where(df,'ids_on_a')
                 show_f_e = (where!='')
                 f_s1=self.cma.map_to_file_structure(db_map_pair1[0],db_map_pair1[1],where,fields2tab)
+                show_f_e = show_f_e and (len(f_s1)>0)
                 where=self._get_id_list_where(df,'ids_on_b')
                 show_f_e = show_f_e and (where!='')
                 f_s2=self.cma.map_to_file_structure(db_map_pair2[0],db_map_pair2[1],where,fields2tab)
+                show_f_e = show_f_e and (len(f_s2)>0)
                 fs_list=[f_s1,f_s2]
                 db_map_list=[db_map_pair1,db_map_pair2]
                 name_list=[f'In A:{db_map_pair1[1]}',f'In A:{db_map_pair2[1]}']
