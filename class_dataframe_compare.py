@@ -1,9 +1,19 @@
 import pandas as pd
 
 class DataFrameCompare:
-    def __init__(self,df_a:pd.DataFrame,df_b:pd.DataFrame):
-        self.df_a=df_a
-        self.df_b=df_b
+    def __init__(self,df_a:pd.DataFrame,df_b:pd.DataFrame,column_name: str='md5'):
+        self.df_a_all=df_a
+        self.df_b_all=df_b
+        self.column_name=column_name
+        fields=['id',column_name]
+        try:
+            self.validate_input_columns(df_a,df_b,column_name)
+            self.df_a=self.get_df_with_fields(df_a,fields)
+            self.df_b=self.get_df_with_fields(df_b,fields)
+        except ValueError as eee:
+            print(f"Not selecting fields from dataframes: {eee}")
+            self.df_a=df_a
+            self.df_b=df_b      
 
 
     @staticmethod
@@ -222,6 +232,76 @@ class DataFrameCompare:
         md5_comparison[count_a_name] = md5_comparison[id_list_a_name].apply(lambda x: len(x) if isinstance(x, list) else 0)
         md5_comparison[count_b_name] = md5_comparison[id_list_b_name].apply(lambda x: len(x) if isinstance(x, list) else 0)
         return md5_comparison
+    
+    
+    def get_df_ab_all_from_df_comp(self,df_comp:pd.DataFrame,column_name='md5',ids_a_name:str='ids_on_a',ids_b_name:str='ids_on_b')->tuple:
+        """Get matching df fro a and b with all columns of the comparison df
+
+        Args:
+            df_comp (pd.DataFrame): Comparison df
+            column_name (str, optional): columnname. Defaults to 'md5'.
+            ids_a_name (str, optional): id list a column name. Defaults to 'ids_on_a'.
+            ids_b_name (str, optional): id list b column name. Defaults to 'ids_on_b'.
+
+        Returns:
+            tuple(pd.DataFrame,pd.DataFrame): selected_df_a,selected_df_b
+        """
+        selected_df_a = self.get_df_x_all_from_df_comp(df_comp,column_name,ids_a_name)
+        selected_df_b = self.get_df_x_all_from_df_comp(df_comp,column_name,ids_b_name)
+        return selected_df_a,selected_df_b
+    
+    def get_df_x_all_from_df_comp(self,df_comp:pd.DataFrame,column_name='md5',ids_x_name:str='ids_on_a')->pd.DataFrame:
+        """Get matching df with all columns of the comparison df
+
+        Args:
+            df_comp (pd.DataFrame): Comparison df
+            column_name (str, optional): columnname. Defaults to 'md5'.
+            ids_a_name (str, optional): id list a column name. Defaults to 'ids_on_a'.
+            ids_b_name (str, optional): id list b column name. Defaults to 'ids_on_b'.
+
+        Returns:
+            pd.DataFrame: selected df
+        """
+        selected_df_x = self.df_a_all.loc[(self.df_a_all['id'].isin(df_comp[ids_x_name])) & (self.df_a_all[column_name] == df_comp[column_name])]
+        return selected_df_x
+
+
+    @staticmethod
+    def selected_df_from_comparison_df(df_all:pd.DataFrame,df_comp:pd.DataFrame,source='A&B',from_ids='ids_on_b',column_name='md5')->pd.DataFrame:
+        """Gets a df with the original df_all fields/columns matching with the comparison of the selected column_name (normally md5),source and id list column
+
+        Args:
+            df_all (pd.DataFrame): dataframe with all columns 'id','filename','filepath','md5' ...
+            df_comp (pd.DataFrame): A B Comparison dataframe
+            source (str, optional): source A,B or A&B. Defaults to 'A&B'.
+            from_ids (str, optional): id list column 'ids_on_a' or 'ids_on_b'. Defaults to 'ids_on_b'.
+
+        Returns:
+            pd.DataFrame: _description_
+        """
+        selected_df_a = df_all.loc[(df_all['id'].isin(df_comp[df_comp['source'] == source][from_ids])) & (df_a[column_name] == df_comp[df_comp['source'] == source][column_name])]
+        return selected_df_a
+    
+    @staticmethod
+    def get_df_with_fields(df_any:pd.DataFrame,fields:list=None)->pd.DataFrame:
+        """Gets a df with the desired fields/columns 
+
+        Args:
+            df_any (pd.DataFrame): dataframe with all columns 'id','filename','filepath','md5' ...
+            fields (list, optional): desired fields list . Defaults to None -> ['md5', 'id'].
+
+        Returns:
+            pd.DataFrame: df with only the fields
+        """
+        if not fields:
+            fields=['md5', 'id']
+        for field in fields:
+            if field not in df_any.columns:
+                return df_any
+        if isinstance(fields,list):    
+            selected_df = df_any.dropna().loc[:, fields]
+            return selected_df
+        return df_any
 
 if __name__=="__main__":
     import hashlib
