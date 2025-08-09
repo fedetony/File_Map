@@ -103,13 +103,51 @@ class DataFrameCompare:
             md5_comparison (pd.DataFrame): comparison df
 
         Returns:
-            pd.DataFrame: more than 1 item in df
+            pd.DataFrame:  1 item in df
         """
         if source == 'A':
             return md5_comparison.loc[(md5_comparison['source'] == source) & (md5_comparison['num_ids_a'] == 1)]
         if source == 'B':
             return md5_comparison.loc[(md5_comparison['source'] == source) & (md5_comparison['num_ids_b'] == 1)]
-        return md5_comparison.loc[(md5_comparison['num_ids_a'] == 1) & (md5_comparison['num_ids_a'] == 1)] 
+        return md5_comparison.loc[(md5_comparison['num_ids_a'] == 1) & (md5_comparison['num_ids_b'] == 1)] 
+    
+    @staticmethod
+    def get_df_of_converge_diverge(source:str,md5_comparison: pd.DataFrame)->pd.DataFrame:
+        """Returnd the df of the md5 items that have:
+           A: A more than B at least 1 B item (Converge)
+           B: B more than A at least 1 A item (Diverge)
+           A&B: Converge or Diverge
+
+        Args:
+            source (str): 'A','B' or 'A&B'
+            md5_comparison (pd.DataFrame): comparison df
+
+        Returns:
+            pd.DataFrame: more than 1 item in df
+        """
+        if source == 'A':
+            return md5_comparison.loc[(md5_comparison['num_ids_a'] > md5_comparison['num_ids_b']) & (md5_comparison['num_ids_a'] >= 1) & (md5_comparison['num_ids_b'] >= 1)]
+        if source == 'B':
+            return md5_comparison.loc[(md5_comparison['num_ids_a'] < md5_comparison['num_ids_b']) & (md5_comparison['num_ids_a'] >= 1) & (md5_comparison['num_ids_b'] >= 1)]
+        return md5_comparison.loc[((md5_comparison['num_ids_a'] > md5_comparison['num_ids_b']) | (md5_comparison['num_ids_a'] < md5_comparison['num_ids_b'])) & 
+                                  (md5_comparison['num_ids_a'] >= 1) & (md5_comparison['num_ids_b'] >= 1)]
+    
+    @staticmethod
+    def get_df_of_equilibrium(source:str,md5_comparison: pd.DataFrame)->pd.DataFrame:
+        """Returnd the df of the md5 items that have:
+           more than 1 item and have same A anb b amount of items 
+            (use unique source=a'A&B' for 1 to 1 item)
+        Args:
+            source (str): 'A','B' or 'A&B'
+            md5_comparison (pd.DataFrame): comparison df
+
+        Returns:
+            pd.DataFrame: more than 1 item in df
+        """
+        if source in ['A','B','A&B']:
+            return md5_comparison.loc[(md5_comparison['num_ids_a'] > 1) & (md5_comparison['num_ids_a'] == md5_comparison['num_ids_b'])]
+        
+        return md5_comparison.loc[(md5_comparison['source'] == source)]
     
     
     @staticmethod
@@ -142,15 +180,28 @@ class DataFrameCompare:
         a_and_b = self.get_df_of_a_source('A&B',md5_comparison)
         only_a = self.get_df_of_a_source('A',md5_comparison)
         only_b = self.get_df_of_a_source('B',md5_comparison)
+        one_to_one =self.get_df_of_unique('A&B',md5_comparison)
+        many_to_many=self.get_df_of_equilibrium('A&B',md5_comparison)
+        converged = self.get_df_of_converge_diverge('A',md5_comparison)
+        diverged = self.get_df_of_converge_diverge('B',md5_comparison)
+        repeated_a = self.get_df_of_repeated('A',md5_comparison)
+        repeated_b = self.get_df_of_repeated('B',md5_comparison)
 
         return {
-            'total_unique_md5': total_unique_md5,
-            'count_a_and_b': len(a_and_b),
-            'percent_a_and_b': round(len(a_and_b) / total_unique_md5 * 100,2),
-            'count_only_a': len(only_a),
-            'percent_only_a': round(len(only_a) / total_unique_md5 * 100,2),
-            'count_only_b': len(only_b),
-            'percent_only_b': round(len(only_b) / total_unique_md5 * 100,2),
+            'Total Unique': total_unique_md5,
+            '# In A&B': len(a_and_b),
+            'In A&B %': round(len(a_and_b) / total_unique_md5 * 100,2),
+            '# Only in A': len(only_a),
+            'Only in A %': round(len(only_a) / total_unique_md5 * 100,2),
+            '# Only in B': len(only_b),
+            'Only in B %': round(len(only_b) / total_unique_md5 * 100,2),
+            '# One to One A=B': len(one_to_one),
+            '# Many to Many An=Bn': len(many_to_many),
+            'Mapped %': round((len(one_to_one)+len(many_to_many)) / total_unique_md5 * 100,2),
+            '# Converging An>Bn': len(converged),
+            '# Diverging An<Bn': len(diverged),
+            '# Repeated A': len(repeated_a),
+            '# Repeated B': len(repeated_b),
         }
     
     @staticmethod

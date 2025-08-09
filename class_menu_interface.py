@@ -1468,10 +1468,10 @@ class TerminalMenuInterface():
         else:
             print(f'[yellow]Map {db_map_pair2[1]} has No filter!')
             where2=None
-        comparison,_,md5_c=self.ba.compare_two_maps(db_map_pair1,db_map_pair2,where1,where2,True)  
-        return self.menu_explore_compare(db_map_pair1,db_map_pair2,comparison,md5_c)  
+        comparison,stats,md5_c=self.ba.compare_two_maps(db_map_pair1,db_map_pair2,where1,where2,True)  
+        return self.menu_explore_compare(db_map_pair1,db_map_pair2,comparison,md5_c,stats)  
 
-    def menu_explore_compare(self,db_map_pair1,db_map_pair2,comparison,md5_c):
+    def menu_explore_compare(self,db_map_pair1,db_map_pair2,comparison,md5_c,stats):
         choices_hints = {
             'Browse Repeated A':'Browse files more than 1 time present in A',
             'Browse Repeated B':'Browse files more than 1 time present in B',
@@ -1503,7 +1503,7 @@ class TerminalMenuInterface():
                 print(msg)
                 msg=''
             else:
-                msg=f'[yellow]A:{db_map_pair1[1]} B:{db_map_pair2[1]} Comparison Result[/yellow]\n{str(md5_c.generate_comparison_stats(comparison))}'
+                msg=f'[yellow]A:{db_map_pair1[1]} B:{db_map_pair2[1]} Comparison Result[/yellow]\n{str(stats)}'
                 print("---------------------------------")
                 print(msg)
                 msg=''
@@ -1546,7 +1546,7 @@ class TerminalMenuInterface():
                     sss=answers['map2mapcompare']
                     self.cma.explore_multiple_file_search(sss,fs_list,db_map_list,name_list)
                 else:
-                    msg=f'[green]No Repeated Files[/green]\n{str(md5_c.generate_comparison_stats(comparison))}'
+                    msg=f'[green]No Repeated Files[/green]\n{str(stats)}'
             if answers['map2mapcompare'] in ['Browse Created','Browse Deleted']:
                 if answers['map2mapcompare'] == 'Browse Deleted':
                     # Deleted -> 0 items in B
@@ -1570,7 +1570,7 @@ class TerminalMenuInterface():
                     sss=answers['map2mapcompare']
                     self.cma.explore_multiple_file_search(sss,fs_list,db_map_list,name_list)
                 else:
-                    msg=f'[yellow]No Created/Deleted Files[/yellow]\n{str(md5_c.generate_comparison_stats(comparison))}'
+                    msg=f'[yellow]No Created/Deleted Files[/yellow]\n{str(stats)}'
             if answers['map2mapcompare']=='Browse Present in A&B':
                 df=md5_c.get_df_of_a_source("A&B",comparison)
                 dfa=md5_c.get_df_x_all_from_df_comp(df,'a','md5','ids_on_a')
@@ -1589,9 +1589,9 @@ class TerminalMenuInterface():
                     sss=answers['map2mapcompare']
                     self.cma.explore_multiple_file_search(sss,fs_list,db_map_list,name_list)
                 else:
-                    msg=f'[yellow]No Files present in both A and B[/yellow]\n{str(md5_c.generate_comparison_stats(comparison))}'
+                    msg=f'[yellow]No Files present in both A and B[/yellow]\n{str(stats)}'
             if answers['map2mapcompare'] in ['Back']:
-                return md5_c.generate_comparison_stats(comparison)
+                return stats
 
     @staticmethod                
     def _get_id_list_where(df,id_col='id'):
