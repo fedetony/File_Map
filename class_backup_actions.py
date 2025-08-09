@@ -338,17 +338,19 @@ class BackupActions():
             return [], {}
         ((name_1,mappath_1,mount_1),(name_2,mappath_2,mount_2))=diff_info
         field_list=fm1.db.get_column_list_of_table(db_map_pair_1[1])
-        data_list_p = []
-        for an_id in differences['+_id']:           
-            data_list_p = data_list_p + fm2.db.get_data_from_table(db_map_pair_2[1], "*", f"id={an_id}")
-        data_list_m = []
+        
+        data_list_p = self.get_data_from_id_list(db_map_pair_2,differences['+_id'],None)
+        # for an_id in differences['+_id']:           
+        #     data_list_p = data_list_p + fm2.db.get_data_from_table(db_map_pair_2[1], "*", f"id={an_id}")
+        # data_list_m = []
         # Calculate md5 of the differences if not already
         self.cma.shallow_to_deep(db_map_pair_1,differences['-_id'])
         self.cma.shallow_to_deep(db_map_pair_2,differences['+_id'])
         _ = fm1.remap_map_in_thread_to_db(db_map_pair_1[1],None,False)
         _ = fm2.remap_map_in_thread_to_db(db_map_pair_2[1],None,False)
-        for an_id in differences['-_id']:     
-            data_list_m = data_list_m + fm1.db.get_data_from_table(db_map_pair_1[1], "*", f"id={an_id}")
+        data_list_m = self.get_data_from_id_list(db_map_pair_1,differences['-_id'],None)
+        # for an_id in differences['-_id']:     
+        #     data_list_m = data_list_m + fm1.db.get_data_from_table(db_map_pair_1[1], "*", f"id={an_id}")
         identified=[]
         already_id_p=[]
         already_id_m=[]
@@ -583,6 +585,35 @@ class BackupActions():
         if not fs_base:
             return map_list
         return {fs_base: map_list}
+    
+    def get_data_from_id_list(self,db_map_pair:tuple,id_list:list,where:str=None)->list:
+        """generates a datalist of the ids in the id_list from the db_map_par.
+
+        Args:
+            db_map_pair (tuple): database map pair
+            id_list (list): list of ids
+            where (str, optional): filter for db. Defaults to None.
+
+        Returns:
+            list: list of tuples with the data
+        """
+        fm1=self.cma.get_file_map(db_map_pair[0])
+        data_list=fm1.db.get_data_from_table(db_map_pair[1],"*",where)
+        if len(data_list)==0:
+            return []
+        if isinstance(id_list,list):
+            if len(id_list)==0:
+                return data_list
+        field_list=fm1.db.get_column_list_of_table(db_map_pair[1])
+        dm1=DataManage(data_list,field_list)
+        # get the selected ids from the list
+        selected_df = dm1.df.loc[(dm1.df['id'].isin(id_list))]
+        if selected_df['id'].size==0:
+            return []
+        # Convert the DataFrame to a list of tuples
+        return selected_df.to_numpy().tolist()
+        
+        
     
         
 

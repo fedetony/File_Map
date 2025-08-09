@@ -114,7 +114,7 @@ class DataFrameCompare:
     
     @staticmethod
     def get_df_of_deleted_created(source:str,md5_comparison: pd.DataFrame)->pd.DataFrame:
-        """Returnd the df of the md5 items that have 0 items in their lists
+        """Return the df of the md5 items that have items on source ie. 0 items in the other source. 
 
         Args:
             source (str): 'A','B' or 'A&B'
@@ -246,15 +246,16 @@ class DataFrameCompare:
         Returns:
             tuple(pd.DataFrame,pd.DataFrame): selected_df_a,selected_df_b
         """
-        selected_df_a = self.get_df_x_all_from_df_comp(df_comp,column_name,ids_a_name)
-        selected_df_b = self.get_df_x_all_from_df_comp(df_comp,column_name,ids_b_name)
+        selected_df_a = self.get_df_x_all_from_df_comp(df_comp,'a',column_name,ids_a_name)
+        selected_df_b = self.get_df_x_all_from_df_comp(df_comp,'b',column_name,ids_b_name)
         return selected_df_a,selected_df_b
     
-    def get_df_x_all_from_df_comp(self,df_comp:pd.DataFrame,column_name='md5',ids_x_name:str='ids_on_a')->pd.DataFrame:
+    def get_df_x_all_from_df_comp(self,df_comp:pd.DataFrame,x:str='a',column_name='md5',ids_x_name:str='ids_on_a')->pd.DataFrame:
         """Get matching df with all columns of the comparison df
 
         Args:
             df_comp (pd.DataFrame): Comparison df
+            x (str,optional): a or b
             column_name (str, optional): columnname. Defaults to 'md5'.
             ids_a_name (str, optional): id list a column name. Defaults to 'ids_on_a'.
             ids_b_name (str, optional): id list b column name. Defaults to 'ids_on_b'.
@@ -268,7 +269,12 @@ class DataFrameCompare:
                 id_list.extend(id_l)
             else:
                 id_list.append(id_l)
-        selected_df_x = self.df_a_all.loc[(self.df_a_all['id'].isin(id_list))]
+        if x=='a':
+            selected_df_x = self.df_a_all.loc[(self.df_a_all['id'].isin(id_list))]
+        elif x=='b':
+            selected_df_x = self.df_b_all.loc[(self.df_b_all['id'].isin(id_list))]   
+        else:
+            selected_df_x=pd.DataFrame()
         # selected_df_x = self.df_a_all.loc[(self.df_a_all['id'].isin(df_comp[ids_x_name])) & (self.df_a_all[column_name] == df_comp[column_name])]
         return selected_df_x
 

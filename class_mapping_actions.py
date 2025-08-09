@@ -551,6 +551,7 @@ class MappingActions():
             else:
                 return {} , f"No data in {db_map_pair_2}"
             diff = difflib.Differ()
+            print("\033[33mStarting Comparison\033[0m")
             result = list(diff.compare(text1, text2))
             comp_list=[]
             differences={'+':[],'-':[],'+_id':[],'-_id':[],'diff_fs':[]}
@@ -565,7 +566,9 @@ class MappingActions():
                     pass
                 else:
                     comp_list.append(line)   
+            print(f"Comparison ready ... {len(comp_list)} lines found")
             # get indexes
+            print("Indexing Comparison")
             for added in differences['+']:
                 added=added[2:]
                 addsep=added.split('|')
