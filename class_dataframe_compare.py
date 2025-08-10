@@ -167,6 +167,53 @@ class DataFrameCompare:
             return md5_comparison.loc[(md5_comparison['source'] == source) & (md5_comparison['num_ids_a'] == 0)]
         return md5_comparison.loc[(md5_comparison['num_ids_a'] == 0) | (md5_comparison['num_ids_b'] == 0)]
 
+    # def generate_expanded_df(self,md5_comparison: pd.DataFrame) -> pd.DataFrame:
+    #     """Make statistics of the comparison
+
+    #     Args:
+    #         md5_comparison (pd.DataFrame): dataframe with comparison results
+
+    #     Returns:
+    #         pd.DataFrame: merged dataframe from to
+    #     """
+    #     md5=self.column_name
+    #     total_unique_md5 = len(md5_comparison)
+    #     comp_only_a = self.get_df_of_a_source('A',md5_comparison)
+    #     comp_only_b = self.get_df_of_a_source('B',md5_comparison)
+    #     # comp_a_and_b = self.get_df_of_a_source('A&B',md5_comparison)
+    #     # comp_one_to_one =self.get_df_of_unique('A&B',md5_comparison)
+    #     # comp_many_to_many=self.get_df_of_equilibrium('A&B',md5_comparison)
+    #     # comp_converged = self.get_df_of_converge_diverge('A',md5_comparison)
+    #     # comp_diverged = self.get_df_of_converge_diverge('B',md5_comparison)
+    #     df_all_only_a=self.get_df_x_all_from_df_comp(comp_only_a,'a',md5,'ids_on_a')
+    #     # df_all_only_a = df_all_only_a.rename(columns=lambda x: f"a_{x}")
+    #     df_all_only_b=self.get_df_x_all_from_df_comp(comp_only_b,'b',md5,'ids_on_b')
+    #     # df_all_only_b = df_all_only_b.rename(columns=lambda x: f"b_{x}")
+    #     df = df.assign(action=lambda x: 'added file' if x['a_id'].notna().all() else 'removed file')
+    #     df_all_only_a['action']='removed file'
+
+    #     # repeated_a = self.get_df_of_repeated('A',md5_comparison)
+    #     # repeated_b = self.get_df_of_repeated('B',md5_comparison)
+
+    #     # 'unmodified', 'data changed', 'file renamed', 'file moved', 'added file', or 'removed file'
+    #     normal_columns=df_all_only_a.columns
+    #     columns_a = [f'a_{col}' for col in df_all_only_a.columns]
+    #     columns_b = [f'b_{col}' for col in df_all_only_b.columns]
+    #     cols_dict={'action': []}
+    #     for col in df_all_only_a.columns:
+    #         cols_dict.update({f'a_{col}':[]})
+    #         cols_dict.update({f'b_{col}':[]})
+    #     df = pd.DataFrame(cols_dict)
+    #     def set_data(row,action,rowa,rowb):
+    #         try:
+    #             for col in normal_columns:
+    #                 rowa[col]
+    #         except KeyError:
+    #             pass
+
+
+
+
     def generate_comparison_stats(self,md5_comparison: pd.DataFrame) -> dict:
         """Make statistics of the comparison
 

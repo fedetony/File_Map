@@ -12,6 +12,7 @@ from class_file_manipulate import FileManipulate
 from class_file_mapper import *
 from class_data_manage import DataManage
 from class_file_explorer import *
+from class_dataframe_compare import DataFrameCompare
 
 
 F_M=FileManipulate()
@@ -518,6 +519,7 @@ class MappingActions():
             differences={'+':[],'-':[],'+_id':[],'-_id':[],'diff_fs':[]}
             'diff_fs' list of tuples (db_map_pair)+(+/-),(* data)
         """
+        use_difflib=False
         fm_1=self.get_file_map(db_map_pair_1[0])
         fm_2=self.get_file_map(db_map_pair_2[0])
         # field list in map
@@ -527,16 +529,22 @@ class MappingActions():
             def fix_separators(path:str):
                 """Sets same separator format for comparison"""
                 return F_M.fix_separator_in_path(F_M.fix_path_separators(path),True)
-            field_list=["dt_file_modified","size","filename","filepath"]
-            what=", ".join(field_list)
+            if use_difflib:
+                field_list=["dt_file_modified","size","filename","filepath"]
+            else:
+                field_list=fm_1.db.get_column_list_of_table(db_map_pair_1[1])
+            if use_difflib:
+                what=", ".join(field_list)
+            else:
+                what="*"
             table_list_1=fm_1.db.get_data_from_table(db_map_pair_1[1],what)
             if len(table_list_1)>0:
                 # field_list= fm_1.db.get_column_list_of_table(db_map_pair_1[1])
                 data_manage_1=DataManage(table_list_1,field_list)
-                # text1=data_manage_1.get_tabulated_fields(None,header=False,index=False,justify='right').splitlines(keepends=False)
                 data_manage_1.df['filepath'] = data_manage_1.df['filepath'].apply(fix_separators)
                 data_manage_1.df['size'] = data_manage_1.df['size'].apply(int)#F_M.get_size_str_formatted)
-                text1=data_manage_1.get_tab_separated_fields(None,sort_by=['filepath','filename'],separator='|',header=False,index=False).splitlines(keepends=False)
+                if use_difflib:
+                    text1=data_manage_1.get_tab_separated_fields(None,sort_by=['filepath','filename'],separator='|',header=False,index=False).splitlines(keepends=False)
             else:
                 return {} , f"No data in {db_map_pair_1}"
             table_list_2=fm_2.db.get_data_from_table(db_map_pair_2[1],what)
@@ -546,52 +554,142 @@ class MappingActions():
                 data_manage_2=DataManage(table_list_2,field_list)
                 data_manage_2.df['filepath'] = data_manage_2.df['filepath'].apply(fix_separators)
                 data_manage_2.df['size'] = data_manage_2.df['size'].apply(int)#F_M.get_size_str_formatted)
-                # text2=data_manage_2.get_tabulated_fields(None,header=False,index=False,justify='right').splitlines(keepends=False)
-                text2=data_manage_2.get_tab_separated_fields(None,sort_by=['filepath','filename'],separator='|',header=False,index=False).splitlines(keepends=False)
+                if use_difflib:
+                    text2=data_manage_2.get_tab_separated_fields(None,sort_by=['filepath','filename'],separator='|',header=False,index=False).splitlines(keepends=False)
             else:
                 return {} , f"No data in {db_map_pair_2}"
-            diff = difflib.Differ()
-            print("\033[33mStarting Comparison\033[0m")
-            result = list(diff.compare(text1, text2))
-            comp_list=[]
-            differences={'+':[],'-':[],'+_id':[],'-_id':[],'diff_fs':[]}
-            for line in result:
-                if line.startswith('+'):
-                    comp_list.append(line)#A_C.add_ansi(line,'hgreen'))
-                    differences.update({'+':differences['+']+[line]})
-                elif line.startswith('-'):
-                    comp_list.append(line)#A_C.add_ansi(line,'hred'))
-                    differences.update({'-':differences['-']+[line]})
-                elif line.startswith('?'):
-                    pass
-                else:
-                    comp_list.append(line)   
-            print(f"Comparison ready ... {len(comp_list)} lines found")
-            # get indexes
-            print("Indexing Comparison")
-            for added in differences['+']:
-                added=added[2:]
-                addsep=added.split('|')
-                fp=fm_2.db.quotes('%'+addsep[len(addsep)-1][1:-1]+'%')
-                where=f"size = {addsep[1]} AND dt_file_modified = {fm_2.db.quotes(addsep[0])} AND filename = {fm_2.db.quotes(addsep[2])} AND filepath LIKE {fp}"
-                id_list_2=fm_2.db.get_data_from_table(db_map_pair_2[1],'*',where)
-                if len(id_list_2)>0:
-                    differences.update({'+_id':differences['+_id']+[id_list_2[0][0]]})
-                    differences.update({'diff_fs':differences['diff_fs']+[tuple(db_map_pair_2)+('+',)+id_list_2[0]]})
-            for added in differences['-']:
-                added=added[2:]
-                addsep=added.split('|')
-                fp=fm_1.db.quotes('%'+addsep[len(addsep)-1][1:-1]+'%')
-                where=f"size = {addsep[1]} AND dt_file_modified = {fm_2.db.quotes(addsep[0])} AND filename = {fm_2.db.quotes(addsep[2])} AND filepath LIKE {fp}"
-                id_list_1=fm_1.db.get_data_from_table(db_map_pair_1[1],'*',where)
-                if len(id_list_1)>0:
-                    differences.update({'-_id':differences['-_id']+[id_list_1[0][0]]})
-                    differences.update({'diff_fs':differences['diff_fs']+[tuple(db_map_pair_1)+('-',)+id_list_1[0]]})
-            
-            # print(differences)
-            return differences , f"Found {len(differences['+_id'])} (+) changes and {len(differences['-_id'])} (-) changes!"
-            
+            print("[yellow]Starting Comparison")
+            if use_difflib:
+                return self._difflib_differences(text1, text2,fm_1,db_map_pair_1,fm_2,db_map_pair_2)
+            else:
+                return self._dataframe_compare_differences(data_manage_1,db_map_pair_1,data_manage_2,db_map_pair_2)
         return {} , 'No Filemap found!'
+
+    def _dataframe_compare_differences(self,dm_1:DataManage,db_map_pair_1,dm_2:DataManage,db_map_pair_2):
+        """Uses difflib to find differences within texts
+
+        Args:
+            dm_1 (DataManage): data manage class with df 1
+            db_map_pair_1 (tuple): db map pair
+            dm_2 (DataManage): data manage class with df 2
+            db_map_pair_2 (tuple): db map pair
+
+        Returns:
+            tuple(dict,str): differences dictionary, message
+            differences={'+':[],'-':[],'+_id':[],'-_id':[],'diff_fs':[]}
+            'diff_fs' list of tuples (db_map_pair)+(+/-),(* data)
+        """
+        df_a=dm_1.df
+        df_b=dm_2.df
+        is_shallow = (df_a['md5'].isin([MD5_CALC, MD5_SHALLOW]).any() | df_b['md5'].isin([MD5_CALC, MD5_SHALLOW]).any())
+        if not is_shallow:
+            print("Found all md5 -> Making Deep Compare")
+            column_name='md5'
+            df_c_class=DataFrameCompare(df_a,df_b,column_name)    
+            df_compare=df_c_class.compare_a_b(column_name)
+        else:
+            print("Missing md5 values in map -> Making Shallow Compare")
+            def use_text_for_md5(row):
+                if row['md5'] in [MD5_SHALLOW, MD5_CALC]:
+                    return f"{row['filename']}|{row['size']}|{row['dt_file_modified']}"
+                return row['md5']
+            column_name='new_md5'
+            df_a.assign(new_md5=df_a.apply(use_text_for_md5, axis=1))[column_name]
+            df_b.assign(new_md5=df_b.apply(use_text_for_md5, axis=1))[column_name]
+            df_c_class=DataFrameCompare(df_a,df_b,column_name)    
+            df_compare=df_c_class.compare_a_b(column_name)
+        stats=df_c_class.generate_comparison_stats(df_compare)
+        print(stats)
+        differences={'+':[],'-':[],'+_id':[],'-_id':[],'diff_fs':[]}
+        # for line in result:
+        #     if line.startswith('+'):
+        #         comp_list.append(line)#A_C.add_ansi(line,'hgreen'))
+        #         differences.update({'+':differences['+']+[line]})
+        #     elif line.startswith('-'):
+        #         comp_list.append(line)#A_C.add_ansi(line,'hred'))
+        #         differences.update({'-':differences['-']+[line]})
+        #     elif line.startswith('?'):
+        #         pass
+        #     else:
+        #         comp_list.append(line)
+        # print("Indexing Comparison")
+        # for added in differences['+']:
+        #     added=added[2:]
+        #     addsep=added.split('|')
+        #     fp=fm_2.db.quotes('%'+addsep[len(addsep)-1][1:-1]+'%')
+        #     where=f"size = {addsep[1]} AND dt_file_modified = {fm_2.db.quotes(addsep[0])} AND filename = {fm_2.db.quotes(addsep[2])} AND filepath LIKE {fp}"
+        #     id_list_2=fm_2.db.get_data_from_table(db_map_pair_2[1],'*',where)
+        #     if len(id_list_2)>0:
+        #         differences.update({'+_id':differences['+_id']+[id_list_2[0][0]]})
+        #         differences.update({'diff_fs':differences['diff_fs']+[tuple(db_map_pair_2)+('+',)+id_list_2[0]]})
+        # for added in differences['-']:
+        #     added=added[2:]
+        #     addsep=added.split('|')
+        #     fp=fm_1.db.quotes('%'+addsep[len(addsep)-1][1:-1]+'%')
+        #     where=f"size = {addsep[1]} AND dt_file_modified = {fm_2.db.quotes(addsep[0])} AND filename = {fm_2.db.quotes(addsep[2])} AND filepath LIKE {fp}"
+        #     id_list_1=fm_1.db.get_data_from_table(db_map_pair_1[1],'*',where)
+        #     if len(id_list_1)>0:
+        #         differences.update({'-_id':differences['-_id']+[id_list_1[0][0]]})
+        #         differences.update({'diff_fs':differences['diff_fs']+[tuple(db_map_pair_1)+('-',)+id_list_1[0]]})
+        
+        return differences , f'{stats}'
+
+
+    def _difflib_differences(self,text1, text2,fm_1:FileMapper,db_map_pair_1,fm_2:FileMapper,db_map_pair_2):
+        """Uses difflib to find differences within texts
+
+        Args:
+            text1 (str): text to compare
+            text2 (str): text to compare
+            fm_1 (FileMapper): file map 1
+            db_map_pair_1 (tuple): db map pair
+            fm_2 (FileMapper): file map 2
+            db_map_pair_2 (tuple): db map pair
+
+        Returns:
+            tuple(dict,str): differences dictionary, message
+            differences={'+':[],'-':[],'+_id':[],'-_id':[],'diff_fs':[]}
+            'diff_fs' list of tuples (db_map_pair)+(+/-),(* data)
+        """
+        diff = difflib.Differ()
+        result = list(diff.compare(text1, text2))
+        comp_list=[]
+        differences={'+':[],'-':[],'+_id':[],'-_id':[],'diff_fs':[]}
+        for line in result:
+            if line.startswith('+'):
+                comp_list.append(line)#A_C.add_ansi(line,'hgreen'))
+                differences.update({'+':differences['+']+[line]})
+            elif line.startswith('-'):
+                comp_list.append(line)#A_C.add_ansi(line,'hred'))
+                differences.update({'-':differences['-']+[line]})
+            elif line.startswith('?'):
+                pass
+            else:
+                comp_list.append(line)   
+        print(f"Comparison ready ... {len(comp_list)} lines found")
+        # get indexes
+        print("Indexing Comparison")
+        for added in differences['+']:
+            added=added[2:]
+            addsep=added.split('|')
+            fp=fm_2.db.quotes('%'+addsep[len(addsep)-1][1:-1]+'%')
+            where=f"size = {addsep[1]} AND dt_file_modified = {fm_2.db.quotes(addsep[0])} AND filename = {fm_2.db.quotes(addsep[2])} AND filepath LIKE {fp}"
+            id_list_2=fm_2.db.get_data_from_table(db_map_pair_2[1],'*',where)
+            if len(id_list_2)>0:
+                differences.update({'+_id':differences['+_id']+[id_list_2[0][0]]})
+                differences.update({'diff_fs':differences['diff_fs']+[tuple(db_map_pair_2)+('+',)+id_list_2[0]]})
+        for added in differences['-']:
+            added=added[2:]
+            addsep=added.split('|')
+            fp=fm_1.db.quotes('%'+addsep[len(addsep)-1][1:-1]+'%')
+            where=f"size = {addsep[1]} AND dt_file_modified = {fm_2.db.quotes(addsep[0])} AND filename = {fm_2.db.quotes(addsep[2])} AND filepath LIKE {fp}"
+            id_list_1=fm_1.db.get_data_from_table(db_map_pair_1[1],'*',where)
+            if len(id_list_1)>0:
+                differences.update({'-_id':differences['-_id']+[id_list_1[0][0]]})
+                differences.update({'diff_fs':differences['diff_fs']+[tuple(db_map_pair_1)+('-',)+id_list_1[0]]})
+        
+        # print(differences)
+        return differences , f"Found {len(differences['+_id'])} (+) changes and {len(differences['-_id'])} (-) changes!"
 
     def shallow_compare_maps_fs(self,db_map_pair_1,db_map_pair_2):
         """Compare two maps using file structures, just compares formatted size path and filename.
