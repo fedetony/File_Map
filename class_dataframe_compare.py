@@ -1,4 +1,7 @@
 import pandas as pd
+from collections import defaultdict
+from difflib import SequenceMatcher
+
 
 class DataFrameCompare:
     def __init__(self,df_a:pd.DataFrame,df_b:pd.DataFrame,column_name: str='md5'):
@@ -166,53 +169,6 @@ class DataFrameCompare:
         if source == 'B':
             return md5_comparison.loc[(md5_comparison['source'] == source) & (md5_comparison['num_ids_a'] == 0)]
         return md5_comparison.loc[(md5_comparison['num_ids_a'] == 0) | (md5_comparison['num_ids_b'] == 0)]
-
-    # def generate_expanded_df(self,md5_comparison: pd.DataFrame) -> pd.DataFrame:
-    #     """Make statistics of the comparison
-
-    #     Args:
-    #         md5_comparison (pd.DataFrame): dataframe with comparison results
-
-    #     Returns:
-    #         pd.DataFrame: merged dataframe from to
-    #     """
-    #     md5=self.column_name
-    #     total_unique_md5 = len(md5_comparison)
-    #     comp_only_a = self.get_df_of_a_source('A',md5_comparison)
-    #     comp_only_b = self.get_df_of_a_source('B',md5_comparison)
-    #     # comp_a_and_b = self.get_df_of_a_source('A&B',md5_comparison)
-    #     # comp_one_to_one =self.get_df_of_unique('A&B',md5_comparison)
-    #     # comp_many_to_many=self.get_df_of_equilibrium('A&B',md5_comparison)
-    #     # comp_converged = self.get_df_of_converge_diverge('A',md5_comparison)
-    #     # comp_diverged = self.get_df_of_converge_diverge('B',md5_comparison)
-    #     df_all_only_a=self.get_df_x_all_from_df_comp(comp_only_a,'a',md5,'ids_on_a')
-    #     # df_all_only_a = df_all_only_a.rename(columns=lambda x: f"a_{x}")
-    #     df_all_only_b=self.get_df_x_all_from_df_comp(comp_only_b,'b',md5,'ids_on_b')
-    #     # df_all_only_b = df_all_only_b.rename(columns=lambda x: f"b_{x}")
-    #     df = df.assign(action=lambda x: 'added file' if x['a_id'].notna().all() else 'removed file')
-    #     df_all_only_a['action']='removed file'
-
-    #     # repeated_a = self.get_df_of_repeated('A',md5_comparison)
-    #     # repeated_b = self.get_df_of_repeated('B',md5_comparison)
-
-    #     # 'unmodified', 'data changed', 'file renamed', 'file moved', 'added file', or 'removed file'
-    #     normal_columns=df_all_only_a.columns
-    #     columns_a = [f'a_{col}' for col in df_all_only_a.columns]
-    #     columns_b = [f'b_{col}' for col in df_all_only_b.columns]
-    #     cols_dict={'action': []}
-    #     for col in df_all_only_a.columns:
-    #         cols_dict.update({f'a_{col}':[]})
-    #         cols_dict.update({f'b_{col}':[]})
-    #     df = pd.DataFrame(cols_dict)
-    #     def set_data(row,action,rowa,rowb):
-    #         try:
-    #             for col in normal_columns:
-    #                 rowa[col]
-    #         except KeyError:
-    #             pass
-
-
-
 
     def generate_comparison_stats(self,md5_comparison: pd.DataFrame) -> dict:
         """Make statistics of the comparison
@@ -414,6 +370,283 @@ class DataFrameCompare:
             return selected_df
         return df_any
 
+    def _check_for_fields(self):
+        """Checks the dfs contain all columns relevant for detail comparison
+
+        Returns:
+            bool: True if ok, false something missing
+        """
+        required_cols=[self.column_name,'id','filename','filepath','size','dt_file_modified']
+        missinga=[]
+        missingb=[]
+        for col in required_cols:
+            if col not in self.df_a_all.columns:
+                missinga.append(col)
+            if col not in self.df_b_all.columns:
+                missingb.append(col)
+        if len(missinga)==0 and len(missingb)==0:
+            return True
+        else:
+            print(f"Missing columns in df A: {missinga}")
+            print(f"Missing columns in df B: {missingb}")
+            return False
+        
+    def detail_comparison(self,md5_comparison: pd.DataFrame)->dict:
+        """Give Detail information on file mapping over a comparison
+
+        Args:
+            md5_comparison (pd.DataFrame): _description_
+
+        Returns:
+            dict(pd.DataFrame): dictionary with a single Dataframe per category under the following categories 
+            'unmodified', 'data changed', 'file renamed', 'file moved', 'added file', 'removed file', 'file moved and renamed'
+        """
+        detailed_comp_dict={'unmodified':None, 'data changed':None, 'file renamed':None, 'file moved':None, 'added file':None,'removed file':None,'file moved and renamed':None}
+        if not self._check_for_fields():
+            return detailed_comp_dict
+        md5=self.column_name
+        comp_only_a = self.get_df_of_a_source('A',md5_comparison)
+        comp_only_b = self.get_df_of_a_source('B',md5_comparison)
+        # These are single files with unique md5 (includes at least 'id','filename','filepath','size','dt_file_modified','md5')
+        df_all_only_a=self.get_df_x_all_from_df_comp(comp_only_a,'a',md5,'ids_on_a')
+        df_all_only_b=self.get_df_x_all_from_df_comp(comp_only_b,'b',md5,'ids_on_b')
+        # if they have the same filename  -> 'data changed'
+        data_changed_a=df_all_only_a.loc[(df_all_only_a['filename'].isin(df_all_only_b['filename']))] 
+        data_changed_b=df_all_only_b.loc[(df_all_only_b['filename'].isin(df_all_only_a['filename']))] 
+        added_file=df_all_only_b.loc[~df_all_only_b['filename'].isin(df_all_only_a['filename'])]
+        added_file = added_file.add_suffix('_b')
+        removed_file=df_all_only_a.loc[~df_all_only_a['filename'].isin(df_all_only_b['filename'])] 
+        removed_file = removed_file.add_suffix('_a')
+        data_changed_a['__filename_m']=data_changed_a['filename']
+        data_changed_b['__filename_m']=data_changed_b['filename']
+        merged_data_changed = pd.merge(data_changed_a,data_changed_b,on='__filename_m',suffixes=('_a', '_b'))
+        merged_data_changed.drop('__filename_m', axis=1, inplace=True)
+        d_c_d7={}
+        d_c_d7.update({'data changed':merged_data_changed})
+        d_c_d7.update({'added file':added_file})
+        d_c_d7.update({'removed file':removed_file})
+
+        # These are files in a and b with same unique md5 only once
+        comp_one_to_one =self.get_df_of_unique('A&B',md5_comparison)
+        df_all_one_to_one_a=self.get_df_x_all_from_df_comp(comp_one_to_one,'a',md5,'ids_on_a')
+        df_all_one_to_one_b=self.get_df_x_all_from_df_comp(comp_one_to_one,'b',md5,'ids_on_b')
+        comparator = MD5FileComparator(df_all_one_to_one_a, df_all_one_to_one_b, md5,'filename', 'filepath', 'dt_file_modified')
+        comparator.compare() #in self.compare
+        summary_df = comparator.get_summary_df()
+        d_c_d0=self._merge_summary(df_all_one_to_one_a, df_all_one_to_one_b,summary_df)
+        
+        # These are files in a and b with many of same unique md5 in same amounts in a and b
+        comp_many_to_many=self.get_df_of_equilibrium('A&B',md5_comparison)
+        df_all_m_to_m_a=self.get_df_x_all_from_df_comp(comp_many_to_many,'a',md5,'ids_on_a')
+        df_all_m_to_m_b=self.get_df_x_all_from_df_comp(comp_many_to_many,'b',md5,'ids_on_b')        
+        comparator = MD5FileComparator(df_all_m_to_m_a, df_all_m_to_m_b, md5,'filename', 'filepath', 'dt_file_modified')
+        comparator.compare() #in self.compare
+        summary_df = comparator.get_summary_df()
+        d_c_d1=self._merge_summary(df_all_m_to_m_a, df_all_m_to_m_b,summary_df)
+
+        # These are files in a and b with many of same unique md5 in amounts in a > b
+        comp_converged = self.get_df_of_converge_diverge('A',md5_comparison)
+        df_all_conv_a=self.get_df_x_all_from_df_comp(comp_converged,'a',md5,'ids_on_a')
+        df_all_conv_b=self.get_df_x_all_from_df_comp(comp_converged,'b',md5,'ids_on_b')        
+        comparator = MD5FileComparator(df_all_conv_a, df_all_conv_b, md5,'filename', 'filepath', 'dt_file_modified')
+        comparator.compare()
+        summary_df = comparator.get_summary_df()
+        d_c_d2=self._merge_summary(df_all_conv_a, df_all_conv_b,summary_df)
+
+        # These are files in a and b with many of same unique md5 in amounts in a < b
+        comp_diverged = self.get_df_of_converge_diverge('B',md5_comparison)
+        df_all_div_a=self.get_df_x_all_from_df_comp(comp_diverged,'a',md5,'ids_on_a')
+        df_all_div_b=self.get_df_x_all_from_df_comp(comp_diverged,'b',md5,'ids_on_b')        
+        comparator = MD5FileComparator(df_all_div_a, df_all_div_b, md5,'filename', 'filepath', 'dt_file_modified')
+        comparator.compare()
+        summary_df = comparator.get_summary_df()
+        d_c_d3=self._merge_summary(df_all_div_a, df_all_div_b,summary_df)
+
+        # List of partial dictionaries to merge
+        partial_dicts = [d_c_d0, d_c_d1, d_c_d2, d_c_d3, d_c_d7]
+
+        # Merge each category across all partial dictionaries
+        # Categories: 'unmodified', 'data changed', 'file renamed', 'file moved', 'added file', 'removed file', 'file moved and renamed'
+        for category in detailed_comp_dict.keys():
+            dfs_to_concat = [d[category] for d in partial_dicts if d[category] is not None and not d[category].empty]
+            
+            if dfs_to_concat:
+                detailed_comp_dict[category] = pd.concat(dfs_to_concat, ignore_index=True)
+            else:
+                for d in partial_dicts:
+                    if d[category] is not None:
+                        detailed_comp_dict[category] = pd.DataFrame(columns=d[category].columns)
+                        break
+                else:
+                    detailed_comp_dict[category] = pd.DataFrame()  # Fallback if all are None
+
+        return detailed_comp_dict
+    
+    def _merge_summary(self,df_a:pd.DataFrame,df_b:pd.DataFrame,summary_df:pd.DataFrame):
+        """Generates a detailed comparison dictionary with the information.
+
+        Args:
+            df_a (pd.DataFrame): dataframe with all columns a
+            df_b (pd.DataFrame): dataframe with all columns b
+            summary_df (pd.DataFrame): summary_comparison
+            md5 (str, optional): column being compared. Defaults to 'md5'.
+
+        Returns:
+            _type_: Generated detailed_comp_dict={'unmodified':None, 
+                                            'data changed':None, 
+                                            'file renamed':None, 
+                                            'file moved':None, 
+                                            'added file':None,
+                                            'removed file':None,
+                                            'file moved and renamed':None}
+           
+        """
+        detailed_comp_dict={'unmodified':None, 'data changed':None, 'file renamed':None, 'file moved':None, 'added file':None,'removed file':None,'file moved and renamed':None}
+        for category in detailed_comp_dict.keys():
+            df_cat = summary_df[summary_df['change_type'] == category].copy()
+
+            if not df_cat.empty:
+                if category in ['added file','removed file']:
+                    if category == 'added file':
+                        sel_df_b = df_b.set_index('id').loc[df_cat['id_b']].reset_index()
+                        merged_df = sel_df_b.add_suffix('_b')
+                    if category == 'removed file':
+                        sel_df_a = df_a.set_index('id').loc[df_cat['id_a']].reset_index()
+                        merged_df = sel_df_a.add_suffix('_a')
+                else:
+                    # Keep only relevant columns and ensure consistent suffixes
+                    sel_df_a = df_a.set_index('id').loc[df_cat['id_a']].reset_index()
+                    sel_df_b = df_b.set_index('id').loc[df_cat['id_b']].reset_index()
+                    # Add suffixes manually
+                    sel_df_a = sel_df_a.add_suffix('_a')
+                    sel_df_b = sel_df_b.add_suffix('_b')
+                    # Concatenate side-by-side
+                    merged_df = pd.concat([sel_df_a.reset_index(drop=True), sel_df_b.reset_index(drop=True)], axis=1)
+                detailed_comp_dict[category] = merged_df                
+            else:
+                detailed_comp_dict[category] = pd.DataFrame()  # Empty DataFrame for consistency
+        return detailed_comp_dict
+
+
+class MD5FileComparator:
+    def __init__(self, df_a:pd.DataFrame, df_b:pd.DataFrame, md5_col:str='md5', filename_col:str='filename', filepath_col:str='filepath',dt_file_modified_col:str='dt_file_modified'):
+        self.df_a = df_a.copy()
+        self.df_b = df_b.copy()
+        self.md5_col = md5_col
+        self.filename_col = filename_col
+        self.filepath_col = filepath_col
+        self.dt_file_modified_col = dt_file_modified_col
+        self.categories = defaultdict(list)
+
+    def similarity(self, a, b):
+        return SequenceMatcher(None, a, b).ratio()
+
+    def compare(self):
+        shared_md5s = set(self.df_a[self.md5_col]) & set(self.df_b[self.md5_col])
+
+        for md5_val in shared_md5s:
+            group_a = self.df_a[self.df_a[self.md5_col] == md5_val].copy()
+            group_b = self.df_b[self.df_b[self.md5_col] == md5_val].copy()
+
+            matched_b_indices = set()
+
+            for idx_a, row_a in group_a.iterrows():
+                best_match = None
+                best_score = 0
+                best_idx_b = None
+
+                for idx_b, row_b in group_b.iterrows():
+                    if idx_b in matched_b_indices:
+                        continue
+
+                    score = 0
+                    if row_a[self.filename_col] == row_b[self.filename_col]:
+                        score += 1
+                    else:
+                        score += self.similarity(row_a[self.filename_col], row_b[self.filename_col])
+
+                    if row_a[self.filepath_col] == row_b[self.filepath_col]:
+                        score += 1
+                    else:
+                        score += self.similarity(row_a[self.filepath_col], row_b[self.filepath_col])
+
+                    if score > best_score:
+                        best_score = score
+                        best_match = row_b
+                        best_idx_b = idx_b
+
+                if best_match is not None:
+                    matched_b_indices.add(best_idx_b)
+
+                    fname_a = row_a[self.filename_col]
+                    fname_b = best_match[self.filename_col]
+                    fpath_a = row_a[self.filepath_col]
+                    fpath_b = best_match[self.filepath_col]
+                    dt_a = row_a[self.dt_file_modified_col]
+                    dt_b = best_match[self.dt_file_modified_col]
+
+                    if fname_a == fname_b and fpath_a == fpath_b:
+                        self.categories['unmodified'].append((row_a, best_match))
+                    elif fname_a == fname_b and dt_a == dt_b:
+                        self.categories['file moved'].append((row_a, best_match))
+                    elif fpath_a == fpath_b and dt_a == dt_b:
+                        self.categories['file renamed'].append((row_a, best_match))
+                    elif dt_a == dt_b:
+                        self.categories['file moved and renamed'].append((row_a, best_match))
+                    else:
+                        self.categories['removed file'].append(row_a)
+                        self.categories['added file'].append(best_match)
+                else:
+                    self.categories['removed file'].append(row_a)
+
+            unmatched_b = group_b.loc[~group_b.index.isin(matched_b_indices)]
+            for _, row_b in unmatched_b.iterrows():
+                self.categories['added file'].append(row_b)
+
+        return self.categories
+
+    def get_summary_df(self):
+        summary = []
+        for category, items in self.categories.items():
+            for item in items:
+                if isinstance(item, tuple):
+                    row_a, row_b = item
+                    summary.append({
+                        'md5': row_a[self.md5_col],
+                        'id_a': row_a.get('id', None),
+                        'filename_a': row_a.get(self.filename_col, None),
+                        'filepath_a': row_a.get(self.filepath_col, None),
+                        'id_b': row_b.get('id', None),
+                        'filename_b': row_b.get(self.filename_col, None),
+                        'filepath_b': row_b.get(self.filepath_col, None),
+                        'change_type': category
+                    })
+                else:
+                    # Unmatched file (added or removed)
+                    if category == 'added file':
+                        summary.append({
+                            'md5': item[self.md5_col],
+                            'id_a': None,
+                            'filename_a': None,
+                            'filepath_a': None,
+                            'id_b': item.get('id', None),
+                            'filename_b': item.get(self.filename_col, None),
+                            'filepath_b': item.get(self.filepath_col, None),
+                            'change_type': category
+                        })
+                    else:  # removed file
+                        summary.append({
+                            'md5': item[self.md5_col],
+                            'id_a': item.get('id', None),
+                            'filename_a': item.get(self.filename_col, None),
+                            'filepath_a': item.get(self.filepath_col, None),
+                            'id_b': None,
+                            'filename_b': None,
+                            'filepath_b': None,
+                            'change_type': category
+                        })
+        return pd.DataFrame(summary)
+
 if __name__=="__main__":
     import hashlib
     import random
@@ -447,7 +680,6 @@ if __name__=="__main__":
     print(MD5C.generate_comparison_stats(df_compare))
 
     
-
 
 
 
