@@ -586,6 +586,39 @@ class BackupActions():
             return map_list
         return {fs_base: map_list}
     
+    def format_detailed_comparison(self,df:pd.DataFrame,view='a')->pd.DataFrame:
+        """Formats the df in accordance to category and view point.
+
+        Args:
+            df (pd.DataFrame): detailed comparison dataframe of a category
+            view (str, optional): a or b. Defaults to 'a'.
+
+        Returns:
+            pd.DataFrame: formatted df
+        """
+        has_a='id_a' in df.columns
+        has_b='id_b' in df.columns
+        if has_a and has_b and view=='a':
+            df['filename'] = df.apply(lambda row: f"{row['filename_a']} »» {row['filepath_b']}/{row['filename_b']}", axis=1)
+            df = df.rename(columns={'filename_a':'filename_a_o'})  # rename column
+        if has_a and has_b and view=='b':
+            df['filename'] = df.apply(lambda row: f"{row['filename_b']} «« {row['filepath_a']}/{row['filename_a']}", axis=1)
+            df = df.rename(columns={'filename_b':'filename_b_o'})  # rename column
+
+        if (view=='a' and has_a) or (view=='b' and not has_b):
+            # Remove the suffix '_a' from all columns that have it
+            for col in df.columns:
+                if col.endswith('_a'):
+                    df = df.rename(columns={col: col[:-2]})  # rename column
+        if (view=='a' and not has_a) or (view=='b' and has_b):
+            # Remove the suffix '_b' from all columns that have it
+            for col in df.columns:
+                if col.endswith('_b'):
+                    df = df.rename(columns={col: col[:-2]})  # rename column
+
+        return df
+
+    
     def get_data_from_id_list(self,db_map_pair:tuple,id_list:list,where:str=None)->list:
         """generates a datalist of the ids in the id_list from the db_map_par.
 

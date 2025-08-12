@@ -1479,6 +1479,7 @@ class TerminalMenuInterface():
             'Browse Created':'Browse files not in A, but in B',
             'Browse Deleted':'Browse files not in B, but in A',
             'Browse Present in A&B':'Browse files in A and also in B',
+            'Detail':'Detail Analysis of A and B ',
             'Back': "Go back"}
         ch=list(choices_hints.keys())
         msg=''
@@ -1590,8 +1591,63 @@ class TerminalMenuInterface():
                     self.cma.explore_multiple_file_search(sss,fs_list,db_map_list,name_list)
                 else:
                     msg=f'[yellow]No Files present in both A and B[/yellow]\n{str(stats)}'
+            if answers['map2mapcompare']=='Detail':
+                detailed_comparison_dict=md5_c.detail_comparison(comparison)
+                msg=self.menu_explore_detail_compare(detailed_comparison_dict,db_map_pair1,db_map_pair2)
             if answers['map2mapcompare'] in ['Back']:
                 return stats
+    
+    def menu_explore_detail_compare(self,detailed_comparison_dict:dict,db_map_pair1,db_map_pair2):
+        if len(detailed_comparison_dict)==0:
+            return '[magenta]There is No detail comparison![\magenta]'
+        choices_hints={}
+        for category, dfs in detailed_comparison_dict.items():      
+            choices_hints.update({category:f'Has {len(dfs)} Files'})
+        choices_hints.update({'Back':'Go back'})
+        ch=list(choices_hints.keys())
+        msg=''
+        in_name='detailcompare'
+        menu = [inquirer.List(
+            in_name,
+            message="Please select",
+            choices=ch,
+            carousel=False,
+            hints=choices_hints,
+            )]
+        # fm1=self.cma.get_file_map(db_map_pair1[0])
+        # fm2=self.cma.get_file_map(db_map_pair2[0])
+        while True:
+            os.system('cls' if os.name == 'nt' else 'clear')
+            print(MENU_HEADER)
+            print("Map A Map B detail comparison:")
+            if not msg in ['',None]:
+                print("---------------------------------")
+                print(msg)
+                msg=''
+            print("---------------------------------")
+            answers = inquirer.prompt(menu)
+            self._check_menu_inquirer(answers)
+            if answers['detailcompare'] in detailed_comparison_dict.keys():
+                category=answers['detailcompare']
+                view='a'
+                df_d=self.ba.format_detailed_comparison(detailed_comparison_dict[category],view)
+                if df_d.empty:
+                    msg='[yellow]No Files to show[/yellow]'
+                    continue
+                fs_list=[self.ba.get_file_structure_from_df(df_d,['id'],f"{category}")]
+                show_f_e = (len(fs_list)>0)
+                if view=='a':
+                    db_map_list=[db_map_pair1]
+                    name_list=[f'View from:{db_map_pair1[1]}'] 
+                else:
+                    db_map_list=[db_map_pair2]
+                    name_list=[f'View from:{db_map_pair2[1]}']    
+                if show_f_e:
+                    self.cma.explore_multiple_file_search(category,fs_list,db_map_list,name_list)
+                else:
+                    msg='[yellow]No Files to show[/yellow]'
+            else:
+                return ""
 
     @staticmethod                
     def _get_id_list_where(df,id_col='id'):

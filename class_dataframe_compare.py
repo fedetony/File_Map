@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 from collections import defaultdict
 from difflib import SequenceMatcher
@@ -5,6 +6,8 @@ from difflib import SequenceMatcher
 
 class DataFrameCompare:
     def __init__(self,df_a:pd.DataFrame,df_b:pd.DataFrame,column_name: str='md5'):
+        df_a=self._fix_paths_in_df(df_a)
+        df_b=self._fix_paths_in_df(df_b)
         self.df_a_all=df_a
         self.df_b_all=df_b
         self.column_name=column_name
@@ -18,6 +21,26 @@ class DataFrameCompare:
             self.df_a=df_a
             self.df_b=df_b      
 
+    @staticmethod
+    def _fix_paths_in_df(df:pd.DataFrame)->pd.DataFrame:
+        """Converts path strings to a standard form for making fast splitting
+            All paths are separatted with single "/", and start with "/".
+
+        Args:
+            df (pd.DataFrame): df with standard filepath format
+        """
+        if not 'filepath' in df.columns:
+            return df
+        def set_standard_path(path):
+            if not path or path.strip() == "":
+                return ''
+            path=str(path).replace('\\\\',"/").replace("//","/")
+            if not str(path).startswith(('\\',"/",os.sep)):
+                path="/"+path
+            return path.replace('\\',"/").replace(os.sep,"/")
+
+        df['filepath'] = df['filepath'].apply(set_standard_path)
+        return df
 
     @staticmethod
     def validate_input_columns(df_a: pd.DataFrame, df_b: pd.DataFrame, column_name: str):
@@ -408,6 +431,7 @@ class DataFrameCompare:
         comp_only_a = self.get_df_of_a_source('A',md5_comparison)
         comp_only_b = self.get_df_of_a_source('B',md5_comparison)
         # These are single files with unique md5 (includes at least 'id','filename','filepath','size','dt_file_modified','md5')
+        print("Detailing comparison of single files with unique md5...")
         df_all_only_a=self.get_df_x_all_from_df_comp(comp_only_a,'a',md5,'ids_on_a')
         df_all_only_b=self.get_df_x_all_from_df_comp(comp_only_b,'b',md5,'ids_on_b')
         # if they have the same filename  -> 'data changed'
@@ -421,12 +445,13 @@ class DataFrameCompare:
         data_changed_b['__filename_m']=data_changed_b['filename']
         merged_data_changed = pd.merge(data_changed_a,data_changed_b,on='__filename_m',suffixes=('_a', '_b'))
         merged_data_changed.drop('__filename_m', axis=1, inplace=True)
-        d_c_d7={}
+        d_c_d7=detailed_comp_dict.copy()
         d_c_d7.update({'data changed':merged_data_changed})
         d_c_d7.update({'added file':added_file})
         d_c_d7.update({'removed file':removed_file})
 
         # These are files in a and b with same unique md5 only once
+        print("Detailing comparison of files in a and b with same unique md5 only once...")
         comp_one_to_one =self.get_df_of_unique('A&B',md5_comparison)
         df_all_one_to_one_a=self.get_df_x_all_from_df_comp(comp_one_to_one,'a',md5,'ids_on_a')
         df_all_one_to_one_b=self.get_df_x_all_from_df_comp(comp_one_to_one,'b',md5,'ids_on_b')
@@ -436,6 +461,7 @@ class DataFrameCompare:
         d_c_d0=self._merge_summary(df_all_one_to_one_a, df_all_one_to_one_b,summary_df)
         
         # These are files in a and b with many of same unique md5 in same amounts in a and b
+        print("Detailing comparison of files in a and b with many of same unique md5 in same amounts in a and b...")
         comp_many_to_many=self.get_df_of_equilibrium('A&B',md5_comparison)
         df_all_m_to_m_a=self.get_df_x_all_from_df_comp(comp_many_to_many,'a',md5,'ids_on_a')
         df_all_m_to_m_b=self.get_df_x_all_from_df_comp(comp_many_to_many,'b',md5,'ids_on_b')        
@@ -445,6 +471,7 @@ class DataFrameCompare:
         d_c_d1=self._merge_summary(df_all_m_to_m_a, df_all_m_to_m_b,summary_df)
 
         # These are files in a and b with many of same unique md5 in amounts in a > b
+        print("Detailing comparison of files in a and b with many of same unique md5 in amounts in a > b...")
         comp_converged = self.get_df_of_converge_diverge('A',md5_comparison)
         df_all_conv_a=self.get_df_x_all_from_df_comp(comp_converged,'a',md5,'ids_on_a')
         df_all_conv_b=self.get_df_x_all_from_df_comp(comp_converged,'b',md5,'ids_on_b')        
@@ -454,6 +481,7 @@ class DataFrameCompare:
         d_c_d2=self._merge_summary(df_all_conv_a, df_all_conv_b,summary_df)
 
         # These are files in a and b with many of same unique md5 in amounts in a < b
+        print("Detailing comparison of files in a and b with many of same unique md5 in amounts in a < b...")
         comp_diverged = self.get_df_of_converge_diverge('B',md5_comparison)
         df_all_div_a=self.get_df_x_all_from_df_comp(comp_diverged,'a',md5,'ids_on_a')
         df_all_div_b=self.get_df_x_all_from_df_comp(comp_diverged,'b',md5,'ids_on_b')        
@@ -466,6 +494,7 @@ class DataFrameCompare:
         partial_dicts = [d_c_d0, d_c_d1, d_c_d2, d_c_d3, d_c_d7]
 
         # Merge each category across all partial dictionaries
+        print("Detailing comparison merging ...")
         # Categories: 'unmodified', 'data changed', 'file renamed', 'file moved', 'added file', 'removed file', 'file moved and renamed'
         for category in detailed_comp_dict.keys():
             dfs_to_concat = [d[category] for d in partial_dicts if d[category] is not None and not d[category].empty]
@@ -502,6 +531,8 @@ class DataFrameCompare:
            
         """
         detailed_comp_dict={'unmodified':None, 'data changed':None, 'file renamed':None, 'file moved':None, 'added file':None,'removed file':None,'file moved and renamed':None}
+        if summary_df.empty:
+            return detailed_comp_dict
         for category in detailed_comp_dict.keys():
             df_cat = summary_df[summary_df['change_type'] == category].copy()
 
