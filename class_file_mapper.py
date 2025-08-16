@@ -314,6 +314,8 @@ class FileMapper:
         # find mounting point
         mount, serial = self.find_mount_serial_of_path(path_to_map)
         mappath = self.remove_mount_from_path(mount, path_to_map)
+        if mappath=='':
+            mappath=os.sep
         was_indexed = None
         if table_indexed:
             # Update mount point and date modified
