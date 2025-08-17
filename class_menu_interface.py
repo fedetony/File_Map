@@ -1473,13 +1473,17 @@ class TerminalMenuInterface():
 
     def menu_explore_compare(self,db_map_pair1,db_map_pair2,comparison,md5_c,stats):
         choices_hints = {
+            'Browse Present in A&B':'Browse files in A and also in B',
+            'Browse Only in A (Deleted)':'Browse files not in B, but in A',
+            'Browse Only in B (Created)':'Browse files not in A, but in B',
+            'Browse one to one in A&B':'Browse files in A and also in B mapped one to one',
+            'Browse many to many in A&B':'Browse files in A and also in B mapped many to many',
+            # 'Browse Converging A>B':'Browse files where there is more in A than in B',
+            # 'Browse Diverging A<B':'Browse files where there is more in B than in A',
             'Browse Repeated A':'Browse files more than 1 time present in A',
             'Browse Repeated B':'Browse files more than 1 time present in B',
             'Browse Repeated A&B':'Browse files more than 1 time present in A or B',
-            'Browse Created':'Browse files not in A, but in B',
-            'Browse Deleted':'Browse files not in B, but in A',
-            'Browse Present in A&B':'Browse files in A and also in B',
-            'Detail':'Detail Analysis of A and B ',
+            'Detail':'Detail Analysis of A and B',
             'Back': "Go back"}
         ch=list(choices_hints.keys())
         msg=''
@@ -1548,8 +1552,8 @@ class TerminalMenuInterface():
                     self.cma.explore_multiple_file_search(sss,fs_list,db_map_list,name_list)
                 else:
                     msg=f'[green]No Repeated Files[/green]\n{str(stats)}'
-            if answers['map2mapcompare'] in ['Browse Created','Browse Deleted']:
-                if answers['map2mapcompare'] == 'Browse Deleted':
+            if answers['map2mapcompare'] in ['Browse Only in B (Created)','Browse Only in A (Deleted)']:
+                if answers['map2mapcompare'] == 'Browse Only in A (Deleted)':
                     # Deleted -> 0 items in B
                     df=md5_c.get_df_of_deleted_created("A",comparison) #Return the df of the md5 items that have items on source ie. 0 items in the other source.
                     dfa=md5_c.get_df_x_all_from_df_comp(df,'a','md5','ids_on_a')
@@ -1558,7 +1562,7 @@ class TerminalMenuInterface():
                     show_f_e = (len(fs_list)>0)
                     db_map_list=[db_map_pair1]
                     name_list=[f'In A and not in B:{db_map_pair1[1]}']
-                elif answers['map2mapcompare'] == 'Browse Created':
+                elif answers['map2mapcompare'] == 'Browse Only in B (Created)':
                     # Created -> 0 items in A
                     df=md5_c.get_df_of_deleted_created("B",comparison) #Return the df of the md5 items that have items on source ie. 0 items in the other source.
                     dfb=md5_c.get_df_x_all_from_df_comp(df,'b','md5','ids_on_b')
@@ -1572,8 +1576,13 @@ class TerminalMenuInterface():
                     self.cma.explore_multiple_file_search(sss,fs_list,db_map_list,name_list)
                 else:
                     msg=f'[yellow]No Created/Deleted Files[/yellow]\n{str(stats)}'
-            if answers['map2mapcompare']=='Browse Present in A&B':
-                df=md5_c.get_df_of_a_source("A&B",comparison)
+            if answers['map2mapcompare'] in ['Browse one to one in A&B','Browse many to many in A&B','Browse Present in A&B']:
+                if answers['map2mapcompare'] == 'Browse one to one in A&B':
+                    df=md5_c.get_df_of_unique("A&B",comparison)
+                elif answers['map2mapcompare'] == 'Browse many to many in A&B':
+                    df=md5_c.get_df_of_equilibrium("A&B",comparison)
+                elif answers['map2mapcompare'] == 'Browse Present in A&B':
+                    df=md5_c.get_df_of_a_source("A&B",comparison)
                 dfa=md5_c.get_df_x_all_from_df_comp(df,'a','md5','ids_on_a')
                 # fs_list=fm1.map_to_file_structure_concurrent(dfa)
                 fs_list=[self.ba.get_file_structure_from_df(dfa,['id'],f"A » {db_map_pair1[1]} »")]

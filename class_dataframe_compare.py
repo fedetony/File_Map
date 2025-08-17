@@ -616,13 +616,13 @@ class MD5FileComparator:
                     dt_a = row_a[self.dt_file_modified_col]
                     dt_b = best_match[self.dt_file_modified_col]
 
-                    if fname_a == fname_b and fpath_a == fpath_b:
+                    if fname_a == fname_b and fpath_a == fpath_b: # and dt_a == dt_b:
                         self.categories['unmodified'].append((row_a, best_match))
-                    elif fname_a == fname_b and dt_a == dt_b:
+                    elif fname_a == fname_b and fpath_a != fpath_b:
                         self.categories['file moved'].append((row_a, best_match))
-                    elif fpath_a == fpath_b and dt_a == dt_b:
+                    elif fname_a != fname_b and fpath_a == fpath_b:
                         self.categories['file renamed'].append((row_a, best_match))
-                    elif dt_a == dt_b:
+                    elif fname_a != fname_b and fpath_a != fpath_b :
                         self.categories['file moved and renamed'].append((row_a, best_match))
                     else:
                         self.categories['removed file'].append(row_a)
