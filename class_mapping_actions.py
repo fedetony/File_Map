@@ -4,6 +4,7 @@ from __future__ import print_function, unicode_literals
 
 import os
 import getpass
+import pandas as pd
 
 from datetime import datetime
 from rich import print
@@ -601,6 +602,37 @@ class MappingActions():
         stats=df_c_class.generate_comparison_stats(df_compare)
         print(stats)
         differences={'+':[],'-':[],'+_id':[],'-_id':[],'diff_fs':[]}
+        detailed_dict=df_c_class.detail_comparison(df_compare)
+        for item,df_det in detailed_dict.items():
+            if isinstance(df_det,pd.DataFrame):
+                if df_det.empty:
+                    continue
+            if item in ['added file', 'removed file']:
+                if item=='added file':
+                    suffix='_b'
+                    d_sel='+'
+                else:
+                    suffix='_a'
+                    d_sel='-'
+                for filepath,filename,an_id in zip(df_det['filepath'+suffix],df_det['filename'+suffix],df_det['id'+suffix]):
+                    differences[d_sel].append(os.path.join(filepath,filename))
+                    differences[d_sel+'_id'].append(an_id)
+                    differences['diff_fs'].append((d_sel,)+tuple(df_det.loc[df_det['id'+suffix] == an_id].iloc[0].values))
+
+                    
+            if item in ['data changed', 'file renamed', 'file moved', 'file moved and renamed']:
+                for filepath_a,filename_a,an_id_a,filepath_b,filename_b,an_id_b in \
+                    zip(df_det['filepath_a'],df_det['filename_a'],df_det['id_a'],
+                        df_det['filepath_b'],df_det['filename_b'],df_det['id_b']):
+                    differences['+'].append(os.path.join(filepath_b,filename_b))
+                    differences['+_id'].append(an_id_b)
+                    differences['diff_fs'].append(('+',)+tuple(df_det.loc[((df_det['id_a'] == an_id_a) & (df_det['id_b'] == an_id_b)), 
+                                                                          [col for col in df_det.columns if col.endswith('_b')]].values))
+                    differences['-'].append(os.path.join(filepath_a,filename_a))
+                    differences['-_id'].append(an_id_a)
+                    differences['diff_fs'].append(('-',)+tuple(df_det.loc[((df_det['id_a'] == an_id_a) & (df_det['id_b'] == an_id_b)), 
+                                                                          [col for col in df_det.columns if col.endswith('_a')]].values))
+
         # for line in result:
         #     if line.startswith('+'):
         #         comp_list.append(line)#A_C.add_ansi(line,'hgreen'))
