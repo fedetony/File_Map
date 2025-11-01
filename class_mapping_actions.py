@@ -490,18 +490,34 @@ class MappingActions():
             db_map_pair (tuple): database map pair
             id_list (list): list of ids to select. Defaults to None 
         """
+        
         fm=self.get_file_map(db_map_pair[0])
-        data_np=fm.db.get_data_from_table(db_map_pair[1],"*",f"md5={fm.db.quotes(MD5_SHALLOW)}")
-        data=[]
         if id_list:
-            for a_row in data_np:
-                if a_row[0] in id_list:
-                    data.append(a_row)
-        else:
+            # Edit one by one
+            id_query="id IN {"+', '.join(id_list)+"}"
+            data_np=fm.db.get_data_from_table(db_map_pair[1],"*",f"md5={fm.db.quotes(MD5_SHALLOW)} AND {id_query}")
+            # data=[]
+            # for a_row in data_np:
+            #     if a_row[0] in id_list:
+            #         data.append(a_row)
+            # else:
             data=data_np
-        for iii,a_row in enumerate(data):
-            A_C.print_cycle(iii,len(data))
-            fm.db.edit_value_in_table(db_map_pair[1],a_row[0],'md5',MD5_CALC)
+            for iii,a_row in enumerate(data):
+                A_C.print_cycle(iii,len(data))
+                fm.db.edit_value_in_table(db_map_pair[1],a_row[0],'md5',MD5_CALC)
+            return
+        def change_shallow_to_calc(md5:str):
+            """Sets calc where there is shallow"""
+            if md5==MD5_SHALLOW:
+                return MD5_CALC
+            return md5
+        field_list=fm.db.get_column_list_of_table(db_map_pair[1])
+        data_np=fm.db.get_data_from_table(db_map_pair[1])
+        data_manage=DataManage(data_np,field_list)
+        data_manage.df['md5'] = data_manage.df['md5'].apply(change_shallow_to_calc)
+        new_values = data_manage.df['md5'].tolist()
+        fm.db.edit_column_in_table(db_map_pair[1], 'md5', new_values)
+
 
     def shallow_compare_maps(self,db_map_pair_1:tuple,db_map_pair_2:tuple):
         """Compare two maps using tabulated data. Compares: 
@@ -591,12 +607,15 @@ class MappingActions():
         else:
             print("Missing md5 values in map -> Making Shallow Compare")
             def use_text_for_md5(row):
-                if row['md5'] in [MD5_SHALLOW, MD5_CALC]:
-                    return f"{row['filename']}|{row['size']}|{row['dt_file_modified']}"
-                return row['md5']
+                return f"{row['filename']}|{row['size']}|{row['dt_file_modified']}"
+                # if row['md5'] in [MD5_SHALLOW, MD5_CALC]:
+                #     return f"{row['filename']}|{row['size']}|{row['dt_file_modified']}"
+                # return row['md5']
             column_name='new_md5'
-            df_a.assign(new_md5=df_a.apply(use_text_for_md5, axis=1))[column_name]
-            df_b.assign(new_md5=df_b.apply(use_text_for_md5, axis=1))[column_name]
+            fields=list(df_a.columns)
+            fields.append(column_name)
+            df_a = df_a.assign(new_md5=df_a.apply(use_text_for_md5, axis=1))[fields]
+            df_b = df_b.assign(new_md5=df_b.apply(use_text_for_md5, axis=1))[fields]
             df_c_class=DataFrameCompare(df_a,df_b,column_name)    
             df_compare=df_c_class.compare_a_b(column_name)
         stats=df_c_class.generate_comparison_stats(df_compare)
@@ -1218,9 +1237,15 @@ class MappingActions():
             db_map_pair_2=(db_map_pair[0],new_tablename)
             differences, msg = self.shallow_compare_maps(db_map_pair_1,db_map_pair_2)
             # Delete the shallow map
-            print(differences['+'])
-            print(differences['-']) 
+            contains_differences=False
+            if '+' in differences.keys() and '-' in differences.keys():
+                print(differences['+'])
+                print(differences['-']) 
+                contains_differences=True
             print(msg)
+            if not contains_differences:
+                msg= "[yellow]No Comparison Made[\yellow]\n"+msg
+                return msg
             found_differences=False
             for _,value in differences.items():
                 if len(value)>0:
@@ -1229,33 +1254,56 @@ class MappingActions():
             if not found_differences:
                 # delete shallow map
                 fm.delete_map(new_tablename)
+                msg= "[yellow]No differences Found[/yellow]\n"+msg
                 return msg
             if not self.ask_confirmation(f"Replace differences in map {db_map_pair[1]}?",False):
                 return '[yellow] Map not Updated! Delete map manually or restart update to use map'
             data_to_add=[]
-            for item in differences['diff_fs']:
-                if item[2]=='+':
-                    ddd=tuple()
-                    for iii in range(4,len(item)):
-                        if item[iii] == MD5_SHALLOW:
-                            ddd=ddd+(MD5_CALC,)
-                        else:    
-                            ddd=ddd+(item[iii],)
-                    data_to_add.append(ddd)
-                if item[2]=='-':
-                    ddd=tuple()
-                    where=f'id = {item[3]}'
-                    fm.db.delete_data_from_table(db_map_pair[1],where)    
-            fm.db.insert_data_to_table(db_map_pair[1],data_to_add)
-            # update data modified
-            fm.db.edit_value_in_table(fm.mapper_reference_table,map_info_1[0][0],'dt_data_modified',datetime.now())
+
+            
+            fields=fm.db.get_column_list_of_table(new_tablename)
+            nf=[iii for iii in fields if iii!='id']
+            self.shallow_to_deep(db_map_pair_2)
+            where = "id IN ("+', '.join([str(ddd) for ddd in differences['+_id']])+")"
+            what = ', '.join(nf)
+            new_data=fm.db.get_data_from_table(new_tablename,what,where)
+            if len(new_data)>0:
+                data_to_add=new_data
+            # remove files in - from db
+            for an_id in differences['-_id']:
+                where=f'id = {an_id}'
+                fm.db.delete_data_from_table(db_map_pair[1],where) 
+            # for item in differences['diff_fs']:
+            #     # # set the array into a tuple changing shallow to calc
+            #     # if item[0]=='+':
+            #     #     ddd=tuple()
+            #     #     for iii,value in enumerate(item): # replace for calculating new items
+            #     #         if iii==6 and value == MD5_SHALLOW:
+            #     #             ddd=ddd+(MD5_CALC,)
+            #     #         elif iii==7:
+            #     #             ddd=ddd+(int(value),) # assure size is a integer
+            #     #         elif iii>1 and iii<len(item)-1:    # do not include id or +,- or new_md5 in end
+            #     #             ddd=ddd+(value,)
+            #     #     data_to_add.append(ddd)
+            #     if item[0]=='-':
+            #         where=f'id = {item[1]}'
+            #         fm.db.delete_data_from_table(db_map_pair[1],where)
+
+            # Add new data to table    
+            if fm.db.insert_data_to_table(db_map_pair[1],data_to_add):
+                print(f"Inserted {len(data_to_add)} new data to the table")
+            # update map data modified
+            fm.db.edit_value_in_table(fm.mapper_reference_table,map_info_1[0][0],'dt_map_modified',datetime.now())
             # delete shallow map
             fm.delete_map(new_tablename)
+            # # reorganize ids in table
+            # fm.db.reenumerate_id_sequence(db_map_pair[1])
             # start thread
             msg = fm.remap_map_in_thread_to_db(db_map_pair[1],None,True)
         except (KeyboardInterrupt,ValueError,TypeError) as eee:
             print(f'Something Wrong:{eee}')
             fm.delete_map(new_tablename)
+            msg="Update interrupted"
         return msg
     
     def create_new_map_from_selected_list(self,sel_files:list,selected_db):
@@ -1268,6 +1316,11 @@ class MappingActions():
         Returns:
             str: message
         """
+        if isinstance(sel_files,list):
+            if len(sel_files)==0:
+                return "No Files/Directories Selected"
+        else:
+            return "No Files/Directories Selected"    
         # sel_files =list tuple 'Source','Type','Operation','Objective'
         fm=self.get_file_map(selected_db)
         def get_mount(path:str):

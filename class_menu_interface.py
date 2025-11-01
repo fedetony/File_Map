@@ -1078,7 +1078,7 @@ class TerminalMenuInterface():
         print(MENU_HEADER)
         print("Selection Map Actions:")
         print("----------")
-        default="Sort"
+        default="Back"
         msg=''
         # self.cma.show_maps(f"maptype NOT LIKE '{MAP_TYPES_LIST[0]}' AND maptype NOT LIKE '{MAP_TYPES_LIST[2]}'")
         # map_types=[]

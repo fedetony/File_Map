@@ -399,6 +399,31 @@ class SQLiteDatabase:
         finally:
             # Release all resources
             c.close()
+    
+    def edit_column_in_table(self, table_name: str, column_name: str, new_column_values):
+        """Edits a complete column of the table with new values.
+
+        Args:
+            table_name (str): table
+            column_name (str): column item
+            new_column_values (_type_): values of column
+        """
+        try:
+            c = self.conn.cursor()
+            # Create an UPDATE query that updates all rows in the specified table and sets the given column to the provided value.
+            update_query = f"UPDATE {self.quotes(table_name)} SET {column_name} = ?"
+            
+            # Use a tuple of values for updating multiple columns at once
+            c.executemany(update_query, [(new_value,) for new_value in new_column_values])
+            self.commit()
+            time.sleep(WAIT_TIME_WRITING)
+            return True
+        except sqlite3.Error as eee:
+            print(eee)
+            return False
+        finally:
+            # Release all resources
+            c.close()
 
     def table_exists(self, table: str) -> bool:
         """Table exists
@@ -582,11 +607,13 @@ class SQLiteDatabase:
             table (str): the table
         """
         id_list = self.get_data_from_table(table, "id")
+        #new_id_list=list(range(1,len(id_list)+1))
         try:
             for iii, idtup in enumerate(id_list):
                 index = iii + 1
                 if index != idtup[0]:
                     self.edit_value_in_table(table, idtup[0], "id", index)
+            # self.edit_column_in_table(table,'id',new_id_list)
             self.commit()
         except sqlite3.Error as eee:
             print(eee)

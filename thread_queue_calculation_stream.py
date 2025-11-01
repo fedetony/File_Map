@@ -201,6 +201,7 @@ class QueueCalcStream(threading.Thread):
         """thread loop"""                
         print('[green]'+'<'*10+'Successfully Started calculation Thread'+'>'*10)
         count=0
+        has_filled_data=False
         with Progress() as progress:
             if not self.pbar_stream:
                 exit_key="ctrl+c"
@@ -209,8 +210,11 @@ class QueueCalcStream(threading.Thread):
                 task1 = progress.add_task(f"[blue]{self.table} [red](Press {exit_key} to Exit)", total=100)
             while not self.killer_event.wait(self.cycle_time):   
                 try:
-                    if self.queue_pathfile.empty():
+                    if not has_filled_data and self.queue_pathfile.empty():
                         self.fill_queue_with_files()
+                        has_filled_data=True
+                    elif has_filled_data and self.queue_pathfile.empty():
+                        self.is_data = False
                     if not self.is_data and self.queue_pathfile.empty():
                         self.calculation_finished=True
                         self.killer_event.set()
