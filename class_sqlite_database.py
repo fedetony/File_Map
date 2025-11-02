@@ -147,19 +147,48 @@ class SQLiteDatabase:
             table_name (str): Table name
             clone_table_name (str): Table name
         """
+        clone_table_name=clone_table_name.strip()
+        table_name=table_name.strip()
+        if self.table_exists(clone_table_name):
+            print("Not a valid table name: Table already exists")
+            return
+        
         if table_name.strip() == clone_table_name.strip():
-            print("Not valid table name")
+            print("Not a valid table name: Same as the original")
             return
 
         if len(clone_table_name.strip()) == 0:
             print("Empty clone_table_name!")
             return
 
-        # Create the table
+        # Create the table preseving type and data
+        description=self.describe_table_in_db(table_name) 
+        # description: (Index, Column name, Data type, Not null constraint, Default value, Primary key flag)
+        
+        type_cols=[]
+        column_name_list=[]
+        for col in description:
+            column_name_list.append(col[1])
+            if col[5] != 1:  # not primary key
+                # (Column name, Data type, Not null constraint)
+                type_cols.append((col[1],col[2],col[3]))
+            
+        self.create_table(clone_table_name,type_cols,False)
+        data=self.get_data_from_table(table_name)
+        sqltxt = str(column_name_list)
+        sqltxt = sqltxt.replace("'", "")
+        sqltxt = sqltxt.replace(",", ", ")
+        sqltxt = sqltxt.replace("[", "(")
+        sqltxt = sqltxt.replace("]", ")")
+        val = sqltxt
+        for ccc in column_name_list:
+            val = val.replace(ccc, "?")
+        sqltxt = sqltxt + " VALUES " + val
         try:
             c = self.conn.cursor()
-            sql = f"CREATE TABLE {self.quotes(clone_table_name)} AS SELECT * FROM {self.quotes(table_name)};"
-            c.execute(sql)
+            # Update the specified column with the given value for all rows that match the condition
+            for row_data in data:
+                c.execute(f"INSERT INTO {self.quotes(clone_table_name)} {sqltxt}", row_data)
             self.commit()
         except sqlite3.OperationalError:
             pass
@@ -409,6 +438,7 @@ class SQLiteDatabase:
             new_column_values (_type_): values of column
         """
         try:
+            description=self.describe_table_in_db(table_name)
             c = self.conn.cursor()
             # Create an UPDATE query that updates all rows in the specified table and sets the given column to the provided value.
             update_query = f"UPDATE {self.quotes(table_name)} SET {column_name} = ?"
@@ -600,23 +630,24 @@ class SQLiteDatabase:
             #     print("Debug---->>>",data)
         return None
 
-    def reenumerate_id_sequence(self, table: str):
+    def reenumerate_id_sequence(self, table: str)->list:
         """Reorganized ids in sequential order in the table
 
         Args:
             table (str): the table
+        Returns:
+            (list[tuple]): (id, old_id) old ids list, Before changing id
         """
-        id_list = self.get_data_from_table(table, "id")
-        #new_id_list=list(range(1,len(id_list)+1))
         try:
-            for iii, idtup in enumerate(id_list):
-                index = iii + 1
-                if index != idtup[0]:
-                    self.edit_value_in_table(table, idtup[0], "id", index)
-            # self.edit_column_in_table(table,'id',new_id_list)
-            self.commit()
+            self.rename_column_in_table(table,"id","old_id")
+            sql=f"ALTER TABLE IF EXISTS {self.quotes(table)} ADD COLUMN id INTEGER PRIMARY KEY AUTOINCREMENT"
+            self.send_sql_command(sql,table)
+            old_id_data=self.get_data_from_table(table,"id, old_id")
+            self.remove_column_from_table(table,"old_id")
+            return old_id_data
         except sqlite3.Error as eee:
             print(eee)
+        return []    
 
     def add_column_to_table(self, table: str, column: str, column_type: str):
         """Add columns to table

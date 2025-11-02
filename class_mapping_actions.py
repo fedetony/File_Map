@@ -1252,12 +1252,16 @@ class MappingActions():
                     found_differences=True
                     break
             if not found_differences:
+                # # reorganize ids in table
+                fm.db.reenumerate_id_sequence(db_map_pair_1[1])
                 # delete shallow map
                 fm.delete_map(new_tablename)
                 msg= "[yellow]No differences Found[/yellow]\n"+msg
                 return msg
-            if not self.ask_confirmation(f"Replace differences in map {db_map_pair[1]}?",False):
-                return '[yellow] Map not Updated! Delete map manually or restart update to use map'
+            if not self.ask_confirmation(f"Replace differences in map {db_map_pair_1[1]}?",False):
+                fm.db.reenumerate_id_sequence(db_map_pair_1[1])
+                fm.db.reenumerate_id_sequence(new_tablename)
+                return '[yellow] Map not Updated! keeping shallow map for update. Delete map manually or restart update to use map already created.'
             data_to_add=[]
 
             
@@ -1272,32 +1276,16 @@ class MappingActions():
             # remove files in - from db
             for an_id in differences['-_id']:
                 where=f'id = {an_id}'
-                fm.db.delete_data_from_table(db_map_pair[1],where) 
-            # for item in differences['diff_fs']:
-            #     # # set the array into a tuple changing shallow to calc
-            #     # if item[0]=='+':
-            #     #     ddd=tuple()
-            #     #     for iii,value in enumerate(item): # replace for calculating new items
-            #     #         if iii==6 and value == MD5_SHALLOW:
-            #     #             ddd=ddd+(MD5_CALC,)
-            #     #         elif iii==7:
-            #     #             ddd=ddd+(int(value),) # assure size is a integer
-            #     #         elif iii>1 and iii<len(item)-1:    # do not include id or +,- or new_md5 in end
-            #     #             ddd=ddd+(value,)
-            #     #     data_to_add.append(ddd)
-            #     if item[0]=='-':
-            #         where=f'id = {item[1]}'
-            #         fm.db.delete_data_from_table(db_map_pair[1],where)
-
+                fm.db.delete_data_from_table(db_map_pair_1[1],where) 
             # Add new data to table    
-            if fm.db.insert_data_to_table(db_map_pair[1],data_to_add):
+            if fm.db.insert_data_to_table(db_map_pair_1[1],data_to_add):
                 print(f"Inserted {len(data_to_add)} new data to the table")
             # update map data modified
             fm.db.edit_value_in_table(fm.mapper_reference_table,map_info_1[0][0],'dt_map_modified',datetime.now())
             # delete shallow map
             fm.delete_map(new_tablename)
             # # reorganize ids in table
-            # fm.db.reenumerate_id_sequence(db_map_pair[1])
+            fm.db.reenumerate_id_sequence(db_map_pair[1])
             # start thread
             msg = fm.remap_map_in_thread_to_db(db_map_pair[1],None,True)
         except (KeyboardInterrupt,ValueError,TypeError) as eee:
