@@ -179,7 +179,7 @@ def my_style_file_expand_size(node:TreeNode,level):
 
 class FileExplorer:
     """File explorer"""
-    def __init__(self,base_path:str=None,path_options:list=None,file_structure=None):
+    def __init__(self,base_path:str=None,path_options:list=None,file_structure=None,do_action=None):
         self.base_path=base_path
         self.file_structure=file_structure
         self.path_options=path_options
@@ -189,6 +189,10 @@ class FileExplorer:
         self.selected_name_list=None
         self.selected_parent_list=None
         self.t_v=None
+        if do_action is not None:
+            self.do_action=do_action
+        else:
+            self.do_action=self._do_action
         if self.check_path_options():
             self.is_file_structure=self.set_tree_structure()
 
@@ -620,6 +624,27 @@ class FileExplorer:
                     selection_list.append(selected_node)
         return selection_list
     
+    def _do_action(self,t_v:TreeViewer,node:TreeNode,keyword):
+        """Do an action to the file
+
+        Args:
+            t_v (Treeviewer): treeviewr object with the nodes
+            node (TreeNode): node with selection information
+            keyword (str): action selected
+
+        Returns:
+            bool: True to quit File explorer after making the action
+        """
+        # print(t_v.treenode_to_string_list(node))
+        
+        print(f"Action selected {keyword}")
+        print(f"node: id {node.id},name {node.name},i am {node.i_am}, info {node.info}, bloodline {node.get_bloodline()}")
+        print(node.to_dict())
+        print("press any key to continue ...")
+        getch()
+        quit_after_action=False
+        return quit_after_action
+
     def process_list_tree_checkbox(self,a_filter,style=my_style,selected_list:list=None,process_list:list=None,locked_list:list=None,prompt:str="Select",expand_contract_id=None)->list:
         """Show and allow process selection tree string in inquire checkbox format
 
@@ -662,12 +687,22 @@ class FileExplorer:
         for ans in answers['path']:
             ans=str(ans)
             is_expand=None
+            is_action=None
             if CONTRACT_KEYWORD in ans:
                 ans=ans.replace(CONTRACT_KEYWORD,'')
                 is_expand=False
             elif EXPAND_KEYWORD in ans:
                 ans=ans.replace(EXPAND_KEYWORD,'')
                 is_expand=True
+            if is_expand is None:    
+                for key,keyword in MENU_PROCESS_SELECTOR.items():  
+                    if not keyword:
+                        continue  
+                    if keyword in ans:
+                        ans=ans.replace(keyword,'')
+                        is_action=key
+                        is_expand=None
+                        break
             node=self.t_v.filtered_nodes[int(ans)]
             if is_expand is not None:
                 setattr(node,'expand',is_expand)
@@ -677,11 +712,17 @@ class FileExplorer:
                 expand_contract_id=node.id
                 # self.t_v.clear_selected_children(node)
                 self.t_v.set_selected_children(node)
-            elif is_expand is None:
+            elif is_expand is None and is_action is None:
                 # Set selected to true
                 setattr(node,'selected',True)
                 nodeid_list.append(node.id)
                 expand_contract_id=None
+            elif is_expand is None and is_action is not None:
+                if not self.do_action(self.t_v,node,keyword):
+                    self.t_v.clear_default()
+                    setattr(node,'default',True)
+                    has_expansion=True
+                    expand_contract_id=node.id
         # set the not selected to False 
         for node in self.t_v.filtered_nodes:
             if node.id not in nodeid_list:
@@ -748,6 +789,14 @@ if __name__ == "__main__":
     #----------------------------
     # selected_node_list=F_E.select_multiple_folders()
     selected_node_list=F_E.select_multiple_files()
+
+    for selected_node in selected_node_list:
+        print('Finally selected:',selected_node.id,selected_node.name,F_M.get_size_str_formatted(selected_node.size),selected_node.expand)
+
+    # Test Files and Folders checkbox
+    #----------------------------
+    # selected_node_list=F_E.select_multiple_folders()
+    selected_node_list=F_E.browse_files_with_process(prompt="Browse With Process")
 
     for selected_node in selected_node_list:
         print('Finally selected:',selected_node.id,selected_node.name,F_M.get_size_str_formatted(selected_node.size),selected_node.expand)
