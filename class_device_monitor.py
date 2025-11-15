@@ -307,15 +307,17 @@ class DeviceMonitor:
             if serial:
                 devices.append([device,str(serial)])
             else:
-
-                if platform.system() == 'Darwin':  # macOS
-                    print("Not implemented :( !!!")
-                else:
-                    # Linux
-                    # Windows
-                    time.sleep(self.time_delay_s) #windows is slow to query. If asked too fast responds unknown
-                    serial_2=self.get_serial_number(device)  
-                    devices.append([device,str(serial_2)])
+                try:
+                    if platform.system() == 'Darwin':  # macOS
+                        print("Not implemented :( !!!")
+                    else:
+                        # Linux
+                        # Windows
+                        time.sleep(self.time_delay_s) #windows is slow to query. If asked too fast responds unknown
+                        serial_2=self.get_serial_number(device)  
+                        devices.append([device,str(serial_2)])
+                except Exception as eee:
+                    print(f"Device {device} serial unavailable: {eee}")
                 self.devices=devices
         return devices
 
