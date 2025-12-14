@@ -2,7 +2,7 @@ common==0.1.2
 cryptography==44.0.1
 inquirer==3.4.0
 keyboard==0.13.5
-pandas==1.5.3
+pandas>=2.0
 psutil==6.1.0
 rich==13.9.4
 WMI==1.5.1

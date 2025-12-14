@@ -1895,7 +1895,7 @@ class TerminalMenuInterface():
                 if len(sel_files)==0:
                     msg = 'Select some Files or directories first'
                 else:
-                    msg=''
+                    msg='Not implemented yet! -> Do a selection map and go to Selection menu :)'
             elif answers['sorting']=='Deselect Files/Directories':
                 sel_files=self.menu_remove_selected_files_directories_sorting(sel_files)
             elif answers['sorting']=='Selection to Map':
@@ -1996,6 +1996,8 @@ class TerminalMenuInterface():
         Args:
             selected_files (list): selected file tuple
         """
+        if not isinstance(sel_files,list):
+            return
         if len(sel_files)>0:
             fields=['Source','Type','Operation','Objective']
             sf_dm=DataManage(sel_files[:max_show],fields)

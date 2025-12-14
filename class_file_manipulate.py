@@ -318,44 +318,54 @@ class FileManipulate:
             os.rmdir(src_path)  # Remove the empty folder        
         return all_moved
     
-    def delete_folder_recursive(self,directory):
+    def delete_folder_recursive(self, directory):
         """
         Recursively deletes all files and subdirectories in the given directory.
+        Returns True only if ALL deletions succeeded.
         
+        Behaviour: never stops early,tracks all failures,returns a correct final flag,
+        keeps recursion going no matter what
         Args:
             directory (str): The path of the directory to be deleted.
             
         Returns:
             bool: True if all items were successfully deleted, False otherwise.
         """
-
-        try:
-            # Iterate over each item in the directory
-            for item in os.listdir(directory):
-                item_path = os.path.join(directory, item)
-                
-                # If it's a file, delete it
-                if os.path.isfile(item_path):
-                    os.remove(item_path)
-                    
-                # If it's a folder, recursively call this function on it
-                elif os.path.isdir(item_path):
-                    if not self.delete_folder_recursive(item_path):  # Recursively check the subdirectory
-                        return False
-                    
-            # After deleting all items in the directory and its subdirectories,
-            # remove the empty directory itself.
-            try:
-                os.rmdir(directory)
-            except OSError:  # If the directory is not empty, this will fail
-                pass
-            
-            return True
-        
-        except FileNotFoundError:
+        if not os.path.exists(directory):
             print(f"Directory '{directory}' does not exist.")
             return False
+        deleted_all = True  # global success flag
+        try:
+            for item in os.listdir(directory):
+                item_path = os.path.join(directory, item)
 
+                # Delete files or symlinks
+                if os.path.isfile(item_path) or os.path.islink(item_path):
+                    try:
+                        os.remove(item_path)
+                    except Exception as e:
+                        print(f"Could not delete file '{item_path}': {e}")
+                        deleted_all = False
+
+                # Delete subdirectories
+                elif os.path.isdir(item_path):
+                    result = self.delete_folder_recursive(item_path)
+                    if not result:
+                        deleted_all = False
+
+            # Try to remove the now-empty directory
+            try:
+                os.rmdir(directory)
+            except Exception as e:
+                print(f"Could not remove directory '{directory}': {e}")
+                deleted_all = False
+
+        except Exception as e:
+            print(f"Error accessing directory '{directory}': {e}")
+            deleted_all = False
+
+        return deleted_all
+    
     def delete_files_folders(self,file_folder_list):
         """
         Recursively deletes all files and subdirectories in the given directory or any file given in the list.
@@ -709,14 +719,11 @@ class FileManipulate:
         Returns:
             str: string with path
         """
-        fn = os.path.basename(filename)  # returns just the name
-        fpath = os.path.abspath(filename)
+        folder = os.path.dirname(os.path.abspath(filename))
         if with_separator:
-            fpath = fpath.replace(fn, "")
-        else:
-            fpath = fpath.replace(os.sep + fn, "")
-        return fpath
-    
+            return folder + os.sep
+        return folder
+        
     def get_file_structure_from_active_path(self,src_path:str,item_name:str=None,file_structure:dict=None,full_path:bool=True,fcn_call=None,show_progress=False):
         """Gets a dictionary with a structure 
         {'item_name': [{'dir1': ['file1', ..., 'fileN']}, 
@@ -837,17 +844,32 @@ class FileManipulate:
         return fpath    
     
     @staticmethod
-    def remove_empty_folders(folder_path):
-        """removes empty folders in a given path
+    def remove_empty_folders(folder_path, topdown=True, log_print=True):
+        """
+        Removes empty folders in a given path.
 
         Args:
-            folder_path (str): path
+            folder_path (str): Path to scan.
+            topdown (bool): 
+                - True: remove only folders that are empty AND have no subfolders.
+                - False: remove empty folders bottom-up, removing parent folders 
+                that become empty after children are removed.
         """
-        for root, dirs, files in os.walk(folder_path):
-            if not files and not dirs:  # Check if directory is empty
-                dir_path = os.path.join(root)
-                print(f"Removing empty folder: {dir_path}")
-                os.rmdir(dir_path)  # Remove the empty folder
+        count=0
+        for root, dirs, files in os.walk(folder_path, topdown=topdown):
+            # Folder is empty if it has no files and no subdirectories
+            if not files and not dirs:
+                try:
+                    dir_path = root # os.path.join(root)
+                    if log_print:
+                        print(f"{count+1} Removing empty folder: {dir_path}")
+                    os.rmdir(dir_path)  # Remove the empty folder
+                    count+=1
+                except OSError:
+                    # Folder might not be empty anymore or permission issue
+                    pass
+        if log_print:
+            print(f"{count+1} Empty Folders Removed!")
 
     @staticmethod
     def get_app_path() -> str:
@@ -939,6 +961,39 @@ class FileManipulate:
             return [path]
         except Exception as eee:
             print(f"Error Glob: {eee}")
+            return []
+    
+    def get_possible_path_list_recursive(self, path, joker='*') -> list[str]:
+        """
+        Use glob to find files or directories with patterns recursively.
+
+        Args:
+            path (str): path as pattern
+            joker (str): wildcard pattern
+
+        Returns:
+            list[str]: list of matching paths
+        """
+        try:
+            file_exist, is_file = self.validate_path_file(path)
+
+            # Case 1: path exists and is a directory
+            if file_exist and not is_file:
+                pattern = os.path.join(path, "**", joker)
+                return gb.glob(pattern, recursive=True)
+                
+
+            # Case 2: path exists and is a file
+            elif file_exist and is_file:
+                folder = self.extract_path(path, True)
+                pattern = os.path.join(folder,"**",joker)
+                return gb.glob(pattern, recursive=True)
+
+            # Case 3: path does not exist
+            return [path]
+
+        except Exception as e:
+            print(f"Error Glob: {e}")
             return []
 
     def get_possible_file_list(self, path, joker='*'):
