@@ -18,6 +18,7 @@ class TreeNode:
         self.size=None
         self.default=None
         self.selected=None
+        self.selectable=None
         self.selected_children=None
 
     def to_dict(self)->dict:
@@ -219,6 +220,7 @@ class TreeViewer:
                         a_size=self.get_file_size_in_tuple(a_file)
                     else:
                         a_f=str(a_file)
+                        a_size = None
                     node = TreeNode(a_f)
                     node.i_am='file'
                     node.info=a_file # add all info to the node

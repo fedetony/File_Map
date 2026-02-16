@@ -318,54 +318,44 @@ class FileManipulate:
             os.rmdir(src_path)  # Remove the empty folder        
         return all_moved
     
-    def delete_folder_recursive(self, directory):
+    def delete_folder_recursive(self,directory):
         """
         Recursively deletes all files and subdirectories in the given directory.
-        Returns True only if ALL deletions succeeded.
         
-        Behaviour: never stops early,tracks all failures,returns a correct final flag,
-        keeps recursion going no matter what
         Args:
             directory (str): The path of the directory to be deleted.
             
         Returns:
             bool: True if all items were successfully deleted, False otherwise.
         """
-        if not os.path.exists(directory):
-            print(f"Directory '{directory}' does not exist.")
-            return False
-        deleted_all = True  # global success flag
+
         try:
+            # Iterate over each item in the directory
             for item in os.listdir(directory):
                 item_path = os.path.join(directory, item)
-
-                # Delete files or symlinks
-                if os.path.isfile(item_path) or os.path.islink(item_path):
-                    try:
-                        os.remove(item_path)
-                    except Exception as e:
-                        print(f"Could not delete file '{item_path}': {e}")
-                        deleted_all = False
-
-                # Delete subdirectories
+                
+                # If it's a file, delete it
+                if os.path.isfile(item_path):
+                    os.remove(item_path)
+                    
+                # If it's a folder, recursively call this function on it
                 elif os.path.isdir(item_path):
-                    result = self.delete_folder_recursive(item_path)
-                    if not result:
-                        deleted_all = False
-
-            # Try to remove the now-empty directory
+                    if not self.delete_folder_recursive(item_path):  # Recursively check the subdirectory
+                        return False
+                    
+            # After deleting all items in the directory and its subdirectories,
+            # remove the empty directory itself.
             try:
                 os.rmdir(directory)
-            except Exception as e:
-                print(f"Could not remove directory '{directory}': {e}")
-                deleted_all = False
+            except OSError:  # If the directory is not empty, this will fail
+                pass
+            
+            return True
+        
+        except FileNotFoundError:
+            print(f"Directory '{directory}' does not exist.")
+            return False
 
-        except Exception as e:
-            print(f"Error accessing directory '{directory}': {e}")
-            deleted_all = False
-
-        return deleted_all
-    
     def delete_files_folders(self,file_folder_list):
         """
         Recursively deletes all files and subdirectories in the given directory or any file given in the list.
@@ -677,7 +667,7 @@ class FileManipulate:
         if not isinstance(file_size, (int, float)):
             raise ValueError(f"Invalid file size input: {file_size}")
         if file_size < 0:
-            return self.get_string_justified(f"{file_size:.2f} ER",is_left_justified,o_size)# f'{file_size} ER'
+            return f'{file_size} ER'
         # Define a list of unit names and their corresponding sizes in bytes
         units = ["By", "kB", "MB", "GB", "TB"]
         sizes = [1, 1024, 1048576, 1073741824, 1099511627776]
@@ -691,39 +681,61 @@ class FileManipulate:
 
     @staticmethod
     def extract_filename(filename: str, with_extension: bool = True) -> str:
-        """Extracts filename of a path+filename string
+        """
+        Extracts the filename from a path.
 
         Args:
             filename (str): path+filename
-            with_extension (bool, optional): return filename including the extension. Defaults to True.
+            with_extension (bool): return filename including extension
 
         Returns:
-            str: string with filename
+            str: filename with or without extension
         """
-        fn = os.path.basename(filename)  # returns just the name
-        fnnoext, fext = os.path.splitext(fn)
-        fnnoext = fnnoext.replace(fext, "")
-        fn = fnnoext + fext
+        fn = os.path.basename(filename)          # "file.tar.gz"
+        fnnoext, fext = os.path.splitext(fn)     # ("file.tar", ".gz")
+
         if with_extension:
-            return fn
-        return fnnoext
+            return fnnoext + fext                # "file.tar.gz"
+        return fnnoext                           # "file.tar"
     
     @staticmethod
     def extract_path(filename: str, with_separator: bool = True) -> str:
-        """Extracts path of a path+filename string
-
+        """
+        Extracts the directory path from a full path+filename string.
         Args:
             filename (str): path+filename
-            with_separator (bool, optional): return path including the separator. Defaults to True.
+            with_separator (bool): return filename including end separator
 
         Returns:
-            str: string with path
+            str: path with or without end separator
         """
-        folder = os.path.dirname(os.path.abspath(filename))
-        if with_separator:
-            return folder + os.sep
-        return folder
-        
+        # Normalize to absolute path
+        abs_path = os.path.abspath(filename)
+
+        # Get directory portion
+        dir_path = os.path.dirname(abs_path)
+
+        # Guarantee a string output
+        if not dir_path:
+            dir_path = ""
+
+        # Add separator if requested
+        if with_separator and dir_path:
+            return dir_path + os.sep
+
+        return dir_path
+
+    def extract_extension(self,filename: str) -> str:
+        """
+        Returns the extension of a filename, including the dot.
+        Example: ".txt", ".tar.gz" (only last extension)
+        """
+        w_ext=self.extract_filename(filename, with_extension = True)
+        no_ext=self.extract_filename(filename, with_extension = False)
+        if w_ext == no_ext:
+            return ""
+        return w_ext.replace(no_ext,"")
+    
     def get_file_structure_from_active_path(self,src_path:str,item_name:str=None,file_structure:dict=None,full_path:bool=True,fcn_call=None,show_progress=False):
         """Gets a dictionary with a structure 
         {'item_name': [{'dir1': ['file1', ..., 'fileN']}, 
@@ -742,73 +754,45 @@ class FileManipulate:
 
         Returns:
             _type_: _description_
-        """
-        # Check if the source and destination paths exist
+        """   
         if not os.path.exists(src_path):
             return file_structure
-        first_loop=False
-        if not file_structure and not item_name:
-            first_loop=True
-            file_structure={}
-        elif not file_structure and item_name:
-            file_structure={}    
-        # Search inner structure    
-        path_list=[]
-        
-        num_items=0
-        for item in os.listdir(src_path):
-            num_items=num_items+1
-        val=0
-        task1 = None
-        # if show_progress:
-        #     progress=Progress()
-        # else:
-        #     progress=None
-        for item in os.listdir(src_path):
-            # if val==0 and first_loop and show_progress:
-            #     print('entered-->',src_path)
 
-            #     task1 = progress.add_task(f"[green]{src_path}", total=num_items) 
-            try:    
-                # if show_progress:
-                #     # progress bar update
-                #     if not progress.finished :
-                #         print('updating-->',val)
-                #         progress.update(task1, advance=1)
-                #         val=val+1
+        # First call
+        if file_structure is None:
+            file_structure = {}
+        if item_name is None:
+            item_name = os.path.basename(src_path.rstrip(os.sep))
+
+        contents = []
+
+        for item in os.listdir(src_path):
+            try:
                 src_item = os.path.join(src_path, item)
-                # If the current item is a file
+
+                # FILE
                 if os.path.isfile(src_item):
                     if fcn_call:
-                        path_list.append(fcn_call(src_item))
+                        contents.append(fcn_call(src_item))
                     else:
-                        path_list.append(item)
-            except PermissionError as error:
-                print('File:',error)
-                # path_list.append({})     
-            try:  
-                # If the current item is a directory
-                if os.path.isdir(src_item):
-                    print(src_item)
-                    if full_path:
-                        mod_item=item
-                    else:    
-                        extract=self.extract_parent_path(item,True) 
-                        mod_item=item.replace(extract,"")
-                    inner_structure=self.get_file_structure_from_active_path(src_item,mod_item,{},full_path,fcn_call, show_progress=False)    
-                    path_list.append(inner_structure)
-            except PermissionError as error:
-                print('Directory:',error)
-                  
-        # # end progressbar if not finished all
-        # if val<num_items and show_progress:
-        #     while not progress.finished:
-        #         print('updating not finished-->',val)
-        #         progress.update(task1, advance=1)
-        if first_loop:
-            file_structure.update({src_path:path_list})
-        elif item_name and not first_loop:
-            file_structure.update({item_name:path_list})         
+                        contents.append(item)
+
+                # DIRECTORY
+                elif os.path.isdir(src_item):
+                    sub_name = item if full_path else os.path.basename(item)
+                    sub_structure = self.get_file_structure_from_active_path(
+                        src_item,
+                        sub_name,
+                        {},
+                        full_path,
+                        fcn_call,
+                        show_progress=False
+                    )
+                    contents.append(sub_structure)
+            except PermissionError:
+                continue
+
+        file_structure[item_name] = contents
         return file_structure
 
     @staticmethod
@@ -821,6 +805,13 @@ class FileManipulate:
         if a_path.endswith((os.sep,'\\','/')):
             return a_path
         return a_path + os.sep    
+    
+    @staticmethod
+    def remove_separator_in_path_end(a_path:str):
+        """Removes the separator to a path end."""
+        if a_path and a_path.endswith((os.sep,'\\','/')) and len(a_path)>1:
+            return a_path[:-1]
+        return a_path     
 
     @staticmethod
     def extract_parent_path(filename: str, with_separator: bool = True) -> str:
@@ -844,32 +835,17 @@ class FileManipulate:
         return fpath    
     
     @staticmethod
-    def remove_empty_folders(folder_path, topdown=True, log_print=True):
-        """
-        Removes empty folders in a given path.
+    def remove_empty_folders(folder_path):
+        """removes empty folders in a given path
 
         Args:
-            folder_path (str): Path to scan.
-            topdown (bool): 
-                - True: remove only folders that are empty AND have no subfolders.
-                - False: remove empty folders bottom-up, removing parent folders 
-                that become empty after children are removed.
+            folder_path (str): path
         """
-        count=0
-        for root, dirs, files in os.walk(folder_path, topdown=topdown):
-            # Folder is empty if it has no files and no subdirectories
-            if not files and not dirs:
-                try:
-                    dir_path = root # os.path.join(root)
-                    if log_print:
-                        print(f"{count+1} Removing empty folder: {dir_path}")
-                    os.rmdir(dir_path)  # Remove the empty folder
-                    count+=1
-                except OSError:
-                    # Folder might not be empty anymore or permission issue
-                    pass
-        if log_print:
-            print(f"{count+1} Empty Folders Removed!")
+        for root, dirs, files in os.walk(folder_path):
+            if not files and not dirs:  # Check if directory is empty
+                dir_path = os.path.join(root)
+                print(f"Removing empty folder: {dir_path}")
+                os.rmdir(dir_path)  # Remove the empty folder
 
     @staticmethod
     def get_app_path() -> str:
@@ -961,39 +937,6 @@ class FileManipulate:
             return [path]
         except Exception as eee:
             print(f"Error Glob: {eee}")
-            return []
-    
-    def get_possible_path_list_recursive(self, path, joker='*') -> list[str]:
-        """
-        Use glob to find files or directories with patterns recursively.
-
-        Args:
-            path (str): path as pattern
-            joker (str): wildcard pattern
-
-        Returns:
-            list[str]: list of matching paths
-        """
-        try:
-            file_exist, is_file = self.validate_path_file(path)
-
-            # Case 1: path exists and is a directory
-            if file_exist and not is_file:
-                pattern = os.path.join(path, "**", joker)
-                return gb.glob(pattern, recursive=True)
-                
-
-            # Case 2: path exists and is a file
-            elif file_exist and is_file:
-                folder = self.extract_path(path, True)
-                pattern = os.path.join(folder,"**",joker)
-                return gb.glob(pattern, recursive=True)
-
-            # Case 3: path does not exist
-            return [path]
-
-        except Exception as e:
-            print(f"Error Glob: {e}")
             return []
 
     def get_possible_file_list(self, path, joker='*'):

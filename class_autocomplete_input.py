@@ -15,11 +15,16 @@ from rich import print  # pylint: disable=redefined-builtin
 import rich.text
 from class_file_manipulate import FileManipulate
 from key_press_functions import key_pressed, get_key, wait_key_press_timeout, wait_key
-from class_sql_search_query import SQLSearchGenerator, ALLOWED_DICT,ALLOWED_OPERATORS_DICT
-ALLOWED_OPERATORS=list(ALLOWED_OPERATORS_DICT.keys())
-ALLOWED_OPERATIONS=list(ALLOWED_DICT.keys())
+try:
+    from class_sql_search_query import SQLSearchGenerator, ALLOWED_DICT,ALLOWED_OPERATORS_DICT
+    ALLOWED_OPERATORS=list(ALLOWED_OPERATORS_DICT.keys())
+    ALLOWED_OPERATIONS=list(ALLOWED_DICT.keys())
 
-SQL_SG=SQLSearchGenerator()
+    SQL_SG=SQLSearchGenerator()
+except:
+    ALLOWED_OPERATORS=[]
+    ALLOWED_OPERATIONS=[]
+    SQL_SG=None
 f_m = FileManipulate()
 APP_PATH = f_m.get_app_path()
 CTRL_KEY = "ctrl+"
@@ -397,6 +402,8 @@ class AutocompletePathFile:
             tuple[str,str,bool]:  (SQL, message, is_valid)
                 Returns only SQL WHERE statement
         """
+        if not SQL_SG:
+            return None,None,None
         text_input=''
         pos=0
         is_help=False
