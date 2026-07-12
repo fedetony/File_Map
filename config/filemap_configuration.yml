@@ -1,0 +1,28 @@
+# FileMap General configuration
+
+paths:
+  log_dir: logs/
+  log_file: __session__.log
+  config_dir: config/
+  database_dir: db_Files/
+  user_databases: "user_databases.yml"
+
+default_databases:
+
+  - name: Test Database
+    db_path: null
+    db_file: linux_db_test.db
+    requires_password: false # or true
+    key_path: null
+    key_file: null
+    autoload: true
+
+ui:
+  window_maximized: true
+  window_geometry: "1200x800+50+50"
+  theme: dark
+
+behavior:
+  log_per_session: false
+  autosave_interval: 300
+  check_updates: false
