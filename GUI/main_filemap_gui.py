@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QTreeWidget, QTreeWidgetItem,
     QStackedWidget, QHBoxLayout, QVBoxLayout, QLabel, QStatusBar,
     QMenuBar, QMenu, QTreeView, QSplitter, QTextEdit,
-    QProgressBar, QDockWidget, QLineEdit
+    QProgressBar, QDockWidget, QLineEdit, QSizePolicy
 )
 from PyQt6.QtGui import QAction,QFileSystemModel
 from PyQt6.QtCore import Qt
@@ -24,24 +24,13 @@ from controllers.class_sort_controller import SortController
 from class_file_manipulate import *
 FM = FileManipulate()
 ap= FM.get_app_path()
-print(ap)
 config_path=os.path.join(ap,"config")
-from pathlib import Path
-
-def load_config(path: str):
-    path = Path(path)
-    if not path.exists():
-        raise FileNotFoundError(f"Config file not found: {path}")
-
-    with path.open("r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
 
 general_config_file=os.path.join(config_path,"filemap_configuration.yml")
-general_config = load_config(general_config_file)
-log_path = general_config["paths"]["log_dir"]
 
-log_file="__session__.log"
-
+from controllers.class_configuration_manager import *
+from controllers.class_database_manager import *
+conf_manager=ConfigurationManager(general_config_file)
     
 # -----------------------------
 # Generic Placeholder Page
@@ -64,55 +53,42 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("File Mapping Tool")
         self.resize(1800, 1000)
 
+        self.setDockOptions(
+            QMainWindow.DockOption.AllowNestedDocks |
+            QMainWindow.DockOption.AllowTabbedDocks
+        )
         # Central layout
-        central = QWidget()
-        self.setCentralWidget(central)
-        main_layout = QHBoxLayout(central)
+        # self.central = QLabel("Select an item from Navigation")
+        # self.central.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # self.setCentralWidget(self.central)
+        self.central = QWidget()
+        self.central.setMinimumSize(0, 0)
+        self.central.setSizePolicy(
+            QSizePolicy.Policy.Ignored,
+            QSizePolicy.Policy.Ignored
+        )
+
+        self.setCentralWidget(self.central)
 
         # -----------------------------
         # Left Navigation Tree
         # -----------------------------
+        # Navigation Dock
+        self.nav_dock = QDockWidget("Navigation", self)
+
         self.nav = QTreeWidget()
         self.nav.setHeaderHidden(True)
         self.build_navigation_tree()
         self.nav.itemClicked.connect(self.on_nav_clicked)
-
-        # -----------------------------
-        # Right Workspace (Stacked Pages)
-        # -----------------------------
-        self.pages = QStackedWidget()
-
-        # Create pages
-        self.page_about = PlaceholderPage("About")
-        self.page_devices = PlaceholderPage("Show Devices")
-        self.page_rescan = PlaceholderPage("Rescan Devices")
-
-        self.page_db = PlaceholderPage("Handle Databases")
-        self.page_mapping = PlaceholderPage("Mapping")
-        self.page_backup = PlaceholderPage("Backup")
-        self.page_selection = PlaceholderPage("Selection")
-
-        self.page_sort = SortPage()
-
-        # Map names to pages
-        self.pages_map = {
-            "About": self.page_about,
-            "Show Devices": self.page_devices,
-            "Rescan Devices": self.page_rescan,
-            "Handle Databases": self.page_db,
-            "Mapping": self.page_mapping,
-            "Backup": self.page_backup,
-            "Selection": self.page_selection,
-            "Sort": self.page_sort,
-        }
-
-        for page in self.pages_map.values():
-            self.pages.addWidget(page)
-
-        # Add navigation + pages
-        main_layout.addWidget(self.nav, 1)
-        main_layout.addWidget(self.pages, 4)
-
+        self.nav_dock.setWidget(self.nav)
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea,self.nav_dock)
+        self.nav_dock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea)
+        self.nav_dock.setFeatures(
+            QDockWidget.DockWidgetFeature.DockWidgetMovable |
+            QDockWidget.DockWidgetFeature.DockWidgetFloatable |
+            QDockWidget.DockWidgetFeature.DockWidgetClosable
+        )
+    
         # -----------------------------
         # Menu Bar
         # -----------------------------
@@ -132,6 +108,18 @@ class MainWindow(QMainWindow):
         action_about.triggered.connect(lambda: self.show_page("About"))
         action_exit.triggered.connect(self.close)
 
+        menu_view = QMenu("View", self)
+        menubar.addMenu(menu_view)
+
+        # action_nav = QAction("Navigation", self)
+        # action_nav.setCheckable(True)
+        # action_nav.setChecked(True)
+        menu_view.addAction(self.nav_dock.toggleViewAction())
+ 
+        # menu_view.addAction(action_nav)
+
+        # action_nav.triggered.connect(self.nav_dock.setVisible)
+        
         # -----------------------------
         # Status Box (DB, Map, Progress, Logger)
         # -----------------------------
@@ -163,18 +151,7 @@ class MainWindow(QMainWindow):
         # -----------------------------
         # Dockables 
         # -----------------------------
-        # Sort Page
-        self.sort_page = SortPage()
-        self.sort_dock = QDockWidget("Sort Tool", self)
-        self.sort_dock.setWidget(self.sort_page)
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.sort_dock)
-        self.sort_dock.hide()
-
-        # Handle database Page
-        self.db_dock = QDockWidget("Database Manager", self)
-        self.db_dock.setWidget(DatabaseManagerDock(config=general_config))
-        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.db_dock)
-        self.db_dock.hide()
+        self.create_docks()
 
         # Models
         self.source_model = QFileSystemModel()
@@ -190,6 +167,21 @@ class MainWindow(QMainWindow):
             self.logger         # QTextEdit logger
         )
 
+    def create_docks(self):
+        # Database
+        dbm = DatabaseManager(conf_manager)
+        self.db_dock = QDockWidget("Database Manager",self)
+        self.db_dock.setWidget(DatabaseManagerDock(database_manager=dbm))
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea,self.db_dock)
+        self.db_dock.hide()
+
+        # Sort
+        self.sort_dock = QDockWidget("Sort Tool",self)
+        self.sort_page = SortPage()
+        self.sort_dock.setWidget(self.sort_page)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea,self.sort_dock)
+        self.sort_dock.hide()
+
     # -----------------------------
     # Navigation Tree
     # -----------------------------
@@ -197,68 +189,31 @@ class MainWindow(QMainWindow):
         root = QTreeWidgetItem(["File Map"])
 
         about = QTreeWidgetItem(["About"])
-        show_devices = QTreeWidgetItem(["Show Devices"])
-        rescan_devices = QTreeWidgetItem(["Rescan Devices"])
-
-        db = QTreeWidgetItem(["Handle Databases"])
-        db.addChildren([
-            QTreeWidgetItem(["Create New Database File"]),
-            QTreeWidgetItem(["Append Database File"]),
-            QTreeWidgetItem(["Remove Database File"]),
-            QTreeWidgetItem(["Activate Database File"]),
-            QTreeWidgetItem(["Deactivate Database File"]),
-        ])
-
+        devices = QTreeWidgetItem(["Devices"])
+        databases = QTreeWidgetItem(["Databases"])
         mapping = QTreeWidgetItem(["Mapping"])
-        mapping.addChildren([
-            QTreeWidgetItem(["Create New Map"]),
-            QTreeWidgetItem(["Delete Map"]),
-            QTreeWidgetItem(["Clone Map"]),
-            QTreeWidgetItem(["Rename Map"]),
-            QTreeWidgetItem(["Update Map"]),
-            QTreeWidgetItem(["Shallow Compare Maps"]),
-            QTreeWidgetItem(["Deep Compare Maps"]),
-            QTreeWidgetItem(["Deepen Shallow Map"]),
-            QTreeWidgetItem(["Continue Mapping"]),
-            QTreeWidgetItem(["Process Map"]),
-        ])
-
         backup = QTreeWidgetItem(["Backup"])
-        backup.addChildren([
-            QTreeWidgetItem(["Backup of Map base"]),
-            QTreeWidgetItem(["Backup of Selection Map"]),
-            QTreeWidgetItem(["Backup compare"]),
-        ])
-
-        selection = QTreeWidgetItem(["Selection"])
-        selection.addChildren([
-            QTreeWidgetItem(["Browse Tree"]),
-            QTreeWidgetItem(["Browse Directories"]),
-            QTreeWidgetItem(["Search Map"]),
-            QTreeWidgetItem(["Edit Selection from Origin"]),
-            QTreeWidgetItem(["Selection Map Action"]),
-        ])
-
         sort = QTreeWidgetItem(["Sort"])
-        sort.addChildren([
-            QTreeWidgetItem(["Select active Files/Directories"]),
-            QTreeWidgetItem(["Select Mapped Files/Directories"]),
-            QTreeWidgetItem(["Deselect Files/Directories"]),
-            QTreeWidgetItem(["Selection to Map"]),
-            QTreeWidgetItem(["Save Selection to File"]),
-            QTreeWidgetItem(["Load Selection from File"]),
-            QTreeWidgetItem(["Process Selection"]),
-        ])
-
+        # sort.addChildren([
+        #     QTreeWidgetItem(["Select active Files/Directories"]),
+        # ])
+        settings = QTreeWidgetItem(["Settings"])
+        ##########################
+        # ├── About
+        # ├── Devices
+        # ├── Databases
+        # ├── Mapping
+        # ├── Selection
+        # ├── Backup
+        # └── Settings
         root.addChildren([
             about,
-            show_devices,
-            rescan_devices,
-            db,
+            devices,
+            databases,
             mapping,
             backup,
-            selection,
             sort,
+            settings,
         ])
 
         self.nav.addTopLevelItem(root)
@@ -269,24 +224,39 @@ class MainWindow(QMainWindow):
     # -----------------------------
     def on_nav_clicked(self, item, column):
         name = item.text(0)
-        self.show_page(name)
+        if name == "Databases":
+            self.show_database_dock()
+        elif name == "Sort":
+            self.show_sort_dock()
+        elif name == "Devices":
+            self.show_devices_dock()
+        elif name == "Mapping":
+            self.show_mapping_dock()
+        elif name == "About":
+            self.show_about()
 
-    def show_page(self, name):
-        # Show stacked page
-        if name in self.pages_map:
-            self.pages.setCurrentWidget(self.pages_map[name])
+    def show_devices_dock(self):
+        pass
+    
+    def show_mapping_dock(self):
+        pass
 
-        # Show dock only for Sort
-        if name == "Sort":
-            self.sort_dock.show()
-        else:
-            self.sort_dock.hide()
-        # Show dock only for Handle databases
-        if name == "Handle Databases":
-            self.db_dock.show()
-        else:
-            self.db_dock.hide()
+    def show_about(self):
+        pass
 
+    def show_database_dock(self):
+        # self.hide_all_docks()
+        self.db_dock.show()
+        self.db_dock.raise_()
+    
+    def show_sort_dock(self):
+        # self.hide_all_docks()
+        self.sort_dock.show()
+        self.sort_dock.raise_()
+    
+    def hide_all_docks(self):
+        for dock in self.findChildren(QDockWidget):
+            dock.hide()
 
 
 # -----------------------------
