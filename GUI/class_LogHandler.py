@@ -1,0 +1,287 @@
+import logging
+import queue
+import threading
+
+import os
+import sys
+from pathlib import Path
+
+LM = None
+
+try:
+    import class_ST
+    HAS_SIGNAL_TRACKER=True
+except ImportError:
+    HAS_SIGNAL_TRACKER=False
+
+def init_logger_manager(log_file):
+    global LM
+    LM = LoggerManager(log_file)
+    return LM
+
+class LoggerManager:
+    def __init__(self, log_file):
+        if log_file:
+            self.log_file = Path(log_file)
+        else:
+            self.log_file = None
+        self.log_queue = queue.Queue()
+        self.root = logging.getLogger()
+        self.root.setLevel(logging.DEBUG)
+        self.formatter = logging.Formatter( "%(asctime)s [%(levelname)s] (%(name)s) %(message)s", "%y-%m-%d %H:%M" )
+
+        if not self.root.handlers:
+            self._setup_file_handler()
+            self._setup_queue_handler()
+
+        self.normal_handlers= None
+        self.gui_handlers = None
+        self.update_thread = None
+
+    def attach_gui_handler(self, parent):
+        """On log emit runs write_GUI_Log function on gui_panel
+
+        Args:
+            gui_panel (QWidget): Window object with write_GUI_Log method
+        """
+        # Create the list the first time
+        if not hasattr(self, "gui_handlers") or not isinstance(self.gui_handlers,list):
+            self.gui_handlers = []
+
+        # Create a new handler for this GUI panel
+        handler = ConsolePanelHandler(parent)
+        handler.setLevel(logging.DEBUG)
+        handler.setFormatter(logging.Formatter(
+            "%(asctime)s [%(levelname)s] (%(name)s) %(message)s",
+            "%y-%m-%d %H:%M"
+        ))
+
+        # Add to root logger
+        self.root.addHandler(handler)
+
+        # Store it so you can manage/remove later
+        self.gui_handlers.append(handler)
+    
+    def attach_signaltracker_handler(self, parent, signal_tracker):
+        """Sends emitted record through signal tracker Log_To_Main process (log_to_main signal)
+
+        Args:
+            parent (any): Not used* 
+            signal_tracker (class_ST.SignalTracker): SignalTracker object connected to main log
+        """
+        if not HAS_SIGNAL_TRACKER:
+            return
+        if not isinstance(signal_tracker,class_ST.SignalTracker):
+            return
+        handler = SignalTrackerHandler(parent, signal_tracker)
+        handler.setLevel(logging.DEBUG)
+        handler.setFormatter(logging.Formatter(
+            "%(asctime)s [%(levelname)s] (%(name)s) %(message)s",
+            "%y-%m-%d %H:%M"
+        ))
+
+        self.root.addHandler(handler)
+    
+    @staticmethod
+    def _get_level(level: str):
+        level=str(level).lower()
+        level_map={
+            "info":logging.INFO,
+            "debug":logging.DEBUG,
+            "critical":logging.CRITICAL,
+            "error":logging.ERROR,
+            "warning":logging.WARNING,
+            "warn":logging.WARN,
+            "fatal":logging.FATAL
+            }
+        return level_map.get(level) or level_map.get("debug")
+
+    def get_logger_with_handler(self,name: str ,level: str="debug",propagate: bool=False,format: str=None):
+        """
+        Create and return a logger with its own StreamHandler.
+
+        This logger receives its own dedicated handler (with its own level and
+        formatting), and optionally forwards log records to the root logger
+        depending on the `propagate` flag.
+
+        Args:
+            name (str):
+                The name of the logger to create or retrieve.
+
+            level (str, optional):
+                Logging level for both the logger and its StreamHandler.
+                Defaults to "debug".
+
+            propagate (bool, optional):
+                If False, the logger is isolated and does NOT forward messages
+                to the root logger.  
+                If True, messages are also propagated to the root logger
+                (e.g., file handler, GUI handler).  
+                Defaults to False.
+
+            format (str, optional):
+                Custom logging format string.  
+                If None, the default format
+                "%(asctime)s [%(levelname)s] (%(name)s) %(message)s"
+                is used.
+
+        Returns:
+            logging.Logger:
+                The configured logger instance with its attached StreamHandler.
+        """
+        logger = logging.getLogger(name)
+        logger.setLevel(self._get_level(level))
+        # define a Handler which writes INFO messages or higher to the sys.stderr
+        stream_handler = logging.StreamHandler()
+        stream_handler.setLevel(self._get_level(level))
+        # set a format which is simpler for console use
+        if not format:
+            formatter = logging.Formatter("%(asctime)s [%(levelname)s] (%(name)s) %(message)s")
+        else:
+            formatter = logging.Formatter(format)
+        # tell the handler to use this format
+        stream_handler.setFormatter(formatter)
+        logger.addHandler(stream_handler)
+        logger.propagate = propagate  # False if you want isolation
+        return logger
+        
+    def get_new_logger_propagating_to_root(self,name,level="debug"):
+        """Creates a logger and adds the logger handler to root central logger.
+
+        Args:
+            name (str): Name of the logger
+        """
+        return self.get_logger_with_handler(name,level,True,None)
+
+    def start_gui_update_thread(self, killer_event):
+        """Starts a thread which persistently logs True value. 
+        When killer_event in a thread is set, then the signal stops.
+        Used to check external device thread is connected."""
+        if self.update_thread is None:
+            self.update_thread = Log_Update(killer_event)
+            self.update_thread.start()
+
+    def _setup_file_handler(self):
+        if self.log_file:
+            fh = logging.FileHandler(self.log_file, mode="a", encoding="utf-8")
+        else:
+            fh = logging.StreamHandler()
+        fh.setLevel(logging.DEBUG)
+        fh.setFormatter(logging.Formatter(
+            "%(asctime)s [%(levelname)s] (%(threadName)-10s) (%(name)s) %(message)s",
+            "%y-%m-%d %H:%M:%S"
+        ))
+        self.root.addHandler(fh)
+
+    def _setup_queue_handler(self):
+        qh = QueueHandler(self.log_queue)
+        qh.setLevel(logging.DEBUG)
+        qh.setFormatter(logging.Formatter(
+            "%(asctime)s [%(levelname)s] (%(threadName)-10s) %(message)s",
+            "%y-%m-%d %H:%M"
+        ))
+        self.root.addHandler(qh)
+
+    def get_logger(self, name):
+        return logging.getLogger(name)
+
+'''
+# How to use it
+LM = LoggerManager(log_file)
+LM.start_gui_update_thread(killer_event)
+
+log = LM.get_logger("main")
+log.info("Application started")
+
+'''
+
+class QueueHandler(logging.Handler):
+    """Class to send logging records to a queue
+    It can be used from different threads
+    The ConsoleUi class polls this queue to display records in a ScrolledText widget
+    """
+    # Example from Moshe Kaplan: https://gist.github.com/moshekaplan/c425f861de7bbf28ef06
+    # (https://stackoverflow.com/questions/13318742/python-logging-to-tkinter-text-widget) is not thread safe!
+    # See https://stackoverflow.com/questions/43909849/tkinter-python-crashes-on-new-thread-trying-to-log-on-main-thread
+
+    def __init__(self, log_queue: queue.Queue):
+        super().__init__()
+        self.log_queue = log_queue
+
+    def emit(self, record):
+        self.log_queue.put(self.format(record))
+
+class ConsolePanelHandler(logging.Handler):    
+    def __init__(self, parent):
+        logging.Handler.__init__(self)
+        self.parent = parent
+        self._emitting = False
+
+    def emit(self, record:logging.LogRecord):
+        if self._emitting: #avoid recursion
+            return
+        self._emitting = True
+        try:
+            self.parent.write_GUI_Log(self.format(record))
+        except AttributeError as eee:
+            print(f"Error in ConsolePanelHandler: {eee}")
+            print(f"[{record.name}] {record.message}")
+        self._emitting = False
+
+class SignalTrackerHandler(logging.Handler):
+    def __init__(self, parent, signal_tracker):
+        super().__init__()
+        if not isinstance(signal_tracker,class_ST.SignalTracker):
+            raise TypeError("Signal tracker must be a ST object")
+        self.ST = signal_tracker
+        self._emitting = False
+        self.parent=parent
+
+    def emit(self, record):
+        if self._emitting: #avoid recursion
+            return
+        self._emitting = True
+        # msg = self.format(record)
+        # logger_name = record.name
+        # level = record.levelname.lower()
+        self.ST.Log_to_Main(record)
+        self._emitting = False
+
+class ToFileLogger:
+    def __init__(self, name: str):
+        self.logger = logging.getLogger(name)
+        self.logger.setLevel(logging.DEBUG)
+
+        stream_handler = logging.StreamHandler(sys.stderr)
+        formatter = logging.Formatter(
+            "[%(asctime)s][%(levelname)s] (%(threadName)-10s) %(message)s", "%Y-%m-%d %H:%M:%S"
+        )
+        stream_handler.setFormatter(formatter)
+
+        stream_handler.setLevel(logging.DEBUG)
+        self.logger.addHandler(stream_handler)
+        # self.logger.propagate = False
+
+class Log_Update(threading.Thread):
+    def __init__(self,killer_event):
+        threading.Thread.__init__(self, name="Log Update")
+        #log.info("Log Update Started")
+        self.killer_event=killer_event
+        self.cycle_time=0.1
+        self.ST=class_ST.SignalTracker()    
+    def run(self):    
+        print('Logging Thread initialized')                       
+        while not self.killer_event.wait(self.cycle_time):   
+            self.ST.Log_Update()
+        print('Logging Thread Exit')  
+    def quit(self):
+        print('quit received')                                   
+        self.killer_event.set()                   
+
+def get_appPath():
+    # determine if application is a script file or frozen exe
+    if getattr(sys, 'frozen', False):
+        application_path = os.path.dirname(sys.executable)
+    elif __file__:
+        application_path = os.path.dirname(__file__)
+    return application_path

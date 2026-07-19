@@ -12,6 +12,13 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QAction,QFileSystemModel
 from PyQt6.QtCore import Qt
 
+#Configure logger before importing classes (so they become child loggers)
+import class_LogHandler
+log_file = None # do stream handler
+LM = class_LogHandler.init_logger_manager(log_file)
+log = LM.get_logger(__name__)
+log.info("Application starting...")
+
 from controllers.class_sort_controller import SortController
 from models.class_virtual_model import VirtualModel
 
@@ -20,6 +27,7 @@ from class_database_manager_dock import DatabaseManagerDock
 from class_sort_dock import SortPage
 from class_sort_dock import SortPage
 from controllers.class_sort_controller import SortController
+from class_navigation_tree import *
 
 from class_file_manipulate import *
 FM = FileManipulate()
@@ -75,12 +83,15 @@ class MainWindow(QMainWindow):
         # -----------------------------
         # Navigation Dock
         self.nav_dock = QDockWidget("Navigation", self)
-
-        self.nav = QTreeWidget()
-        self.nav.setHeaderHidden(True)
-        self.build_navigation_tree()
-        self.nav.itemClicked.connect(self.on_nav_clicked)
-        self.nav_dock.setWidget(self.nav)
+        
+        self.nav_obj=QtWidgets.QTreeView(self)
+        self.nav_struct=NAV_STRUCT_EXAMPLE
+        self.nav = NavigationMenu(self.nav_obj,self.nav_struct,self)
+        # self.nav = QTreeWidget()
+        # self.nav.setHeaderHidden(True)
+        # self.build_navigation_tree()
+        # self.nav.itemClicked.connect(self.on_nav_clicked)
+        self.nav_dock.setWidget(self.nav_obj)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea,self.nav_dock)
         self.nav_dock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea)
         self.nav_dock.setFeatures(
@@ -117,7 +128,6 @@ class MainWindow(QMainWindow):
         menu_view.addAction(self.nav_dock.toggleViewAction())
  
         # menu_view.addAction(action_nav)
-
         # action_nav.triggered.connect(self.nav_dock.setVisible)
         
         # -----------------------------
