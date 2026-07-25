@@ -66,17 +66,18 @@ class MainWindow(QMainWindow):
             QMainWindow.DockOption.AllowTabbedDocks
         )
         # Central layout
-        # self.central = QLabel("Select an item from Navigation")
-        # self.central.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        # self.setCentralWidget(self.central)
-        self.central = QWidget()
-        self.central.setMinimumSize(0, 0)
-        self.central.setSizePolicy(
+        # self.central_dock = QLabel("Select an item from Navigation")
+        # self.central_dock.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # self.setCentralWidget(self.central_dock)
+        self.central_dock = QWidget()
+        self.central_dock.setMinimumSize(0, 0)
+        self.central_dock.setSizePolicy(
             QSizePolicy.Policy.Ignored,
             QSizePolicy.Policy.Ignored
         )
 
-        self.setCentralWidget(self.central)
+        self.setCentralWidget(self.central_dock)
+        self.central_dock.setObjectName("Central")
 
         # -----------------------------
         # Left Navigation Tree
@@ -91,6 +92,7 @@ class MainWindow(QMainWindow):
         # self.nav.setHeaderHidden(True)
         # self.build_navigation_tree()
         # self.nav.itemClicked.connect(self.on_nav_clicked)
+        self.nav_obj.clicked.connect(self.on_nav_clicked)
         self.nav_dock.setWidget(self.nav_obj)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea,self.nav_dock)
         self.nav_dock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea)
@@ -181,16 +183,23 @@ class MainWindow(QMainWindow):
         # Database
         dbm = DatabaseManager(conf_manager)
         self.db_dock = QDockWidget("Database Manager",self)
+        self.db_dock.setObjectName("Databases")
         self.db_dock.setWidget(DatabaseManagerDock(database_manager=dbm))
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea,self.db_dock)
         self.db_dock.hide()
 
         # Sort
         self.sort_dock = QDockWidget("Sort Tool",self)
+        self.sort_dock.setObjectName("Sort")
         self.sort_page = SortPage()
         self.sort_dock.setWidget(self.sort_page)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea,self.sort_dock)
         self.sort_dock.hide()
+
+        for dock in self.findChildren(QDockWidget):
+            dock.visibilityChanged.connect(self._dock_visibility_changed)
+        
+        
 
     # -----------------------------
     # Navigation Tree
@@ -232,8 +241,9 @@ class MainWindow(QMainWindow):
     # -----------------------------
     # Navigation Click Handler
     # -----------------------------
-    def on_nav_clicked(self, item, column):
-        name = item.text(0)
+    def on_nav_clicked(self, item:QtCore.QModelIndex): #column):
+        # print(item.data(0)) -> content where you click
+        name = item.siblingAtColumn(0).data(0) #item.text(0)
         if name == "Databases":
             self.show_database_dock()
         elif name == "Sort":
@@ -244,6 +254,7 @@ class MainWindow(QMainWindow):
             self.show_mapping_dock()
         elif name == "About":
             self.show_about()
+        self._checkboxes_all_docks()
 
     def show_devices_dock(self):
         pass
@@ -258,15 +269,32 @@ class MainWindow(QMainWindow):
         # self.hide_all_docks()
         self.db_dock.show()
         self.db_dock.raise_()
+        self.central_dock.hide()
     
     def show_sort_dock(self):
         # self.hide_all_docks()
         self.sort_dock.show()
         self.sort_dock.raise_()
+        self.central_dock.hide()
     
     def hide_all_docks(self):
+        """Hides all docks"""
         for dock in self.findChildren(QDockWidget):
             dock.hide()
+        self._checkboxes_all_docks()
+    
+    def _dock_visibility_changed(self, visible):
+        self._checkboxes_all_docks()
+    
+    def _checkboxes_all_docks(self, *args):
+        """Set checkbox True or False in the Navigation"""
+        for dock in self.findChildren(QDockWidget):
+            cbval = dock.isVisible() and dock.isEnabled()
+            name = dock.objectName()
+            if name:
+                self.nav.set_value(["FileMap", name, "value"], cbval)
+
+
 
 
 # -----------------------------

@@ -3,6 +3,7 @@ from PyQt6.QtWidgets import *
 
 import class_treeview_functions
 import class_struct_conditioner
+from class_struct_tracker import TreeStructTracker
 
 
 FIELDS_POSITION=[
@@ -17,13 +18,20 @@ conditions={"rapid": "me_set('meta[hidden]',False) if node_get('rapid[Show[value
 
 NAV_STRUCT_EXAMPLE={
         "FileMap": {"children":[                  
-                {"About": {"value": True, "type": "bool", "unit":"", "meta": {}}},
-                {"Devices": {"value": True, "type": "bool", "unit":"", "meta": {}}},
-                {"Databases": {"value": True, "type": "bool", "unit":"", "meta": {}}},
-                {"Mapping": {"value": True, "type": "bool", "unit":"", "meta": {}}},
-                {"Backup": {"value": True, "type": "bool", "unit":"", "meta": {}}},
-                {"Sort": {"value": True, "type": "bool", "unit":"", "meta": {}}},
-                {"Settings": {"value": True, "type": "bool", "unit":"", "meta": {}}},
+                {"About": {"value": False, "type": "bool", "unit":"", 
+                           "meta": {"editable": False, "selectable": True,  "hidden": False}}},
+                {"Devices": {"value": False, "type": "bool", "unit":"", 
+                             "meta": {"editable": False, "selectable": True,  "hidden": False}}},
+                {"Databases": {"value": False, "type": "bool", "unit":"", 
+                               "meta": {"editable": False, "selectable": True,  "hidden": False}}},
+                {"Mapping": {"value": False, "type": "bool", "unit":"", 
+                             "meta": {"editable": False, "selectable": True,  "hidden": False}}},
+                {"Backup": {"value": False, "type": "bool", "unit":"", 
+                            "meta": {"editable": False, "selectable": True,  "hidden": False}}},
+                {"Sort": {"value": False, "type": "bool", "unit":"", 
+                          "meta": {"editable": False, "selectable": True,  "hidden": False}}},
+                {"Settings": {"value": False, "type": "bool", "unit":"", 
+                              "meta": {"editable": False, "selectable": True,  "hidden": False}}},
             ]},            
         }
 
@@ -161,3 +169,15 @@ class NavigationMenu(QtCore.QObject):
     #     if self.axes:
     #         self.axes.setVisible(checked)
     #     self.apply_axes_style()
+
+    @property
+    def tracker(self)->TreeStructTracker:
+        return self.nav_tv.tracker
+    
+    def set_value(self, track, value):
+        """Sets the value and refreshes the conditions and treeview"""
+        self._do_evaluation=True
+        was_set=self.nav_tv.tracker.set_value(track,value)
+        if was_set:
+            self._evaluate_conditions()
+        return was_set
