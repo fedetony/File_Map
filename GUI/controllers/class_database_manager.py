@@ -4,6 +4,7 @@ import yaml
 
 from controllers.class_database_info import DatabaseInfo
 from controllers.class_configuration_manager import ConfigurationManager
+from widgets.database_auth_dialog import DatabaseAuthDialog
 
 class DatabaseManager:
 
@@ -115,5 +116,47 @@ class DatabaseManager:
     @property
     def active_databases(self):
         return [db for db in self.databases if db.active]
+    
+    def activate_database(self, db_file):
+        try:
+            self.open_database(db_file)
+        except DatabasePasswordRequired:
+            dialog = DatabaseAuthDialog(
+                db_file,
+                need_password=True,
+                need_key=False
+            )
+            if dialog.exec():
+                password, key = dialog.values()
+                self.open_database(
+                    db_file,
+                    password,
+                    key
+                )
+
+        except DatabaseKeyRequired:
+            dialog = DatabaseAuthDialog(
+                db_file,
+                need_password=False,
+                need_key=True
+            )
+            if dialog.exec():
+                password, key = dialog.values()
+                self.open_database(
+                    db_file,
+                    password,
+                    key
+                )
+
+    def open_database(self,*args):
+        print(args)
+
+
+class DatabasePasswordRequired(Exception):
+    pass
+
+
+class DatabaseKeyRequired(Exception):
+    pass
 
     

@@ -47,11 +47,22 @@ from widgets.navigation_tree import NavigationTree
 from widgets.status_widget import StatusWidget
 from widgets.logger_dock import LoggerDock
 
+from controllers.class_configuration_manager import ConfigurationManager
 
 class MainWindow(QMainWindow):
 
-    def __init__(self):
+    def __init__(
+    self,
+    file_list:list,
+    password_list:list,
+    key_list:list,
+    conf_manager:ConfigurationManager):
         super().__init__()
+        # Get Filemap's inputs
+        self.file_list = file_list
+        self.password_list = password_list
+        self.key_list = key_list
+        self.conf_manager = conf_manager
 
         self.setWindowTitle("File Mapping Tool")
         self.resize(1800, 1000)
