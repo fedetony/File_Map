@@ -59,24 +59,15 @@ class MainWindow(QMainWindow):
 
     def __init__(
     self,
-    file_list:list,
-    password_list:list,
-    key_list:list,
     conf_manager:ConfigurationManager,
     dbm:DatabaseManager,
     ):
         super().__init__()
         # Get Filemap's inputs
-        self.file_list = file_list
-        self.password_list = password_list
-        self.key_list = key_list
         self.conf_manager = conf_manager
         self.dbm = dbm
         # Object to Filemap Cli 
         self.fmap = FileMapCliManager(
-            file_list=self.file_list,
-            password_list=self.password_list,
-            key_list=self.key_list,
             conf_manager=self.conf_manager,
             dbm=self.dbm,
         )
@@ -289,21 +280,5 @@ class MainWindow(QMainWindow):
         event.accept()
 
 
-# --------------------------------------------------
-# Run
-# --------------------------------------------------
-
-def main():
-
-    app = QApplication(sys.argv)
-
-    window = MainWindow()
-
-    window.show()
-
-    sys.exit(app.exec())
-
-
 if __name__ == "__main__":
-
-    main()
+    pass

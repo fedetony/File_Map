@@ -43,16 +43,9 @@ def main():
     dialog = DatabaseStartupDialog(conf_manager)
 
     if dialog.exec():
-        (
-            file_list,
-            password_list,
-            key_list
-        ) = dialog.get_databases()
-
-        win = MainWindow(file_list,password_list,key_list,dialog.conf,dialog.dbm)
+        win = MainWindow(dialog.conf,dialog.dbm)
         win.show()
         sys.exit(app.exec())
-
 
 if __name__ == "__main__":
     main()

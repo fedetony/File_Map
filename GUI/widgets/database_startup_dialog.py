@@ -36,7 +36,7 @@ class DatabaseStartupDialog(QDialog):
         self.dbm = DatabaseManager(self.conf)
         
         self.databases = self.dbm.databases
-        self.file_list, self.password_list, self.key_list = self.dbm.get_file_pwd_key_lists()
+        self.file_list, self.password_list, self.key_list, self.activation_list = self.dbm.get_file_pwd_key_lists()
 
         self.database_widgets = []
         self.create_ui()
@@ -59,7 +59,10 @@ class DatabaseStartupDialog(QDialog):
             if isinstance(db,DatabaseInfo):
                 pass
             item = QListWidgetItem()
-            item.setCheckState(Qt.CheckState.Checked)
+            if db.autoload:
+                item.setCheckState(Qt.CheckState.Checked)
+            else:
+                item.setCheckState(Qt.CheckState.Unchecked)    
             widget = QWidget()
             row = QVBoxLayout(widget)
             # Database name

@@ -161,28 +161,67 @@ class DatabaseManager:
     def open_database(self,*args):
         print(args)
     
-    def get_file_pwd_key_lists(self):
+    def verify_db_paths(self,db:DatabaseInfo):
+        """Verify if paths are ok and exist in db Info item.
+
+        Args:
+            db (DatabaseInfo): Item of database
+
+        Returns:
+            tuple: (is_ok_db, is_ok_k, db_filepath, k_filepath)
+        """
+        db_filepath, k_filepath = None, None
+        if not db.db_path:
+            db_path=os.path.join(FM.get_app_path(),self.cfg.paths["database_dir"])
+        else:
+            db_path=db.db_path
+        db_filepath=os.path.join(db_path,db.db_file)
+        file_exist, is_file=FM.validate_path_file(db_filepath)
+        if db.key_file:
+            if not db.key_path:
+                k_path=os.path.join(FM.get_app_path(),self.cfg.paths["database_dir"])
+            else:
+                k_path=db.key_path
+            k_filepath=os.path.join(k_path,db.key_file)
+            kfile_exist, kis_file=FM.validate_path_file(k_filepath)
+            if kfile_exist and kis_file:
+                is_ok_k=True
+            else:
+                is_ok_k=False
+        else:
+            is_ok_k=True
+            
+        is_ok_db=False
+        if file_exist and is_file:
+            is_ok_db=True
+        return is_ok_db,is_ok_k, db_filepath, k_filepath
+        
+    def get_file_pwd_key_lists(self)->tuple[list]:
+        """Gets the valid content of databases in the lists
+
+        Returns:
+            _type_: (file_list, password_list, key_list , activation_list)
+        """
         file_list = []
         password_list = []
         key_list = []
+        activation_list = []
         for db in self.databases:
             if isinstance(db,DatabaseInfo):
-                if not db.db_path:
-                    db_path=os.path.join(FM.get_app_path(),self.cfg.paths["database_dir"])
-                else:
-                    db_path=db.db_path
-                db_filepath=os.path.join(db_path,db.db_file)
-
-                file_exist, is_file=FM.validate_path_file(db_filepath)
-                if file_exist and is_file:
+                is_ok_db,is_ok_k, db_filepath, k_filepath = self.verify_db_paths(db)
+                if is_ok_db and is_ok_k:
                     file_list.append(db_filepath)
                     password_list.append(db.requires_password)
-                    key_list.append(db.keyfile_filepath)
+                    key_list.append(k_filepath)
+                    activation_list.append(db.autoload)
                 else:
-                    log.error(f"Could not load {db_filepath}, maybe is wrong in configuration or file does not exist!")
+                    if not is_ok_db:
+                        log.error(f"Could not load {db_filepath}, check the configuration, file does not exist!")
+                    if not is_ok_k:
+                        log.error(f"Could not load {k_filepath}, check the configuration, file does not exist!")
 
         
-        return file_list, password_list, key_list               
+        return file_list, password_list, key_list , activation_list             
 
 
 
