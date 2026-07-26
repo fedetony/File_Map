@@ -76,7 +76,6 @@ class DatabaseManagerDock(QWidget):
     # ==========================================================
 
     def refresh_table(self):
-
         self.table.setRowCount(0)
 
         for db in self.dbm.databases:
@@ -113,18 +112,14 @@ class DatabaseManagerDock(QWidget):
     # ==========================================================
 
     def selected_databases(self):
-
         databases = []
-
         rows = {
             index.row()
             for index in self.table.selectionModel().selectedRows()
         }
 
         for row in rows:
-
             item = self.table.item(row, 0)
-
             databases.append(
                 item.data(Qt.ItemDataRole.UserRole)
             )
@@ -169,7 +164,6 @@ class DatabaseManagerDock(QWidget):
     # ==========================================================
 
     def create_database(self):
-
         filename, _ = QFileDialog.getSaveFileName(
             self,
             "Create database",
@@ -181,27 +175,22 @@ class DatabaseManagerDock(QWidget):
             return
 
         self.dbm.create_database(filename)
-
         self.refresh_table()
 
     def append_database(self):
-
         filename, _ = QFileDialog.getOpenFileName(
             self,
             "Append database",
             "",
             "Database (*.db)"
         )
-
         if not filename:
             return
 
         self.dbm.append_database(filename)
-
         self.refresh_table()
 
     def remove_selected(self):
-
         for db in self.selected_databases():
             self.dbm.remove_database(db)
 

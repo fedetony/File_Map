@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QMessageBox
 )
 
-class QtDialogs:
+class ConfirmationDialog:
 
     @staticmethod
     def ask_confirmation(
@@ -20,5 +20,8 @@ class QtDialogs:
             QMessageBox.StandardButton.Yes |
             QMessageBox.StandardButton.No
         )
+        if result not in [QMessageBox.StandardButton.Yes ,
+            QMessageBox.StandardButton.No]:
+            return default
 
         return result == QMessageBox.StandardButton.Yes

@@ -1,13 +1,23 @@
 # database manager
 from pathlib import Path
 import yaml
+import os
 
 from controllers.class_database_info import DatabaseInfo
 from controllers.class_configuration_manager import ConfigurationManager
 from widgets.database_auth_dialog import DatabaseAuthDialog
+from class_file_manipulate import FileManipulate
+FM = FileManipulate()
+
+from class_LogHandler import LM
+log=LM.get_logger_with_handler("DBManager","debug",True,None)
 
 class DatabaseManager:
-
+    """
+    This class only interact with the configuration in Yml File
+    Keeps the information syncronizes between the configuration 
+    and user selection.
+    """
     def __init__(self, config_manager:ConfigurationManager):
         self.cfg = config_manager
         self.databases = []
@@ -98,15 +108,15 @@ class DatabaseManager:
         self.databases.append(db)
         self.save()
 
-    def remove_database(self, db):
+    def remove_database(self, db:DatabaseInfo):
         if db in self.databases:
             self.databases.remove(db)
             self.save()
     
-    def activate(self, db):
+    def activate(self, db:DatabaseInfo):
         db.active = True
     
-    def deactivate(self, db):
+    def deactivate(self, db:DatabaseInfo):
         db.active = False
 
     def create_database(self, filename):
@@ -150,6 +160,30 @@ class DatabaseManager:
 
     def open_database(self,*args):
         print(args)
+    
+    def get_file_pwd_key_lists(self):
+        file_list = []
+        password_list = []
+        key_list = []
+        for db in self.databases:
+            if isinstance(db,DatabaseInfo):
+                if not db.db_path:
+                    db_path=os.path.join(FM.get_app_path(),self.cfg.paths["database_dir"])
+                else:
+                    db_path=db.db_path
+                db_filepath=os.path.join(db_path,db.db_file)
+
+                file_exist, is_file=FM.validate_path_file(db_filepath)
+                if file_exist and is_file:
+                    file_list.append(db_filepath)
+                    password_list.append(db.requires_password)
+                    key_list.append(db.keyfile_filepath)
+                else:
+                    log.error(f"Could not load {db_filepath}, maybe is wrong in configuration or file does not exist!")
+
+        
+        return file_list, password_list, key_list               
+
 
 
 class DatabasePasswordRequired(Exception):
@@ -159,4 +193,5 @@ class DatabasePasswordRequired(Exception):
 class DatabaseKeyRequired(Exception):
     pass
 
-    
+if __name__ == "__main__":
+    pass

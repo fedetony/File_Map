@@ -22,7 +22,7 @@ class DatabaseInfo:
     user_database: bool = False
 
     @property
-    def database_path(self) -> Path:
+    def database_filepath(self) -> Path:
 
         if self.db_path:
             return Path(self.db_path) / self.db_file
@@ -30,7 +30,7 @@ class DatabaseInfo:
         return Path(self.db_file)
 
     @property
-    def keyfile_path(self):
+    def keyfile_filepath(self):
 
         if self.key_file is None:
             return None

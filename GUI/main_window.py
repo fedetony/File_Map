@@ -1,5 +1,6 @@
 import sys
 
+from PyQt6 import QtGui ,QtCore, QtWidgets
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import (
@@ -48,6 +49,11 @@ from widgets.status_widget import StatusWidget
 from widgets.logger_dock import LoggerDock
 
 from controllers.class_configuration_manager import ConfigurationManager
+from controllers.class_database_manager import DatabaseManager
+from controllers.class_filemap_cli_manager import FileMapCliManager
+# icons
+from class_icons import Icons
+
 
 class MainWindow(QMainWindow):
 
@@ -56,15 +62,30 @@ class MainWindow(QMainWindow):
     file_list:list,
     password_list:list,
     key_list:list,
-    conf_manager:ConfigurationManager):
+    conf_manager:ConfigurationManager,
+    dbm:DatabaseManager,
+    ):
         super().__init__()
         # Get Filemap's inputs
         self.file_list = file_list
         self.password_list = password_list
         self.key_list = key_list
         self.conf_manager = conf_manager
+        self.dbm = dbm
+        # Object to Filemap Cli 
+        self.fmap = FileMapCliManager(
+            file_list=self.file_list,
+            password_list=self.password_list,
+            key_list=self.key_list,
+            conf_manager=self.conf_manager,
+            dbm=self.dbm,
+        )
+
+        self.icons = Icons() 
 
         self.setWindowTitle("File Mapping Tool")
+        self.setWindowIcon(self.icons.icon("main"))
+
         self.resize(1800, 1000)
 
         self.setDockOptions(
@@ -91,23 +112,14 @@ class MainWindow(QMainWindow):
     def create_pages(self):
 
         self.pages = {
-
             "Home": HomePage(),
-
-            "Databases": DatabasePage(),
-
+            "Databases": DatabasePage(self.fmap),
             "Mapping": MappingPage(),
-
             "Map Explorer": MapExplorerPage(),
-
             "Sort": SortPage(),
-
             "Devices": DevicesPage(),
-
             "Settings": SettingsPage(),
-
             "About": AboutPage(),
-
         }
 
     # --------------------------------------------------

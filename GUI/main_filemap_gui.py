@@ -39,9 +39,8 @@ def main():
 
     app = QApplication(sys.argv)
     conf_manager = ConfigurationManager(general_config_file)
-
-    databases = conf_manager.bundled_databases
-    dialog = DatabaseStartupDialog(databases)
+    
+    dialog = DatabaseStartupDialog(conf_manager)
 
     if dialog.exec():
         (
@@ -50,7 +49,7 @@ def main():
             key_list
         ) = dialog.get_databases()
 
-        win = MainWindow(file_list,password_list,key_list,conf_manager)
+        win = MainWindow(file_list,password_list,key_list,dialog.conf,dialog.dbm)
         win.show()
         sys.exit(app.exec())
 
