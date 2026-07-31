@@ -10,7 +10,7 @@ from class_file_manipulate import FileManipulate
 FM = FileManipulate()
 
 from class_LogHandler import LM
-log=LM.get_logger_with_handler("DBManager","debug",True,None)
+log=LM.get_logger_with_handler("DBManager","debug",False,None)
 
 class DatabaseManager:
     """
@@ -74,6 +74,7 @@ class DatabaseManager:
             )
 
     def save(self):
+        """Rewrites user database file with the registered databases"""
         filename = self.cfg.user_database_file
         filename.parent.mkdir(parents=True, exist_ok=True)
         output = {"databases": []}
@@ -104,7 +105,8 @@ class DatabaseManager:
             key_file=None,
             user_database=True
         )
-
+        auth_dialog=DatabaseAuthDialog(db.name,db.requires_password,db.has_key)
+        auth_dialog.values()
         self.databases.append(db)
         self.save()
 

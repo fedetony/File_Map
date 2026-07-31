@@ -39,4 +39,18 @@ class DatabaseInfo:
             return Path(self.key_path) / self.key_file
 
         return Path(self.key_file)
+    
+    @property
+    def has_key(self):
+        if self.key_file:
+            return True
+        return False
+    
+    @property
+    def config_dict(self):
+        list_cfg=["name", "db_path", "db_file", "requires_password", "key_path", "key_file", "autoload"]
+        cfg_dict={}
+        for cfgitem in list_cfg:
+            cfg_dict[cfgitem]=getattr(self,cfgitem)
+        return cfg_dict   
 

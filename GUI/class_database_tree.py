@@ -194,6 +194,7 @@ class DatabaseMenu(QtCore.QObject):
         db.key_path
         db.keyfile_filepath
         db.database_filepath
+        
         base_struct= {"children":[                  
                 {"Name": {"value": db.name, "type": "str", "unit":"", 
                            "meta": {"editable": True, "selectable": True,  "hidden": False}}},

@@ -139,6 +139,7 @@ class Icons:
         "report":":/icons/icons8-business-report-96.png",
         "bluegreen up dw arrows":":/icons/download_all_icon.png",
         "databases": ":/icons/Icojam-Blue-Bits-Database.256.png",
+        "pen": ":/icons/Icojam-Blue-Bits-Pen-write.256.png",
         "db": ":/icons/Icojam-Blue-Bits-Database.256.png",
         "db add": ":/icons/Icojam-Blue-Bits-Database-add.256.png",
         "db remove": ":/icons/Icojam-Blue-Bits-Database-remove.256.png",
@@ -146,6 +147,10 @@ class Icons:
         "db deactivate": ":/icons/Icojam-Blue-Bits-Database-delete.256.png",
         "db search": ":/icons/Icojam-Blue-Bits-Database-search.256.png",
         "db settings": ":/icons/Icojam-Blue-Bits-Database-settings.256.png",
+        "folder ok": ":/icons/Icojam-Blue-Bits-Folder-check.256.png",
+        "folder not ok": ":/icons/Icojam-Blue-Bits-Folder-delete.256.png",
+        "shield": ":/icons/Icojam-Blue-Bits-Shield.256.png",
+
     }
 
     _cache = {}

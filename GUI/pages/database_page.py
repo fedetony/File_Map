@@ -19,16 +19,9 @@ from PyQt6.QtWidgets import (
 from class_icons import Icons
 from controllers.class_database_manager import *
 from controllers.class_filemap_cli_manager import FileMapCliManager
-
-# Old:
-# class DatabaseManagerDock(QDockWidget):
-# becomes:
-# class DatabasePage(QWidget):
-# Then:
-# setWidget(...) disappears
-# show()/hide() disappears
-# the controller stays
-# The logic can move almost unchanged.
+from widgets.ask_db_authentication_dialog import DatabaseAuthTypeDialog
+from widgets.ask_confirmation_dialog import ConfirmationDialog
+from class_table_widget_functions import TableWidgetFunctions
 
 class DatabasePage(QWidget):
 
@@ -37,10 +30,39 @@ class DatabasePage(QWidget):
         self.fmap=filemapcli
         self.dbm = self.fmap.dbm
         self.icons=Icons()
+        self.define_struct_restrictions()
         self.create_ui()
         self.connect_ui()
         # self.load_demo()
+        self.fmap.set_active_databases_in_dbm()
         self.refresh_table()
+
+    def define_struct_restrictions(self):
+        self.db_struct = {
+        "-1": { "Name": "Dummy", 
+        "DB Filepath": "",
+        "DB Filename": "",
+        "DB active": "False",
+        "DB autoload": "False",
+        "Requires Password": "False",
+        "Has Encryption Key": "False",
+        }}
+        self.db_struct_mask = {
+            "__any__": {
+                "Name": {"__m__1": "is_unique", "__mv__1": ""},
+                "DB Filepath": {"__m__1": "is_value_type", "__mv__1": str(str)},
+                "DB Filename": {"__m__1": "is_value_type", "__mv__1": str(str),
+                                "__m__2": "is_format", "__mv__2": r"^[a-zA-Z0-9._-]+(\.[a-zA-Z0-9._-]+)?$"},
+                "DB active": {"__m__1": "is_value_type", "__mv__1": str(bool),
+                              "__m__2": "is_not_change", "__mv__2": ""},
+                "DB autoload": {"__m__1": "is_value_type", "__mv__1": str(bool)},
+                "Requires Password": {"__m__1": "is_value_type", "__mv__1": str(bool),
+                                      "__m__2": "is_not_change", "__mv__2": ""},
+                "Has Encryption Key": {"__m__1": "is_value_type", "__mv__1": str(bool),
+                                       "__m__2": "is_not_change", "__mv__2": ""},
+                # "Resolution": {"__m__1": "is_not_change", "__mv__1": ""}, # dont mask if it has widget
+            },
+        }
 
     # --------------------------------------------------
     # UI
@@ -49,7 +71,12 @@ class DatabasePage(QWidget):
     def connect_ui(self):
         self.btn_new.clicked.connect(self.create_database)
         self.btn_append.clicked.connect(self.append_database)
-        self.btn_remove.clicked.connect(self.remove_selected)
+        self.btn_remove_all.clicked.connect(self.remove_all)
+        self.btn_activate_all.clicked.connect(self.activate_all)
+        self.btn_deactivate_all.clicked.connect(self.deactivate_all)
+
+        # right click menu
+        self.database_table.customContextMenuRequested.connect(self._table_item_right_clicked)
 
     def create_ui(self):
         layout = QVBoxLayout(self)
@@ -81,23 +108,23 @@ class DatabasePage(QWidget):
         self.btn_new.setIcon(self.icons.icon("db key"))
         self.btn_append = QPushButton("Add")
         self.btn_append.setIcon(self.icons.icon("db add"))
-        self.btn_remove = QPushButton("Remove")
-        self.btn_remove.setIcon(self.icons.icon("db remove"))
+        self.btn_remove_all = QPushButton("Remove All")
+        self.btn_remove_all.setIcon(self.icons.icon("bin"))
 
-        self.btn_activate = QPushButton("Activate")
-        self.btn_activate.setIcon(self.icons.icon("db activate"))
-        self.btn_deactivate = QPushButton("Deactivate")
-        self.btn_deactivate.setIcon(self.icons.icon("db deactivate"))
+        self.btn_activate_all = QPushButton("Activate All")
+        self.btn_activate_all.setIcon(self.icons.icon("yes"))
+        self.btn_deactivate_all = QPushButton("Deactivate All")
+        self.btn_deactivate_all.setIcon(self.icons.icon("db deactivate"))
 
         #self.refresh_btn = QPushButton("Refresh")
 
         toolbar.addWidget(self.btn_new)
-        toolbar.addStretch()
         toolbar.addWidget(self.btn_append)
-        toolbar.addWidget(self.btn_remove)
+
+        toolbar.addWidget(self.btn_remove_all)
         toolbar.addStretch()
-        toolbar.addWidget(self.btn_activate)
-        toolbar.addWidget(self.btn_deactivate)
+        toolbar.addWidget(self.btn_activate_all)
+        toolbar.addWidget(self.btn_deactivate_all)
         #toolbar.addWidget(self.refresh_btn)
 
         toolbar.addStretch()
@@ -111,16 +138,14 @@ class DatabasePage(QWidget):
 
         db_layout = QVBoxLayout(db_group)
         self.database_table = QTableWidget()
-
-        self.database_table.setColumnCount(4)
-        self.database_table.setHorizontalHeaderLabels(
-            [
-                "Name",
-                "Location",
-                "Maps",
-                "Active"
-            ]
+        # -----------TableWidgetFunctions
+        self.twf = TableWidgetFunctions(
+            self.database_table,self.db_struct,self.db_struct_mask, None, []
         )
+        self.twf.signal_data_change[list, str, str, str].connect(self._table_widget_data_changed)
+        self.twf.signal_item_button_right_clicked[list, QtCore.QPoint].connect(self._table_item_right_clicked)
+        #self.twf.signal_item_combobox_currentindexchanged[int, str, list].connect(self._table_item_comboboxindexchanged)
+        # self.model=self.twf.modelobj
 
         db_layout.addWidget(self.database_table)
 
@@ -143,72 +168,25 @@ class DatabasePage(QWidget):
 
         layout.addWidget(splitter)
 
-        # Demo data
-        #self.load_demo()
-
-    # --------------------------------------------------
-    # Demo / placeholder
-    # --------------------------------------------------
-
-    def load_demo(self):
-        databases = [
-            (
-                "Music",
-                "D:/MusicMap",
-                "12",
-                "Yes"
-            ),
-            (
-                "Backup",
-                "E:/BackupMap",
-                "5",
-                "No"
-            ),
-        ]
-        self.database_table.setRowCount(len(databases))
-        for row, data in enumerate(databases):
-            for col, value in enumerate(data):
-                self.database_table.setItem(
-                    row,
-                    col,
-                    QTableWidgetItem(value)
-                )
-        self.refresh_table()
 
     # ==========================================================
     # TABLE
     # ==========================================================
 
     def refresh_table(self):
+        """Clears the rows and adds the db_struct"""
         self.database_table.setRowCount(0)
-
+        self.db_struct = {}
         for db in self.dbm.databases:
-            self.add_database(db)
+            self.add_item_to_db_struct(db)
+        # add icons to active
+        id_list=self._get_all_id_list()
+        active_db_list, unactive_db_list= self.fmap.get_active_unactive_db_id_list(id_list)
+        self._add_remove_icons_to_items(active_db_list,True,"DB active",self.icons.icon("yes")) 
+        self._add_remove_icons_to_items(unactive_db_list,False,"DB active",None)
 
+        self._main_refresh_tablewidget()
         self.database_table.resizeColumnsToContents()
-
-    def add_database(self, db:DatabaseInfo):
-        row = self.database_table.rowCount()
-        self.database_table.insertRow(row)
-
-        # Store database object on first column
-        item = QTableWidgetItem(db.name)
-        item.setData(Qt.ItemDataRole.UserRole, db)
-
-        self.database_table.setItem(row, 0, item)
-        self.database_table.setItem(row, 1, QTableWidgetItem(db.db_file))
-        self.database_table.setItem(
-            row, 2,
-            QTableWidgetItem("Yes" if db.requires_password else "No")
-        )
-        self.database_table.setItem(
-            row, 3,
-            QTableWidgetItem("Yes" if db.key_file else "No")
-        )
-        self.database_table.setItem(
-            row, 4,
-            QTableWidgetItem("Yes" if db.active else "No")
-        )
 
     # ==========================================================
     # Helpers
@@ -233,31 +211,128 @@ class DatabasePage(QWidget):
     # Context menu
     # ==========================================================
 
-    def open_context_menu(self, pos):
-        menu = QMenu(self)
+    # Right click Menu
+    def _table_item_right_clicked(self, track: list, apos: QtCore.QPoint):
+        """Displays right click menu where item was right clicked
 
-        act_activate = menu.addAction("Activate")
-        act_deactivate = menu.addAction("Deactivate")
-        menu.addSeparator()
-        act_remove = menu.addAction("Remove")
+        Args:
+            track (list): track of item
+            apos (QtCore.QPoint): global position of event
+        """
+        id_key_list, track_list = self._get_id_key_list_from_selection(track)
 
-        action = menu.exec(self.database_table.viewport().mapToGlobal(pos))
+        log.debug("Rightclick Selected->  id_key_list: %s, track_list %s, track %s", id_key_list, track_list, track)
+        if len(track) == 0:
+            return
+        self.item_menu = QtWidgets.QMenu()
+        menu_items_map={}
 
-        if action == act_activate:
+        one_item_selected = False
+        if len(id_key_list) > 0 or len(track)>0:
+            db_name = self.twf.get_tracked_value_in_struct([track[0],"Name"], self.db_struct)
+            item_id=track[0]
+            one_item_selected = True
+        
+        more_items_selected=False
+        if len(track_list)>1:
+            one_item_selected = False
+            more_items_selected = True
 
-            for db in self.selected_databases():
-                self.dbm.activate(db)
+        # value_of_ = self.twf.get_tracked_value_in_struct(track, self.db_struct)
+        # is_itm_bool = self.twf.check_restrictions.check_type(str(bool), value_of_, True)
+        autoload_list,notautoload_list = self.fmap.get_autoload_db_id_list(id_key_list)
+        if len(track)>1:
+            item=track[1]
+            if item in ["Name","DB Filepath", "DB Filename"]:
+                menu_item10 = self._add_action_to_menu(f"Create New Database", True, self.icons.icon("db key"))
+                menu_item10.triggered.connect(lambda: self._create_new_database())
+                menu_items_map["create_db"] = menu_item10
 
-        elif action == act_deactivate:
+                menu_item11 = self._add_action_to_menu(f"Add Database", True, self.icons.icon("db add"))
+                menu_item11.triggered.connect(lambda: self._add_database())
+                menu_items_map["add_db"] = menu_item11
+                self.item_menu.addSeparator()
 
-            for db in self.selected_databases():
-                self.dbm.deactivate(db)
+            if item == "DB autoload":
+                if len(autoload_list)>0:
+                    menu_item31 = self._add_action_to_menu(f"AutoLoad OFF {autoload_list}", True, self.icons.icon("folder not ok"))
+                    menu_item31.triggered.connect(lambda: self.__set_autoload(autoload_list,False))
+                    menu_items_map["autoload off"] = menu_item31    
+                if len(notautoload_list)>0:
+                    menu_item32 = self._add_action_to_menu(f"AutoLoad ON {notautoload_list}", True, self.icons.icon("folder ok"))
+                    menu_item32.triggered.connect(lambda: self.__set_autoload(notautoload_list,True))
+                    menu_items_map["autoload on"] = menu_item32
+                self.item_menu.addSeparator()
+            if item in ["Requires Password","Has Encryption Key"]:
+                menu_item33 = self._add_action_to_menu(f"Authenticate [{track[0]}]", True, self.icons.icon("shield"))
+                menu_item33.triggered.connect(lambda: self._authenticate_db(track[0]))
+                menu_items_map["authenticate"] = menu_item33
+                self.item_menu.addSeparator()
+        
+        # Always show active
+        active_db_list, unactive_db_list = self.fmap.get_active_unactive_db_id_list(id_key_list)
+        if len(unactive_db_list)>0:
+            menu_item20 = self._add_action_to_menu(f"Activate {unactive_db_list}", True, self.icons.icon("db activate"))
+            menu_item20.triggered.connect(lambda: self._activate_databases(unactive_db_list))
+            menu_items_map["activate_db"] = menu_item20
+        if len(active_db_list)>0:
+            menu_item22 = self._add_action_to_menu(f"Deactivate {active_db_list}", True, self.icons.icon("db deactivate"))
+            menu_item22.triggered.connect(lambda: self._deactivate_databases(active_db_list))
+            menu_items_map["deactivate_db"] = menu_item22
+        self.item_menu.addSeparator()
 
-        elif action == act_remove:
+        if one_item_selected or more_items_selected:
+            if more_items_selected:
+                menu_item01 = self._add_action_to_menu(f"Remove {id_key_list}", True, self.icons.icon("bin"))
+            else:
+                menu_item01 = self._add_action_to_menu(f"Remove [{item_id}] - {db_name}", True, self.icons.icon("bin"))
+            menu_item01.triggered.connect(lambda: self._remove_databases(id_key_list))
+            menu_items_map["remove_db"] = menu_item01
+            self.item_menu.addSeparator()
 
-            self.remove_selected()
+        if not one_item_selected and not more_items_selected:
+            menu_item10.setEnabled(False)
+            menu_item11.setEnabled(False)
+            menu_item20.setEnabled(False)            
+            menu_item22.setEnabled(False)
+            
+        self.item_menu.move(apos)
+        self.item_menu.show()
 
-        self.refresh_table()
+
+    def _add_configuration_menu(self, ids):
+        act = self._add_action_to_menu("Save to User Configuration", True, self.icons.icon("save"))
+        act.triggered.connect(lambda: self.fmap.save_db_in_config(ids, user=True))
+
+        act = self._add_action_to_menu("Save to Default Configuration", True, self.icons.icon("save"))
+        act.triggered.connect(lambda: self.fmap.save_db_in_config(ids, user=False))
+        self.item_menu.addSeparator()
+
+    # def open_context_menu(self, pos):
+    #     menu = QMenu(self)
+
+    #     act_activate = menu.addAction("Activate")
+    #     act_deactivate = menu.addAction("Deactivate")
+    #     menu.addSeparator()
+    #     act_remove = menu.addAction("Remove")
+
+    #     action = menu.exec(self.database_table.viewport().mapToGlobal(pos))
+
+    #     if action == act_activate:
+
+    #         for db in self.selected_databases():
+    #             self.dbm.activate(db)
+
+    #     elif action == act_deactivate:
+
+    #         for db in self.selected_databases():
+    #             self.dbm.deactivate(db)
+
+    #     elif action == act_remove:
+
+    #         self.remove_selected()
+
+    #     self.refresh_table()
 
     # ==========================================================
     # Buttons
@@ -286,11 +361,279 @@ class DatabasePage(QWidget):
         )
         if not filename:
             return
-
-        self.dbm.append_database(filename)
+        
+        name=FM.extract_filename(filename,False)
+        password, keyfile=self.ask_db_authentication(name)
+        self.fmap.add_database(filename,password, keyfile)
         self.refresh_table()
+    
+
+    def ask_confirmation(self, message, default:bool=False):
+        conf_dialog = ConfirmationDialog()
+        confirmed = default
+
+        if conf_dialog.exec():
+            confirmed = conf_dialog.ask_confirmation(message=message,default=default)
+
+        return confirmed
+    
+    def ask_db_authentication(self,database_name):
+        auth_type = DatabaseAuthTypeDialog(database_name)
+        password = None
+        keyfile = None
+        if auth_type.exec():
+            need_password, need_key = auth_type.values()
+
+            auth_dialog = DatabaseAuthDialog(
+                database_name,
+                need_password=need_password,
+                need_key=need_key,
+            )
+
+            if auth_dialog.exec():
+                password, keyfile = auth_dialog.values()
+
+        return password, keyfile
 
     def remove_selected(self):
         for db in self.selected_databases():
             self.dbm.remove_database(db)
         self.refresh_table()
+
+    def _get_all_id_list(self)->list[str]:
+        """Returns all ids in dbm
+
+        Returns:
+            list[str]: list of ids
+        """
+        return [str(dbid) for dbid in range(len(self.dbm.databases))]
+
+    def activate_all(self):
+        """Activates all unactive databases 
+        """
+        id_list=self._get_all_id_list()
+        _ , unactive_db_list= self.fmap.get_active_unactive_db_id_list(id_list)
+        self._activate_databases(unactive_db_list)
+    
+    def deactivate_all(self):
+        """Deactivates all active databases 
+        """
+        id_list=self._get_all_id_list()
+        active_db_list, _ = self.fmap.get_active_unactive_db_id_list(id_list)
+        self._deactivate_databases(active_db_list)
+
+    def remove_all(self):
+        """Removes all databases in Table
+        """
+        numdb=len(self.dbm.databases)
+        confirm=False
+        if numdb>0:
+            confirm=self.ask_confirmation((f"Are you sure to remove {numdb} "
+                                  f"database{'s' if numdb>1 else ''} from list?"),False)
+        if confirm:    
+            for db in self.dbm.databases:
+                self.dbm.remove_database(db)
+        self.refresh_table()
+        
+    def _create_new_database(self):
+        self.create_database()
+        # self.refresh_table() # in create
+    
+    def _add_database(self):
+        self.append_database()
+        # self.refresh_table() # in append
+    
+    def _remove_databases(self,db_id_list):        
+        self.fmap.remove_database(db_id_list)        
+        self.refresh_table()
+    
+    def _authenticate_db(self,db_id):
+        auth_list=self.fmap.get_authentication_list([db_id])
+        for (db , db_filepath, requires_password, has_key, db_key_filepath) in auth_list:
+            if isinstance(db,DatabaseInfo):
+                password, keyfile=self.ask_db_authentication(db.name)
+            auth_changed=False
+            auth_changed = auth_changed or (not has_key and keyfile) 
+            auth_changed = auth_changed or (db_key_filepath != keyfile)
+            auth_changed = auth_changed or requires_password != bool(password)
+            if auth_changed:
+                self.fmap.remove_database([db_id])
+                self.fmap.add_database(db_filepath, password, keyfile)
+    
+    def __set_name(self,db_id,new_name:str):
+        self.fmap.set_db_name(db_id, new_name)
+        self.refresh_table()
+
+    def __set_autoload(self, autoload_list, set_auto:bool):
+        self.fmap.set_autoload(autoload_list, set_auto)
+        self.refresh_table()
+
+    def _activate_databases(self,active_db_list):
+        self.fmap.activate_databases(active_db_list)
+        self.refresh_table()
+    
+    def _deactivate_databases(self,unactive_db_list):
+        self.fmap.deactivate_databases(unactive_db_list)
+        self.refresh_table()
+
+    def _add_action_to_menu(self, text: str, is_enabled: bool, an_icon: QtGui.QIcon = None):
+        """Adds an action to the menu interactively
+        Args:
+            text (str):text of menu
+            an_icon (QtGui.QIcon, optional): Icon. Defaults to None.
+
+        Returns:
+            QAction: menu action
+        """
+        menu_itemxx = self.item_menu.addAction(text)
+        if an_icon:
+            menu_itemxx.setIcon(an_icon)
+        menu_itemxx.setEnabled(is_enabled)
+        return menu_itemxx
+
+    def _get_id_key_list_from_selection(self,atrack) -> tuple[list, list]:
+        """Gets a list of keys of the items selected
+
+        Returns:
+            tuple[list,list]: list of selected items, list of track lists
+        """
+        selindex = self.database_table.selectedIndexes()
+        id_key_list = []
+        track_list = []
+        if len(atrack)>0:
+            id_key_list.append(atrack[0])
+            track_list.append(atrack)
+
+        for selection in selindex:
+            itm = self.twf.tablewidgetobj.itemFromIndex(selection)
+            id_key = self.twf.get_key_value_from_item(itm)
+            track = self.twf.get_track_of_item_in_table(itm)
+            
+            if id_key not in id_key_list:
+                id_key_list.append(id_key)
+                track_list.append(track)
+        return id_key_list, track_list
+    
+    def _table_widget_data_changed(self, track: list[str], val: any, valtype: str, subtype: str):
+        """Sets the changed information in table widget by user into the Structure
+
+        Args:
+            track (list[str]): _description_
+            val (any): _description_
+            valtype (str): _description_
+            subtype (str): _description_
+        """
+        # print("before: %s",self.url_struct)
+        processed_val = self.twf.check_restrictions.set_type_to_value(val, valtype, subtype)
+        self.twf.set_tracked_value_to_dict(track, processed_val, self.db_struct, subtype, False)
+        if track[1] == "DB autoload":
+            self.fmap.set_autoload([track[0]],processed_val)
+            
+        if track[1] == "Name":
+            self.fmap.set_db_name(track[0],processed_val)
+        
+
+    def _get_db_id(self,db:DatabaseInfo) -> str:
+        db_id=None
+        for iii, reg_db in enumerate(self.dbm.databases):
+            if reg_db == db :
+                db_id = iii
+        if db_id is None:
+            db_id=len(self.dbm.databases)
+            log.info(f"{db_id} New database {db.name} Registered in user databases")
+            self.dbm.databases.append(db)
+            self.dbm.save()
+        return str(db_id)
+
+    def add_item_to_db_struct(self, db:DatabaseInfo):
+        """Adds item to list"""
+        self.twf.tablewidgetobj.clearSelection()
+        db_id = self._get_db_id(db)
+        self.db_struct.update(
+                {
+                db_id: {
+                        "Name": db.name, 
+                        "DB Filepath": db.db_path,
+                        "DB Filename": db.db_file,
+                        "DB active": str(db.active),
+                        "DB autoload": str(db.autoload),
+                        "Requires Password": str(db.requires_password),
+                        "Has Encryption Key": str(db.has_key),
+                    },
+                }
+        )
+        
+    def _main_refresh_tablewidget(self):
+        """Refresh the tablewidget"""
+        # refresh
+        self.twf.data_struct = self.db_struct
+        # self.twf.set_show_dict()
+        self.twf.refresh_tablewidget(self.db_struct, self.twf.modelobj, self.twf.tablewidgetobj)
+
+    def _add_remove_icons_to_items(self, 
+                                   id_key_list: list,         
+                                   add_to: bool, 
+                                   column_field: str, 
+                                   the_icon: QtGui.QIcon = None
+    ):
+        """Adds icons to items
+
+        Args:
+            id_key_list (list): items to add icon
+            add_to (bool) : True adds icons,False remove them
+            column_field (str): Column name of the item
+            the_icon (QtGui.QIcon, optional): Icon to set, None to remove. Defaults to None.
+        """
+        it_icon_dict = {}
+        it_icon_dict = self.twf.icon_dict.copy()
+        
+        track_list = it_icon_dict["track_list"]
+        icon_list = it_icon_dict["icon_list"]
+        if add_to and the_icon is not None:
+            # add icon to twf
+            for id_key in id_key_list:
+                track = [id_key, column_field]
+                track_list.append(track)
+                icon_list.append(the_icon)
+            it_icon_dict.update({"track_list": track_list})
+            it_icon_dict.update({"icon_list": icon_list})
+        elif not add_to:
+            pos_to_del_list = []
+            for id_key in id_key_list:
+                del_track = [id_key, column_field]
+                for pos, track in enumerate(track_list):
+                    if self._is_same_list(del_track, track):
+                        pos_to_del_list.append(pos)
+            new_track_list = []
+            new_icon_list = []
+            for pos, (a_track, an_icon) in enumerate(zip(track_list, icon_list)):
+                if pos not in pos_to_del_list:
+                    new_track_list.append(a_track)
+                    new_icon_list.append(an_icon)
+            it_icon_dict = {}
+            it_icon_dict.update({"track_list": new_track_list})
+            it_icon_dict.update({"icon_list": new_icon_list})
+    
+        self.twf.set_items_icons(it_icon_dict)
+        self._main_refresh_tablewidget()
+    
+    def _is_same_list(self, list1: list, list2: list) -> bool:
+        """Compares two lists
+
+        Args:
+            list1 (list): list1
+            list2 (list): list2
+
+        Returns:
+            bool: True if the same,False if different
+        """
+        if len(list1) != len(list2):
+            return False
+        for iii, jjj in zip(list1, list2):
+            if iii != jjj:
+                return False
+        return True
+    
+
+if __name__ == "__main__":
+    pass
