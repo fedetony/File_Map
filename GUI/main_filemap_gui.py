@@ -7,7 +7,7 @@ import yaml
 #Configure logger before importing classes (so they become child loggers)
 import class_LogHandler
 log_file = None # do stream handler
-LM = class_LogHandler.init_logger_manager(log_file)
+LM = class_LogHandler.init_logger_manager(log_file,emit_record = True)
 log = LM.get_logger(__name__)
 log.info("Application starting...")
 

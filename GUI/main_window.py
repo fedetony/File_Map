@@ -146,13 +146,13 @@ class MainWindow(QMainWindow):
     # --------------------------------------------------
 
     def create_logger(self):
-        self.loggerDock = LoggerDock()
+        self.loggerDock = LoggerDock(LM.log_queue)
         self.addDockWidget(
             Qt.DockWidgetArea.BottomDockWidgetArea,
             self.loggerDock,
         )
-        LM.attach_gui_handler(self.loggerDock)
-        log.info("GUI Logger attached...")
+        LM.attach_gui_handler(self.loggerDock, emit_record=True)
+        # log.info("GUI Logger attached...")
         # self.loggerDock.hide()
 
     # --------------------------------------------------

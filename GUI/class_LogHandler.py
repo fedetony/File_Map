@@ -14,9 +14,9 @@ try:
 except ImportError:
     HAS_SIGNAL_TRACKER=False
 
-def init_logger_manager(log_file):
+def init_logger_manager(log_file, emit_record=False):
     global LM
-    LM = LoggerManager(log_file)
+    LM = LoggerManager(log_file, emit_record)
     return LM
 
 class LoggerManager:
@@ -73,7 +73,7 @@ class LoggerManager:
     - Support thread-safe logging from worker threads.
     - Optionally write logs to a file.
     """
-    def __init__(self, log_file):
+    def __init__(self, log_file, emit_record=False):
         if log_file:
             self.log_file = Path(log_file)
         else:
@@ -85,24 +85,26 @@ class LoggerManager:
 
         if not self.root.handlers:
             self._setup_file_handler()
-            self._setup_queue_handler()
+            self._setup_queue_handler(emit_record)
 
         self.normal_handlers= None
         self.gui_handlers = None
         self.update_thread = None
 
-    def attach_gui_handler(self, parent):
+    def attach_gui_handler(self, parent, emit_record=False):
         """On log emit runs write_GUI_Log function on gui_panel
 
         Args:
             gui_panel (QWidget): Window object with write_GUI_Log method
         """
+        if self.gui_handlers:
+            return
         # Create the list the first time
         if not hasattr(self, "gui_handlers") or not isinstance(self.gui_handlers,list):
             self.gui_handlers = []
 
         # Create a new handler for this GUI panel
-        handler = ConsolePanelHandler(parent)
+        handler = ConsolePanelHandler(parent, emit_record)
         handler.setLevel(logging.DEBUG)
         handler.setFormatter(logging.Formatter(
             "%(asctime)s [%(levelname)s] (%(name)s) %(message)s",
@@ -114,6 +116,34 @@ class LoggerManager:
 
         # Store it so you can manage/remove later
         self.gui_handlers.append(handler)
+    
+    def remove_gui_handler(self, parent):
+        """
+        Removes GUI logging handlers attached to a specific widget.
+
+        The LoggerManager can attach multiple GUI handlers, for example when
+        different windows or dock widgets display logging output. This method
+        searches the registered GUI handlers and removes the ones associated
+        with the given parent widget from the root logger.
+
+        Removing the handler prevents future log records from being forwarded
+        to that GUI instance and allows the widget to be safely destroyed
+        without leaving stale references.
+
+        Args:
+            parent (QWidget):
+                The GUI object that owns the logging handler. The object must
+                match the parent used when calling :meth:`attach_gui_handler`.
+
+        Returns:
+            None
+        """
+        # The [:] copy is important because you are modifying the list while iterating over it. 
+        # It avoids skipping entries if later you decide to allow multiple handlers for the same parent.
+        for handler in self.gui_handlers[:]:
+            if handler.parent == parent:
+                self.root.removeHandler(handler)
+                self.gui_handlers.remove(handler)
     
     def attach_signaltracker_handler(self, parent, signal_tracker):
         """Sends emitted record through signal tracker Log_To_Main process (log_to_main signal)
@@ -231,8 +261,8 @@ class LoggerManager:
         ))
         self.root.addHandler(fh)
 
-    def _setup_queue_handler(self):
-        qh = QueueHandler(self.log_queue)
+    def _setup_queue_handler(self,emit_record=False):
+        qh = QueueHandler(self.log_queue, emit_record)
         qh.setLevel(logging.DEBUG)
         qh.setFormatter(logging.Formatter(
             "%(asctime)s [%(levelname)s] (%(threadName)-10s) %(message)s",
@@ -262,29 +292,40 @@ class QueueHandler(logging.Handler):
     # (https://stackoverflow.com/questions/13318742/python-logging-to-tkinter-text-widget) is not thread safe!
     # See https://stackoverflow.com/questions/43909849/tkinter-python-crashes-on-new-thread-trying-to-log-on-main-thread
 
-    def __init__(self, log_queue: queue.Queue):
+    def __init__(self, log_queue: queue.Queue,emit_record=False):
         super().__init__()
         self.log_queue = log_queue
+        self.emit_record = emit_record
 
     def emit(self, record):
-        self.log_queue.put(self.format(record))
+        if self.emit_record:
+            self.log_queue.put(record)
+        else:
+            self.log_queue.put(self.format(record))
 
 class ConsolePanelHandler(logging.Handler):    
-    def __init__(self, parent):
+    def __init__(self, parent,emit_record=True):
         logging.Handler.__init__(self)
         self.parent = parent
         self._emitting = False
-
-    def emit(self, record:logging.LogRecord):
+        self.emit_record = emit_record
+    
+    def emit(self, record: logging.LogRecord):
         if self._emitting: #avoid recursion
             return
         self._emitting = True
         try:
-            self.parent.write_GUI_Log(self.format(record))
+            if self.emit_record:
+                self.parent.write_GUI_Log(record)
+            else:
+                self.parent.write_GUI_Log(self.format(record))
         except AttributeError as eee:
             print(f"Error in ConsolePanelHandler: {eee}")
             print(f"[{record.name}] {record.message}")
-        self._emitting = False
+        except Exception as e:
+            print(f"ConsolePanelHandler error: {e}")
+        finally:
+            self._emitting = False
 
 class SignalTrackerHandler(logging.Handler):
     def __init__(self, parent, signal_tracker):
