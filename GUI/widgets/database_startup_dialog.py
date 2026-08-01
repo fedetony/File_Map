@@ -74,7 +74,7 @@ class DatabaseStartupDialog(QDialog):
             # Key file
             key_row = QHBoxLayout()
             key_edit = QLineEdit()
-            key_edit.setPlaceholderText(db.keyfile_filepath)
+            key_edit.setPlaceholderText(str(db.keyfile_filepath))
 
             browse = QPushButton("Browse")
             browse.setIcon(self.icons.icon("db key"))

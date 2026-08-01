@@ -46,6 +46,7 @@ class DatabasePage(QWidget):
         "DB autoload": "False",
         "Requires Password": "False",
         "Has Encryption Key": "False",
+        "Config": "None"
         }}
         self.db_struct_mask = {
             "__any__": {
@@ -60,6 +61,9 @@ class DatabasePage(QWidget):
                                       "__m__2": "is_not_change", "__mv__2": ""},
                 "Has Encryption Key": {"__m__1": "is_value_type", "__mv__1": str(bool),
                                        "__m__2": "is_not_change", "__mv__2": ""},
+                "Config": {"__m__1": "is_value_type", "__mv__1": str(str),
+                        "__m__2": "limited_selection", "__mv__2": ["","None","User","Default"],
+                        "__m__3": "is_not_change", "__mv__3": ""},                        
                 # "Resolution": {"__m__1": "is_not_change", "__mv__1": ""}, # dont mask if it has widget
             },
         }
@@ -98,6 +102,7 @@ class DatabasePage(QWidget):
         )
         header.addWidget(icon)
         header.addWidget(title)
+        header.addStretch()
         layout.addLayout(header)
 
 
@@ -179,11 +184,28 @@ class DatabasePage(QWidget):
         self.db_struct = {}
         for db in self.dbm.databases:
             self.add_item_to_db_struct(db)
-        # add icons to active
+
         id_list=self._get_all_id_list()
         active_db_list, unactive_db_list= self.fmap.get_active_unactive_db_id_list(id_list)
         self._add_remove_icons_to_items(active_db_list,True,"DB active",self.icons.icon("yes")) 
         self._add_remove_icons_to_items(unactive_db_list,False,"DB active",None)
+        # add icons to active
+        autoload, not_autoload = self.fmap.get_autoload_db_id_list(id_list)
+        self._add_remove_icons_to_items(autoload,True,"DB autoload",self.icons.icon("bluegreen up dw arrows")) 
+        self._add_remove_icons_to_items(not_autoload,False,"DB autoload",None)
+        # key
+        haskey ,nohaskey =self.fmap.get_cond_db_id_list(id_list,"has_key")
+        self._add_remove_icons_to_items(haskey,True,"Has Encryption Key",self.icons.icon("shield")) 
+        self._add_remove_icons_to_items(nohaskey,False,"Has Encryption Key",None)
+        # password
+        haspwd ,nohaspwd =self.fmap.get_cond_db_id_list(id_list,"requires_password")
+        self._add_remove_icons_to_items(haspwd,True,"Requires Password",self.icons.icon("db key")) 
+        self._add_remove_icons_to_items(nohaspwd,False,"Requires Password",None)
+        # Config
+        user_list, default_list, none_list = self.fmap.get_user_default_config(id_list)
+        self._add_remove_icons_to_items(user_list,True,"Config",self.icons.icon("heart")) 
+        self._add_remove_icons_to_items(default_list,True,"Config",self.icons.icon("star")) 
+        self._add_remove_icons_to_items(none_list,False,"Config",None)
 
         self._main_refresh_tablewidget()
         self.database_table.resizeColumnsToContents()
@@ -210,129 +232,160 @@ class DatabasePage(QWidget):
     # ==========================================================
     # Context menu
     # ==========================================================
-
-    # Right click Menu
     def _table_item_right_clicked(self, track: list, apos: QtCore.QPoint):
-        """Displays right click menu where item was right clicked
-
-        Args:
-            track (list): track of item
-            apos (QtCore.QPoint): global position of event
+        """Display the context menu for the selected database(s).
+        right click
+            ├── database actions
+            ├── autoload actions
+            ├── authentication
+            ├── activation
+            ├── configuration
+            └── removal
         """
+
+        if not track:
+            return
+
         id_key_list, track_list = self._get_id_key_list_from_selection(track)
 
-        log.debug("Rightclick Selected->  id_key_list: %s, track_list %s, track %s", id_key_list, track_list, track)
-        if len(track) == 0:
-            return
+        log.debug(
+            "Rightclick Selected-> id_key_list: %s, track_list %s, track %s",
+            id_key_list,
+            track_list,
+            track,
+        )
+
         self.item_menu = QtWidgets.QMenu()
-        menu_items_map={}
 
-        one_item_selected = False
-        if len(id_key_list) > 0 or len(track)>0:
-            db_name = self.twf.get_tracked_value_in_struct([track[0],"Name"], self.db_struct)
-            item_id=track[0]
-            one_item_selected = True
-        
-        more_items_selected=False
-        if len(track_list)>1:
-            one_item_selected = False
-            more_items_selected = True
+        one_item = len(track_list) == 1
+        many_items = len(track_list) > 1
 
-        # value_of_ = self.twf.get_tracked_value_in_struct(track, self.db_struct)
-        # is_itm_bool = self.twf.check_restrictions.check_type(str(bool), value_of_, True)
-        autoload_list,notautoload_list = self.fmap.get_autoload_db_id_list(id_key_list)
-        if len(track)>1:
-            item=track[1]
-            if item in ["Name","DB Filepath", "DB Filename"]:
-                menu_item10 = self._add_action_to_menu(f"Create New Database", True, self.icons.icon("db key"))
-                menu_item10.triggered.connect(lambda: self._create_new_database())
-                menu_items_map["create_db"] = menu_item10
+        self._add_database_menu(track)
+        self._add_autoload_menu(track, id_key_list)
+        self._add_authentication_menu(track)
+        self._add_activation_menu(id_key_list)
+        self._add_configuration_menu(track, id_key_list)
+        self._add_remove_menu(track, id_key_list, one_item, many_items)
 
-                menu_item11 = self._add_action_to_menu(f"Add Database", True, self.icons.icon("db add"))
-                menu_item11.triggered.connect(lambda: self._add_database())
-                menu_items_map["add_db"] = menu_item11
-                self.item_menu.addSeparator()
-
-            if item == "DB autoload":
-                if len(autoload_list)>0:
-                    menu_item31 = self._add_action_to_menu(f"AutoLoad OFF {autoload_list}", True, self.icons.icon("folder not ok"))
-                    menu_item31.triggered.connect(lambda: self.__set_autoload(autoload_list,False))
-                    menu_items_map["autoload off"] = menu_item31    
-                if len(notautoload_list)>0:
-                    menu_item32 = self._add_action_to_menu(f"AutoLoad ON {notautoload_list}", True, self.icons.icon("folder ok"))
-                    menu_item32.triggered.connect(lambda: self.__set_autoload(notautoload_list,True))
-                    menu_items_map["autoload on"] = menu_item32
-                self.item_menu.addSeparator()
-            if item in ["Requires Password","Has Encryption Key"]:
-                menu_item33 = self._add_action_to_menu(f"Authenticate [{track[0]}]", True, self.icons.icon("shield"))
-                menu_item33.triggered.connect(lambda: self._authenticate_db(track[0]))
-                menu_items_map["authenticate"] = menu_item33
-                self.item_menu.addSeparator()
-        
-        # Always show active
-        active_db_list, unactive_db_list = self.fmap.get_active_unactive_db_id_list(id_key_list)
-        if len(unactive_db_list)>0:
-            menu_item20 = self._add_action_to_menu(f"Activate {unactive_db_list}", True, self.icons.icon("db activate"))
-            menu_item20.triggered.connect(lambda: self._activate_databases(unactive_db_list))
-            menu_items_map["activate_db"] = menu_item20
-        if len(active_db_list)>0:
-            menu_item22 = self._add_action_to_menu(f"Deactivate {active_db_list}", True, self.icons.icon("db deactivate"))
-            menu_item22.triggered.connect(lambda: self._deactivate_databases(active_db_list))
-            menu_items_map["deactivate_db"] = menu_item22
-        self.item_menu.addSeparator()
-
-        if one_item_selected or more_items_selected:
-            if more_items_selected:
-                menu_item01 = self._add_action_to_menu(f"Remove {id_key_list}", True, self.icons.icon("bin"))
-            else:
-                menu_item01 = self._add_action_to_menu(f"Remove [{item_id}] - {db_name}", True, self.icons.icon("bin"))
-            menu_item01.triggered.connect(lambda: self._remove_databases(id_key_list))
-            menu_items_map["remove_db"] = menu_item01
-            self.item_menu.addSeparator()
-
-        if not one_item_selected and not more_items_selected:
-            menu_item10.setEnabled(False)
-            menu_item11.setEnabled(False)
-            menu_item20.setEnabled(False)            
-            menu_item22.setEnabled(False)
-            
         self.item_menu.move(apos)
         self.item_menu.show()
+    
+    def _add_database_menu(self, track):
+        if len(track) < 2:
+            return
 
+        if track[1] not in ("Name", "DB Filepath", "DB Filename"):
+            return
 
-    def _add_configuration_menu(self, ids):
-        act = self._add_action_to_menu("Save to User Configuration", True, self.icons.icon("save"))
-        act.triggered.connect(lambda: self.fmap.save_db_in_config(ids, user=True))
+        act = self._add_action_to_menu("Create New Database", True, self.icons.icon("db key"))
+        act.triggered.connect(self._create_new_database)
 
-        act = self._add_action_to_menu("Save to Default Configuration", True, self.icons.icon("save"))
-        act.triggered.connect(lambda: self.fmap.save_db_in_config(ids, user=False))
+        act = self._add_action_to_menu("Add Database", True, self.icons.icon("db add"))
+        act.triggered.connect(self._add_database)
+
         self.item_menu.addSeparator()
+    
+    def _add_autoload_menu(self, track, id_key_list):
+        if len(track) < 2 or track[1] != "DB autoload":
+            return
 
-    # def open_context_menu(self, pos):
-    #     menu = QMenu(self)
+        autoload, not_autoload = self.fmap.get_autoload_db_id_list(id_key_list)
 
-    #     act_activate = menu.addAction("Activate")
-    #     act_deactivate = menu.addAction("Deactivate")
-    #     menu.addSeparator()
-    #     act_remove = menu.addAction("Remove")
+        if autoload:
+            act = self._add_action_to_menu(
+                f"AutoLoad OFF {autoload}",True, self.icons.icon("folder not ok"))
+            act.triggered.connect(
+                lambda: self.__set_autoload(autoload, False))
 
-    #     action = menu.exec(self.database_table.viewport().mapToGlobal(pos))
+        if not_autoload:
+            act = self._add_action_to_menu(
+                f"AutoLoad ON {not_autoload}",True, self.icons.icon("folder ok"))
+            act.triggered.connect(
+                lambda: self.__set_autoload(not_autoload, True))
 
-    #     if action == act_activate:
+        self.item_menu.addSeparator()
+    
+    def _add_authentication_menu(self, track):
+        if len(track) < 2:
+            return
 
-    #         for db in self.selected_databases():
-    #             self.dbm.activate(db)
+        if track[1] not in ("Requires Password", "Has Encryption Key"):
+            return
+        
+        act = self._add_action_to_menu(
+            f"Authenticate [{track[0]}]", True, self.icons.icon("shield"))
+        act.triggered.connect(lambda: self._authenticate_db(track[0]))
 
-    #     elif action == act_deactivate:
+        self.item_menu.addSeparator()
+    
+    def _add_activation_menu(self, id_key_list):
+        active, inactive = self.fmap.get_active_unactive_db_id_list(id_key_list)
 
-    #         for db in self.selected_databases():
-    #             self.dbm.deactivate(db)
+        if inactive:
+            act = self._add_action_to_menu(
+                f"Activate {inactive}", True, self.icons.icon("db activate"))
+            act.triggered.connect(lambda: self._activate_databases(inactive))
 
-    #     elif action == act_remove:
+        if active:
+            act = self._add_action_to_menu(
+                f"Deactivate {active}", True, self.icons.icon("db deactivate"))
+            act.triggered.connect(lambda: self._deactivate_databases(active))
 
-    #         self.remove_selected()
+        self.item_menu.addSeparator()
+    
+    def _add_configuration_menu(self, track, ids):
+        if len(track) < 2 or track[1] != "Config":
+            return
 
-    #     self.refresh_table()
+        user_list, default_list, none_list = self.fmap.get_user_default_config(ids)
+
+        # Databases not yet saved
+        if none_list:
+            act = self._add_action_to_menu(f"Save {none_list} to User Configuration",
+                                        True, self.icons.icon("add file"))
+            act.triggered.connect(lambda: self._save_db_in_config(none_list, user=True))
+
+            act = self._add_action_to_menu(f"Save {none_list} to Default Configuration",
+                                        True, self.icons.icon("add file"))
+            act.triggered.connect(lambda: self._save_db_in_config(none_list, user=False))
+
+        # Already in user configuration
+        if user_list:
+            act = self._add_action_to_menu(f"Update User Configuration {user_list}", 
+                                           True, self.icons.icon("update file"))
+            act.triggered.connect(lambda: self._save_db_in_config(user_list, user=True))
+
+            act = self._add_action_to_menu(f"Remove from User Configuration {user_list}",
+                True, self.icons.icon("trash"))
+            act.triggered.connect(lambda: self._remove_db_from_config(user_list, user=True))
+
+        # Already in default configuration
+        if default_list:
+            act = self._add_action_to_menu(f"Update Default Configuration {default_list}",
+                True, self.icons.icon("update file"))
+            act.triggered.connect(lambda: self._save_db_in_config(default_list, user=False))
+
+            act = self._add_action_to_menu(f"Remove from Default Configuration {default_list}", 
+                True, self.icons.icon("trash"))
+            act.triggered.connect(lambda: self._remove_db_from_config(default_list, user=False))
+
+        self.item_menu.addSeparator()
+    
+    def _add_remove_menu(self, track, id_key_list, one_item, many_items):
+        if not (one_item or many_items):
+            return
+
+        if many_items:
+            text = f"Remove {id_key_list}"
+        else:
+            db_name = self.twf.get_tracked_value_in_struct(
+                [track[0], "Name"], self.db_struct)
+            text = f"Remove [{track[0]}] - {db_name}"
+
+        act = self._add_action_to_menu( text, True, self.icons.icon("bin"))
+        act.triggered.connect(lambda: self._remove_databases(id_key_list))
+
+        self.item_menu.addSeparator()
 
     # ==========================================================
     # Buttons
@@ -459,6 +512,7 @@ class DatabasePage(QWidget):
             if auth_changed:
                 self.fmap.remove_database([db_id])
                 self.fmap.add_database(db_filepath, password, keyfile)
+        self.refresh_table()
     
     def __set_name(self,db_id,new_name:str):
         self.fmap.set_db_name(db_id, new_name)
@@ -474,6 +528,14 @@ class DatabasePage(QWidget):
     
     def _deactivate_databases(self,unactive_db_list):
         self.fmap.deactivate_databases(unactive_db_list)
+        self.refresh_table()
+
+    def _save_db_in_config(self, a_list, user):    
+        self.fmap.save_db_in_config(a_list, user)
+        self.refresh_table()
+
+    def _remove_db_from_config(self, a_list, user):    
+        self.fmap.remove_db_from_config(a_list, user)
         self.refresh_table()
 
     def _add_action_to_menu(self, text: str, is_enabled: bool, an_icon: QtGui.QIcon = None):
@@ -559,6 +621,7 @@ class DatabasePage(QWidget):
                         "DB autoload": str(db.autoload),
                         "Requires Password": str(db.requires_password),
                         "Has Encryption Key": str(db.has_key),
+                        "Config": db.config_name,
                     },
                 }
         )

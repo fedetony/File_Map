@@ -58,7 +58,16 @@ class FileMapCliManager:
         for db in self._get_db_list_from_id_list(db_id_list):
             is_ok_db, is_ok_k, *_ = self.dbm.verify_db_paths(db)
             if is_ok_db and is_ok_k:
+                db.user_database = user
                 self.cfg.save_database(db.config_dict, user)
+                
+    def remove_db_from_config(self, db_id_list, user=True):
+        """
+        Remove the selected databases from the configuration.
+        """
+        for db in self._get_db_list_from_id_list(db_id_list):
+            self.cfg.remove_database(db.config_dict, user)
+            db.user_database = None
         
     
     def _get_db_list_from_id_list(self,db_id_list)->list[DatabaseInfo]:
@@ -176,7 +185,7 @@ class FileMapCliManager:
             requires_password = (a_pwd == True),
             key_path = k_path,
             key_file = k_file,
-            user_database = True,
+            user_database = None,
         )
         self.dbm.databases.append(db)
         self.dbm.save()
@@ -203,6 +212,23 @@ class FileMapCliManager:
             else:
                 notauto_db_list.append(db_id) 
         return auto_db_list, notauto_db_list
+    
+    def get_cond_db_id_list(self,db_id_list,condition):
+        """
+        Split database IDs into autoload and non-autoload groups.
+        """
+        key_db_list=[]
+        nokey_db_list=[]
+        the_dbs=self._get_db_list_from_id_list(db_id_list)
+        for db_id, db in zip(db_id_list,the_dbs):
+            if not hasattr(db,condition):
+                log.error(f"No condition found in DBinfo for '{condition}'")
+                break
+            if getattr(db,condition):        
+                key_db_list.append(db_id)         
+            else:
+                nokey_db_list.append(db_id) 
+        return key_db_list, nokey_db_list
 
     def get_active_unactive_db_id_list(self,db_id_list):
         """
@@ -217,6 +243,23 @@ class FileMapCliManager:
             else:
                 unactive_db_list.append(db_id) 
         return active_db_list, unactive_db_list
+    
+    def get_user_default_config(self,db_id_list):
+        """
+        Split database IDs into User, Default and None groups.
+        """
+        user_list=[]
+        default_list=[]
+        none_list=[]
+        the_dbs=self._get_db_list_from_id_list(db_id_list)
+        for db_id, db in zip(db_id_list,the_dbs):
+            if db.config_name=="User":        
+                user_list.append(db_id)         
+            elif db.config_name=="Default":
+                default_list.append(db_id) 
+            else:
+                none_list.append(db_id)
+        return user_list, default_list, none_list
     
     def set_active_databases_in_dbm(self):
         """

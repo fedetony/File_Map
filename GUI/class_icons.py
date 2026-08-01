@@ -150,6 +150,9 @@ class Icons:
         "folder ok": ":/icons/Icojam-Blue-Bits-Folder-check.256.png",
         "folder not ok": ":/icons/Icojam-Blue-Bits-Folder-delete.256.png",
         "shield": ":/icons/Icojam-Blue-Bits-Shield.256.png",
+        "update file": ":/icons/icons8-symlink-file-96.png",
+        "star": ":/icons/Icojam-Blue-Bits-Star-rating.256.png",
+        "heart": ":/icons/Icojam-Blue-Bits-Love-heart.256.png",
 
     }
 

@@ -104,11 +104,11 @@ class MainWindow(QMainWindow):
 
         self.pages = {
             "Home": HomePage(),
+            "Devices": DevicesPage(self.fmap),
             "Databases": DatabasePage(self.fmap),
             "Mapping": MappingPage(),
             "Map Explorer": MapExplorerPage(),
             "Sort": SortPage(),
-            "Devices": DevicesPage(),
             "Settings": SettingsPage(),
             "About": AboutPage(),
         }

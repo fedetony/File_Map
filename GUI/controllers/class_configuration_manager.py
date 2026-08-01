@@ -64,6 +64,33 @@ class ConfigurationManager:
         databases.append(database)
         save()
 
+    def remove_database(self, database, user=True):
+        """
+        Remove a database from the selected configuration.
+
+        Args:
+            database (dict): Database configuration dictionary.
+            user (bool): True for the user configuration,
+                        False for the bundled configuration.
+        """
+        if user:
+            databases = self.user.setdefault("databases", [])
+        else:
+            databases = self.general.setdefault("default_databases", [])
+
+        databases[:] = [
+            db for db in databases
+            if not (
+                db.get("db_file") == database.get("db_file")
+                and db.get("db_path") == database.get("db_path")
+            )
+        ]
+
+        if user:
+            self.save_user()
+        else:
+            self.save()
+
     # -------------------------------------------------
     # Properties
     # -------------------------------------------------

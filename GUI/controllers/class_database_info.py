@@ -19,7 +19,7 @@ class DatabaseInfo:
     autoload: bool = True
     active: bool = False
 
-    user_database: bool = False
+    user_database: bool | None = None
 
     @property
     def database_filepath(self) -> Path:
@@ -52,5 +52,13 @@ class DatabaseInfo:
         cfg_dict={}
         for cfgitem in list_cfg:
             cfg_dict[cfgitem]=getattr(self,cfgitem)
-        return cfg_dict   
+        return cfg_dict  
+
+    @property
+    def config_name(self) -> str:
+        if self.user_database is True:
+            return "User"
+        if self.user_database is False:
+            return "Default"
+        return "None" 
 

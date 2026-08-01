@@ -16,9 +16,9 @@ from PyQt6.QtWidgets import (
 
 class DevicesPage(QWidget):
 
-    def __init__(self, parent=None):
+    def __init__(self,fmap, parent=None):
         super().__init__(parent)
-
+        self.fmap=fmap
         self.create_ui()
 
 

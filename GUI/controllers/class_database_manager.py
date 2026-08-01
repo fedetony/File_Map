@@ -25,76 +25,102 @@ class DatabaseManager:
     
     
     def load(self):
+        """
+        Load all configured databases into the manager.
+
+        Clears the current list and loads both bundled and
+        user database definitions.
+        """
         self.databases.clear()
         self.load_default_databases()
         self.load_user_databases()
     
     def load_default_databases(self):
-        defaults = self.cfg.bundled_databases# self.config.get("default_databases", [])
-        for db in defaults:
+        """
+        Load bundled database definitions from configuration.
+        """
+        for db in self.cfg.bundled_databases:
             self.databases.append(
-                DatabaseInfo(
-                    name=db["name"],
-                    db_path=db.get("db_path"),
-                    db_file=db["db_file"],
-                    requires_password=db.get(
-                        "requires_password", False),
-                    key_path=db.get("key_path"),
-                    key_file=db.get("key_file"),
-                    autoload=db.get("autoload", True),
-                    active=db.get("autoload", False),
-                    user_database=False
-                )
+                self._database_from_config(db, False)
+            )
+
+    def load_user_databases(self):
+        """
+        Load user database definitions from configuration.
+        """
+        for db in self.cfg.user_databases:
+            self.databases.append(
+                self._database_from_config(db, True)
             )
     
-    def load_user_databases(self):
+    
+    def _database_from_config(self, db_dict, user_database):
+        """
+        Create a DatabaseInfo object from a configuration dictionary.
 
-        filename = (
-            Path(self.cfg.config_directory)
-            / self.cfg.user_database_file 
-        ) #self.config["paths"]["config_dir"]) #self.config["paths"]["user_databases"]
-        if not filename.exists():
-            return
-        with open(filename, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f) or {}
-        for db in data.get("databases", []):
-            self.databases.append(
-                DatabaseInfo(
-                    name=db["name"],
-                    db_path=db.get("db_path"),
-                    db_file=db["db_file"],
-                    requires_password=db.get(
-                        "requires_password", False),
-                    key_path=db.get("key_path"),
-                    key_file=db.get("key_file"),
-                    autoload=db.get("autoload", True),
-                    active=db.get("autoload", False),
-                    user_database=True
-                )
-            )
+        Resolves available paths and marks the database source
+        as user or bundled configuration.
+        """
+        db = DatabaseInfo(
+            name=db_dict["name"],
+            db_path=db_dict.get("db_path"),
+            db_file=db_dict["db_file"],
+            requires_password=db_dict.get("requires_password", False),
+            key_path=db_dict.get("key_path"),
+            key_file=db_dict.get("key_file"),
+            autoload=db_dict.get("autoload", True),
+            active=db_dict.get("autoload", False),
+            user_database=user_database,
+        )
+
+        is_ok = self._resolve_database_paths(db)
+        if not is_ok:
+            log.warning(f"Filepaths could not be verified for:{db_dict}")
+
+        return db
+    
+    def _resolve_database_paths(self, db: DatabaseInfo):
+        """
+        Resolve and update database paths using the filesystem.
+
+        Returns:
+            bool: True if database and key paths are valid.
+        """
+        is_ok_db, is_ok_k, db_filepath, k_filepath = self.verify_db_paths(db)
+
+        if is_ok_db and db_filepath:
+            db.db_path = FM.extract_path(db_filepath)
+
+        if is_ok_k and k_filepath:
+            db.key_path = FM.extract_path(k_filepath)
+
+        return is_ok_db and is_ok_k
 
     def save(self):
-        """Rewrites user database file with the registered databases"""
-        filename = self.cfg.user_database_file
-        filename.parent.mkdir(parents=True, exist_ok=True)
-        output = {"databases": []}
-        for db in self.databases:
-            if not db.user_database:
-                continue
-            output["databases"].append({
+        """
+        Save all user databases to the user configuration.
+
+        Bundled/default databases are not modified.
+        """
+        self.cfg.user["databases"] = [
+            {
                 "name": db.name,
                 "db_path": db.db_path,
                 "db_file": db.db_file,
                 "requires_password": db.requires_password,
                 "key_path": db.key_path,
                 "key_file": db.key_file,
-                "autoload": db.autoload
-            })
-
-        with open(filename, "w", encoding="utf-8") as f:
-            yaml.safe_dump(output,f,sort_keys=False)
+                "autoload": db.autoload,
+            }
+            for db in self.databases
+            if db.user_database
+        ]
+        self.cfg.save_user()
     
     def append_database(self, filename):
+        """
+        Create and register a new user database from a file.
+        """
         p = Path(filename)
         db = DatabaseInfo(
             name=p.stem,
@@ -110,58 +136,76 @@ class DatabaseManager:
         self.databases.append(db)
         self.save()
 
-    def remove_database(self, db:DatabaseInfo):
+    def remove_database(self, db: DatabaseInfo):
+        """
+        Remove a database from the manager and save the change.
+        """
         if db in self.databases:
             self.databases.remove(db)
             self.save()
     
-    def activate(self, db:DatabaseInfo):
+    def activate(self, db: DatabaseInfo):
+        """
+        Mark a database as active.
+        """
         db.active = True
     
-    def deactivate(self, db:DatabaseInfo):
+    def deactivate(self, db: DatabaseInfo):
+        """
+        Mark a database as inactive.
+        """
         db.active = False
 
     def create_database(self, filename):
+        """
+        Create a new database file and register it.
+        """
         Path(filename).touch(exist_ok=True)
         self.append_database(filename)
     
     @property
     def active_databases(self):
+        """
+        Return the list of currently active databases.
+        """
         return [db for db in self.databases if db.active]
     
-    def activate_database(self, db_file):
-        try:
-            self.open_database(db_file)
-        except DatabasePasswordRequired:
-            dialog = DatabaseAuthDialog(
-                db_file,
-                need_password=True,
-                need_key=False
-            )
-            if dialog.exec():
-                password, key = dialog.values()
-                self.open_database(
-                    db_file,
-                    password,
-                    key
-                )
+    # def activate_database(self, db_file):
+    #     """
+    #     Open a database, requesting authentication if required.
+    #     """
+    #     try:
+    #         self.open_database(db_file)
+    #     except DatabasePasswordRequired:
+    #         dialog = DatabaseAuthDialog(
+    #             db_file,
+    #             need_password=True,
+    #             need_key=False
+    #         )
+    #         if dialog.exec():
+    #             password, key = dialog.values()
+    #             self.open_database(
+    #                 db_file,
+    #                 password,
+    #                 key
+    #             )
 
-        except DatabaseKeyRequired:
-            dialog = DatabaseAuthDialog(
-                db_file,
-                need_password=False,
-                need_key=True
-            )
-            if dialog.exec():
-                password, key = dialog.values()
-                self.open_database(
-                    db_file,
-                    password,
-                    key
-                )
+    #     except DatabaseKeyRequired:
+    #         dialog = DatabaseAuthDialog(
+    #             db_file,
+    #             need_password=False,
+    #             need_key=True
+    #         )
+    #         if dialog.exec():
+    #             password, key = dialog.values()
+    #             self.open_database(
+    #                 db_file,
+    #                 password,
+    #                 key
+    #             )
 
-    def open_database(self,*args):
-        print(args)
+    # def open_database(self,*args):
+    #     print(args)
     
     def verify_db_paths(self,db:DatabaseInfo):
         """Verify if paths are ok and exist in db Info item.
