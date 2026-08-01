@@ -10,7 +10,7 @@ from class_file_manipulate import FileManipulate
 FM = FileManipulate()
 
 from class_LogHandler import LM
-log=LM.get_logger_with_handler("DBManager","debug",False,None)
+log=LM.get_logger_with_handler("DBManager","debug",True,None)
 
 class DatabaseManager:
     """

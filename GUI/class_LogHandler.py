@@ -20,6 +20,59 @@ def init_logger_manager(log_file):
     return LM
 
 class LoggerManager:
+    """
+    Central logging manager for the application.
+
+    Logging Architecture
+    --------------------
+    The root logger acts as the central dispatcher for all log messages.
+    Any logger created with ``propagate=True`` forwards its records to the
+    root logger, which distributes them to the configured handlers.
+
+        Root Logger
+             │
+      ┌──────┼──────────────┐
+      │      │              │
+      ▼      ▼              ▼
+    File   Queue        GUI Handler
+   Handler Handler           │
+                             ▼
+                    LoggerDock.write_GUI_Log()
+
+    Module loggers
+    --------------
+    Individual modules (DatabaseManager, FileMapCliManager, MainWindow, etc.)
+    obtain their own named logger. These loggers may either:
+
+    - propagate=False
+        Operate independently using only their own StreamHandler.
+
+    - propagate=True
+        Forward records to the root logger so they are written to the log
+        file, placed on the logging queue, displayed in the GUI, and handled
+        by any other root handlers.
+
+            DatabaseManager
+            FileMapCliManager
+            MainWindow
+                  │
+                  └────────────► Root Logger
+
+    Thread Safety
+    -------------
+    Worker threads should not update the GUI directly. Instead they emit log
+    records through the SignalTracker, which forwards them to the main thread.
+    The root logger then processes the records normally, allowing the GUI log
+    panel to update safely.
+
+    Responsibilities
+    ----------------
+    - Configure the root logger and its handlers.
+    - Create and configure module loggers.
+    - Forward logs to the GUI.
+    - Support thread-safe logging from worker threads.
+    - Optionally write logs to a file.
+    """
     def __init__(self, log_file):
         if log_file:
             self.log_file = Path(log_file)
@@ -131,18 +184,23 @@ class LoggerManager:
         """
         logger = logging.getLogger(name)
         logger.setLevel(self._get_level(level))
-        # define a Handler which writes INFO messages or higher to the sys.stderr
-        stream_handler = logging.StreamHandler()
-        stream_handler.setLevel(self._get_level(level))
         # set a format which is simpler for console use
-        if not format:
-            formatter = logging.Formatter("%(asctime)s [%(levelname)s] (%(name)s) %(message)s")
+        if format is None:
+            formatter = logging.Formatter(
+                "%(asctime)s [%(levelname)s] (%(name)s) %(message)s"
+            )
         else:
             formatter = logging.Formatter(format)
-        # tell the handler to use this format
-        stream_handler.setFormatter(formatter)
-        logger.addHandler(stream_handler)
-        logger.propagate = propagate  # False if you want isolation
+
+        if not any(isinstance(h, logging.StreamHandler) for h in logger.handlers):
+            # define a Handler which writes INFO messages or higher to the sys.stderr
+            stream_handler = logging.StreamHandler()
+            stream_handler.setLevel(self._get_level(level))
+            # tell the handler to use this format
+            stream_handler.setFormatter(formatter)
+            logger.addHandler(stream_handler)
+
+        logger.propagate = propagate
         return logger
         
     def get_new_logger_propagating_to_root(self,name,level="debug"):

@@ -15,7 +15,7 @@ try:
     from class_LogHandler import get_appPath, LM
     log = LM.get_logger_with_handler(tw_fun_name,
                                      "debug",
-                                     False,
+                                     True,
                                      "%(asctime)s [%(levelname)s] (%(name)s) %(message)s")
     log.info(f"{tw_fun_name} Logger started")
 except (AttributeError, ImportError):

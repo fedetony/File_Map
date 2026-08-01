@@ -13,7 +13,7 @@ from widgets.ask_confirmation_dialog import *
 from controllers.class_database_manager import *
 
 from class_LogHandler import LM
-log=LM.get_logger_with_handler("FileMapCli","debug",False,None)
+log=LM.get_logger_with_handler("FileMapCli","debug",True,None)
 
 class FileMapCliManager:
     """

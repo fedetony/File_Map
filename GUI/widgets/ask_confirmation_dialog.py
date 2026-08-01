@@ -8,10 +8,7 @@ from PyQt6.QtWidgets import (
 class ConfirmationDialog:
 
     @staticmethod
-    def ask_confirmation(
-        message,
-        default=False
-    ):
+    def ask_confirmation(message, default=False):
 
         result = QMessageBox.question(
             None,

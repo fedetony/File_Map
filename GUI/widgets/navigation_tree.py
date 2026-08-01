@@ -32,33 +32,21 @@ class NavigationTree(QTreeWidget):
         root.setExpanded(True)
 
         pages = [
-
             "Home",
-
-            "Databases",
-
-            "Mapping",
-
-            "Map Explorer",
-
-            "Sort",
-
             "Devices",
-
+            "Databases",
+            "Mapping",
+            "Map Explorer",
+            "Sort",
             "Settings",
-
             "About",
-
         ]
 
         for name in pages:
-
             item = QTreeWidgetItem(
                 [name]
             )
-
             root.addChild(item)
-
 
         self.addTopLevelItem(root)
 
@@ -68,10 +56,7 @@ class NavigationTree(QTreeWidget):
     # --------------------------------------------------
 
     def item_clicked(self, item, column):
-
         name = item.text(0)
-
         if name == "File Map":
             return
-
         self.pageSelected.emit(name)

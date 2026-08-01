@@ -53,7 +53,10 @@ from controllers.class_database_manager import DatabaseManager
 from controllers.class_filemap_cli_manager import FileMapCliManager
 # icons
 from class_icons import Icons
-
+# looger
+from class_LogHandler import LM
+log=LM.get_logger_with_handler("MainWindow","debug",True,None)
+log.info("Main Window Logger started")
 
 class MainWindow(QMainWindow):
 
@@ -67,10 +70,8 @@ class MainWindow(QMainWindow):
         self.conf_manager = conf_manager
         self.dbm = dbm
         # Object to Filemap Cli 
-        self.fmap = FileMapCliManager(
-            conf_manager=self.conf_manager,
-            dbm=self.dbm,
-        )
+        self.fmap = FileMapCliManager(conf_manager=self.conf_manager,
+                                      dbm=self.dbm)
 
         self.icons = Icons() 
 
@@ -84,10 +85,10 @@ class MainWindow(QMainWindow):
             QMainWindow.DockOption.AnimatedDocks
         )
 
+        self.create_logger()
         self.create_pages()
         self.create_central()
         self.create_navigation()
-        self.create_logger()
         self.create_statusbar()
         self.create_menubar()
 
@@ -118,9 +119,7 @@ class MainWindow(QMainWindow):
     # --------------------------------------------------
 
     def create_central(self):
-
         self.stack = QStackedWidget()
-
         for page in self.pages.values():
             self.stack.addWidget(page)
 
@@ -131,23 +130,13 @@ class MainWindow(QMainWindow):
     # --------------------------------------------------
 
     def create_navigation(self):
-
         self.nav = NavigationTree()
-
         self.navDock = QDockWidget("Navigation")
-
         self.navDock.setObjectName("Navigation")
-
         self.navDock.setWidget(self.nav)
+        self.navDock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea)
 
-        self.navDock.setAllowedAreas(
-            Qt.DockWidgetArea.LeftDockWidgetArea
-        )
-
-        self.addDockWidget(
-            Qt.DockWidgetArea.LeftDockWidgetArea,
-            self.navDock,
-        )
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.navDock)
 
         self.navDock.setMinimumWidth(220)
         self.navDock.setMaximumWidth(320)
@@ -157,31 +146,23 @@ class MainWindow(QMainWindow):
     # --------------------------------------------------
 
     def create_logger(self):
-
         self.loggerDock = LoggerDock()
-
         self.addDockWidget(
             Qt.DockWidgetArea.BottomDockWidgetArea,
             self.loggerDock,
         )
-
-        self.loggerDock.hide()
+        LM.attach_gui_handler(self.loggerDock)
+        log.info("GUI Logger attached...")
+        # self.loggerDock.hide()
 
     # --------------------------------------------------
     # Status Bar
     # --------------------------------------------------
 
     def create_statusbar(self):
-
         self.statusWidget = StatusWidget()
-
         status = QStatusBar()
-
-        status.addPermanentWidget(
-            self.statusWidget,
-            1,
-        )
-
+        status.addPermanentWidget(self.statusWidget,1)
         self.setStatusBar(status)
 
     # --------------------------------------------------
@@ -189,44 +170,23 @@ class MainWindow(QMainWindow):
     # --------------------------------------------------
 
     def create_menubar(self):
-
         menubar = self.menuBar()
-
         menuFile = menubar.addMenu("File")
-
         menuView = menubar.addMenu("View")
-
         menuHelp = menubar.addMenu("Help")
-
         actExit = QAction("Exit", self)
-
         actAbout = QAction("About", self)
-
         actHome = QAction("Home", self)
 
         actExit.triggered.connect(self.close)
-
-        actAbout.triggered.connect(
-            lambda: self.change_page("About")
-        )
-
-        actHome.triggered.connect(
-            lambda: self.change_page("Home")
-        )
+        actAbout.triggered.connect(lambda: self.change_page("About"))
+        actHome.triggered.connect(lambda: self.change_page("Home"))
 
         menuFile.addAction(actHome)
-
         menuFile.addSeparator()
-
         menuFile.addAction(actExit)
-
-        menuView.addAction(
-            self.navDock.toggleViewAction()
-        )
-
-        menuView.addAction(
-            self.loggerDock.toggleViewAction()
-        )
+        menuView.addAction(self.navDock.toggleViewAction())
+        menuView.addAction(self.loggerDock.toggleViewAction())
 
         menuHelp.addAction(actAbout)
 
@@ -235,22 +195,15 @@ class MainWindow(QMainWindow):
     # --------------------------------------------------
 
     def change_page(self, name):
-
         page = self.pages.get(name)
-
         if not page:
             return
-
         old = self.stack.currentWidget()
-
         if old and hasattr(old, "deactivate"):
             old.deactivate()
-
         self.stack.setCurrentWidget(page)
-
         if hasattr(page, "activate"):
             page.activate()
-
         self.setWindowTitle(
             f"File Mapping Tool - {name}"
         )
@@ -259,17 +212,17 @@ class MainWindow(QMainWindow):
     # --------------------------------------------------
     # Helpers
     # --------------------------------------------------
-
     def current_page(self):
-
         return self.stack.currentWidget()
 
 
     def log_message(self, text):
-
         if self.loggerDock:
             self.loggerDock.append(text)
-
+    
+    # def write_GUI_Log(self, text):
+    #     """Called by ConsolePanelHandler in class_LogHandler"""
+    #     self.log_message(text)
 
     # --------------------------------------------------
     # Window State
@@ -278,6 +231,7 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
 
         event.accept()
+
 
 
 if __name__ == "__main__":
