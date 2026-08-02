@@ -199,7 +199,7 @@ class DatabasePage(QWidget):
         self._add_remove_icons_to_items(nohaskey,False,"Has Encryption Key",None)
         # password
         haspwd ,nohaspwd =self.fmap.get_cond_db_id_list(id_list,"requires_password")
-        self._add_remove_icons_to_items(haspwd,True,"Requires Password",self.icons.icon("db key")) 
+        self._add_remove_icons_to_items(haspwd,True,"Requires Password",self.icons.icon("key")) 
         self._add_remove_icons_to_items(nohaspwd,False,"Requires Password",None)
         # Config
         user_list, default_list, none_list = self.fmap.get_user_default_config(id_list)

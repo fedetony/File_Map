@@ -6,25 +6,39 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QCheckBox,
     QTableWidget,
     QTableWidgetItem,
     QSplitter,
     QGroupBox,
     QTextEdit,
+    QTreeView,
 )
 
 from functional.class_icons import Icons
 from controllers.class_filemap_cli_manager import FileMapCliManager
 from widgets.ask_confirmation_dialog import ConfirmationDialog
+from widgets.class_device_menu import DeviceMenu
 # from class_table_widget_functions import TableWidgetFunctions
 
 class DevicesPage(QWidget):
 
-    def __init__(self,fmap: FileMapCliManager, parent=None):
+    def __init__(self, fmap:FileMapCliManager, parent=None):
         super().__init__(parent)
+        
+        self.icons =Icons()
         self.fmap = fmap
-        self.dev_m = self.fmap.device_monitor
+        self.dev_m = fmap.device_monitor
+
+        self._refresh_timeout_ms = 5000
+        self._refresh_elapsed = 0
+
+        self.refresh_timer = QtCore.QTimer(self)
+        self.refresh_timer.setInterval(200)      # check every 200 ms
+        self.refresh_timer.timeout.connect(self._check_refresh)
+
         self.create_ui()
+        self.connect_objects()
 
     # --------------------------------------------------
     # UI
@@ -33,25 +47,39 @@ class DevicesPage(QWidget):
     def create_ui(self):
 
         layout = QVBoxLayout(self)
-
+        
+        # Header
+        header= QHBoxLayout()
+        icon = QLabel()
+        icon.setPixmap(self.icons.icon("devices").pixmap(32, 32))
         title = QLabel("Devices")
-        title.setSizePolicy(
-            QtWidgets.QSizePolicy.Policy.Preferred,
-            QtWidgets.QSizePolicy.Policy.Fixed
-        )
         title.setStyleSheet(
             """
             font-size:24px;
             font-weight:bold;
             """
         )
-        layout.addWidget(title)
+        title.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Preferred,
+            QtWidgets.QSizePolicy.Policy.Fixed
+        )
+        header.addWidget(icon)
+        header.addWidget(title)
+        header.addStretch()
+        layout.addLayout(header)
+
 
         toolbar = QHBoxLayout()
-        self.scan_button = QPushButton("Rescan Devices")
+        self.rescan_btn = QPushButton("Rescan Devices")
+        self.rescan_btn.setIcon(self.icons.icon("refresh"))
+        toolbar.addWidget(self.rescan_btn)
 
-        toolbar.addWidget(self.scan_button)
         toolbar.addStretch()
+
+        self.view_details_ckb= QCheckBox("View Details")
+        self.view_details_ckb.setIcon(self.icons.icon("details"))
+        self.view_details_ckb.setChecked(False)
+        toolbar.addWidget(self.view_details_ckb)
 
         layout.addLayout(toolbar)
 
@@ -62,22 +90,13 @@ class DevicesPage(QWidget):
 
         devices_layout = QVBoxLayout(devices_group)
 
-        self.device_table = QTableWidget()
-        self.device_table.setColumnCount(5)
-
-        self.device_table.setHorizontalHeaderLabels(
-            [
-                "Device",
-                "Mount",
-                "Size",
-                "Filesystem",
-                "Maps"
-            ]
-        )
-
-        devices_layout.addWidget(self.device_table)
+        self.device_tv_obj = QTreeView()
+        self.dev_menu = DeviceMenu(self.fmap,self.device_tv_obj)
+        
+        #self.dev_menu.__signal__.connect(self.change_page)
 
         # Details
+        devices_layout.addWidget(self.device_tv_obj)
         details_group = QGroupBox("Device Information")
         details_layout = QVBoxLayout(details_group)
         self.details = QTextEdit()
@@ -93,55 +112,60 @@ class DevicesPage(QWidget):
         splitter.setStretchFactor(1,1)
         layout.addWidget(splitter)
 
-        self.load_demo()
+    def connect_objects(self):
+        self.view_details_ckb.stateChanged.connect(self.change_view)
+        self.rescan_btn.clicked.connect(self.rescan_devices)
 
     # --------------------------------------------------
-    # Demo
+    # functions
     # --------------------------------------------------
 
-    def load_demo(self):
+    def change_view(self,value):
+        is_checked=self.view_details_ckb.isChecked()
+        if is_checked:
+            self.dev_menu.generate_new_info_struct()
+        else:
+            self.dev_menu.generate_new_mount_serial_struct()
+    
+    def rescan_devices(self):
+        self.rescan_btn.setEnabled(False)
+        self.rescan_btn.setText("Scanning...")
 
-        devices = [
+        self.dev_menu.info_cache.clear()
 
-            (
-                "Samsung SSD",
-                "C:\\",
-                "1 TB",
-                "NTFS",
-                "System"
-            ),
+        self._refresh_elapsed = 0
+        self.fmap.device_monitor.refresh()
 
-            (
-                "External HDD",
-                "D:\\",
-                "4 TB",
-                "NTFS",
-                "Music, Photos"
-            ),
+        self.refresh_timer.start()
 
-            (
-                "USB Backup",
-                "E:\\",
-                "512 GB",
-                "exFAT",
-                "Backup"
-            ),
+    def _check_refresh(self):
+        self._refresh_elapsed += self.refresh_timer.interval()
+        devices = self.fmap.device_monitor.devices
 
-        ]
+        if devices:
+            self.refresh_timer.stop()
 
+            self.rescan_btn.setEnabled(True)
+            self.rescan_btn.setText("Rescan Devices")
 
-        self.device_table.setRowCount(
-            len(devices)
-        )
-        for row, data in enumerate(devices):
-            for col, value in enumerate(data):
-                self.device_table.setItem(
-                    row,
-                    col,
-                    QTableWidgetItem(value)
-                )
+            if self.view_details_ckb.isChecked():
+                self.dev_menu.generate_new_info_struct()
+            else:
+                self.dev_menu.generate_new_mount_serial_struct()
+            return
 
+        if self._refresh_elapsed >= self._refresh_timeout_ms:
+            self.refresh_timer.stop()
 
+            self.rescan_btn.setEnabled(True)
+            self.rescan_btn.setText("Rescan Devices")
+
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Timeout",
+                "Device scan did not complete."
+            )
+    
     # --------------------------------------------------
     # Lifecycle
     # --------------------------------------------------

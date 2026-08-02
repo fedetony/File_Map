@@ -826,6 +826,10 @@ class TreeStructTracker(QtCore.QObject):
                 del parent_node[key]
                 self.data_changed.emit(track, None, "delete", "")
                 return True
+            children_list = parent_node.get('children')
+            if children_list:
+                #set as list to enter next evaluation
+                parent_node = children_list
 
         if isinstance(parent_node, list):
             for i, entry in enumerate(parent_node):

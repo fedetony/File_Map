@@ -33,13 +33,15 @@ class DeviceMenu(QtCore.QObject):
         # Define main structure or use example
         self.fmap = fmap
         self.dev_tv_obj = treeview_obj
-        
-        self.dev_struct=self.generate_new_mount_serial_struct()
-
+        self.dev_struct=DEV_STRUCT_EXAMPLE.copy()
         self._syncing_ui = False
-        self.tracker=None
         self.info_cache=[] # list of info dicts
         self._build_dev_configuration_tree()
+        self.dev_struct=self.generate_new_mount_serial_struct()
+
+    @property
+    def tracker(self):
+        return self.dev_ce.tracker
 
     def _build_dev_configuration_tree(self):
         """Initialize and configure the style tree, delegates, condition engine, and context menu.
@@ -68,7 +70,6 @@ class DeviceMenu(QtCore.QObject):
         #self.dev_tv.item_right_clicked.connect(self.on_item_right_clicked)
         
         self.dev_tv.do_refresh()
-        self.tracker=self.dev_ce.tracker
 
     @QtCore.pyqtSlot(list, object, str, str)
     def on_struct_item_edited(self, track, value, typestr, subtype):
@@ -163,11 +164,13 @@ class DeviceMenu(QtCore.QObject):
         
     def generate_new_mount_serial_struct(self):
         devices_list=self.get_devices_list()
-        self.dev_struct=DEV_STRUCT_EXAMPLE.copy()
+        self.dev_struct=DEV_STRUCT_EXAMPLE.copy() #clear struct
         for dev_id,mount_serial in enumerate(devices_list):
-            self.add_dev_to_struct(["Devices",f"{dev_id}"],"Mount",mount_serial[0], editable=False,selectable=True,hidden=False)
-            self.add_dev_to_struct(["Devices",f"{dev_id}"],"Serial",mount_serial[1], editable=False,selectable=True,hidden=False)
-        
+            self.tracker.delete_node(["Devices",f"{dev_id}"])
+            self.add_dev_to_struct(["Devices",f"{dev_id}"],"Mount",mount_serial[0], editable=True,selectable=True,hidden=False)
+            self.add_dev_to_struct(["Devices",f"{dev_id}"],"Serial",mount_serial[1], editable=True,selectable=True,hidden=False)
+            self.tracker.delete_node(["Devices",f"{dev_id}","Details"])
+        # print(self.tracker.get_root())
         # refresh treeview
         self.dev_tv.refresh_treeview(self.dev_struct,self.dev_tv.modelobj,self.dev_tv_obj)
         self.dev_tv.expand_to_depth(3)
@@ -176,11 +179,12 @@ class DeviceMenu(QtCore.QObject):
         devices_list=self.get_devices_list()        
         self.dev_struct=DEV_STRUCT_EXAMPLE.copy() #clear struct
         for dev_id,mount_serial in enumerate(devices_list):
-            self.add_dev_to_struct(["Devices",f"{dev_id}"],"Mount",mount_serial[0], editable=False,selectable=True,hidden=False)
-            self.add_dev_to_struct(["Devices",f"{dev_id}"],"Serial",mount_serial[1], editable=False,selectable=True,hidden=False)
-            info=self.get_device_info(self,dev_id, devices_list)
+            self.tracker.delete_node(["Devices",f"{dev_id}"])
+            self.add_dev_to_struct(["Devices",f"{dev_id}"],"Mount",mount_serial[0], editable=True,selectable=True,hidden=False)
+            self.add_dev_to_struct(["Devices",f"{dev_id}"],"Serial",mount_serial[1], editable=True,selectable=True,hidden=False)
+            info=self.get_device_info(dev_id, devices_list)
             for key,value in info.items(): 
-                self.add_dev_to_struct(["Devices",f"{dev_id}","Details"],key, value, editable=False,selectable=True,hidden=False)
+                self.add_dev_to_struct(["Devices",f"{dev_id}","Details"],key, value, editable=True,selectable=True,hidden=False)
         
         # refresh treeview
         self.dev_tv.refresh_treeview(self.dev_struct,self.dev_tv.modelobj,self.dev_tv_obj)
@@ -213,16 +217,19 @@ class DeviceMenu(QtCore.QObject):
 
     def add_dev_to_struct(self,track,key,value, editable=False,selectable=True,hidden=False):
         child_node = {
-            "value": value, 
-            "type": "str", 
-            "unit":"", 
-            "meta": {
-                    "editable": editable, 
-                    "selectable": selectable,  
-                    "hidden": hidden
-                    }
-            }
-        self.tracker.create_node(track,key,child_node)
+                "value": value, 
+                "type": "str", 
+                "unit":"", 
+                "meta": {
+                        "editable": editable, 
+                        "selectable": selectable,  
+                        "hidden": hidden
+                        }
+                }
+        self.tracker.ensure_path(track+[key])
+        self.tracker.set_value(track+[key],child_node)
+        
+        
         
        
         
