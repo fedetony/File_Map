@@ -119,7 +119,270 @@ This structure is used by:
     - the validator (constraints, masks)
     - the model (Qt tree representation)
     - the editor (UI rendering and editing)
+
+---------------------------------------------------------------------------
+TRACK PATH RESOLUTION
+---------------------------------------------------------------------------
+
+A track identifies either a node or a property inside a node.
+
+If the path terminates at a node name:
+    the tracker returns the complete node structure.
+
+Example:
+
+    ["Devices", "0", "Details", "Model"]
+
+returns:
+
+    {
+        "value": "Samsung",
+        "type": "str",
+        "meta": {...}
+    }
+
+
+If the path includes a property selector:
+    the tracker returns only that property.
+
+Example:
+
+    ["Devices", "0", "Details", "Model[value]"]
+
+returns:
+
+    "Samsung"
+
+
+Examples:
+
+Node:
+    ["Devices", "0"]
+
+returns:
+    {
+        "children": [...],
+        "meta": {...}
+    }
+
+
+Node property:
+    ["Devices", "0[Details[Model[value]]]"]
+
+returns:
+    "Samsung"
+
+
+Metadata property:
+    ["Devices", "0[Details[Model[meta[hidden]]]]"]
+
+returns:
+    True / False
+
+
+---------------------------------------------------------------------------
+PROPERTY SELECTORS
+---------------------------------------------------------------------------
+
+Property selectors use square brackets after a node name.
+
+Common node properties:
+
+    [value]
+    [type]
+    [subtype]
+    [children]
+    [meta]
+    ... user can add more of them
+
+Metadata can be further accessed:
+
+    [meta[hidden]]
+    [meta[editable]]
+    [meta[conditions]]
+    [meta[constraints[min]]]
+
+
+Without a property selector, the complete node is returned.
+
+    ----------------------------------------------------------------------
+    Track Syntax
+    ----------------------------------------------------------------------
+
+    Tracks identify nodes or properties inside the canonical structure.
+
+    A track without a property selector returns the complete node.
+
+        ["Devices", "0", "Details", "Model"]
+
+    returns the Model node:
+
+        {
+            "value": "...",
+            "type": "str",
+            "meta": {...}
+        }
+
+
+    A property selector returns only that property.
+
+        ["Devices", "0", "Details", "Model[value]"]
+
+    returns:
+
+        "Samsung"
+
+
+    Nested property selectors are supported:
+
+        ["Devices", "0", "Details", "Model[meta[hidden]]"]
+
+    returns:
+
+        True / False
+
+
+    Equivalent compact notation is supported:
+
+        ["Devices", "0", "Details[Model[value]]"]
+
+        ["Devices[0[Details[Model[value]]]]"]
+
+
+    The tracker internally normalizes paths before navigation.
+
+    ----------------------------------------------------------------------
+    Reading API
+    ----------------------------------------------------------------------
+
+    get_value(track)
+        Returns the resolved object at the given path.
+        Depending on the track, this may be:
+            - a complete node
+            - a node property
+            - a metadata value
+
+    get_node(track)
+        Returns the node dictionary only.
+        Property selectors are ignored.
+
+    node_exists(track)
+        Checks if a node or property exists.
+
+    get_children(track)
+        Returns the children list of a node.
+
+    get_property(track, property_name)
+        Reads a node property explicitly.
+
+    get_meta(track, key)
+        Returns a metadata value from a node.
+
+    ----------------------------------------------------------------------
+    Writing API
+    ----------------------------------------------------------------------
+
+    set_value(track, value, subtype='')
+        Updates an existing value or property.
+        Does not create missing nodes.
+
+    set_property(track, property_name, value)
+        Updates a node property.
+
+    set_meta(track, key, value)
+        Updates metadata without affecting node values.
+
+    remove_property(track, property_name)
+        Removes a property from a node.
+
+    ----------------------------------------------------------------------
+    Structure Management
+    ----------------------------------------------------------------------
+
+    create_node(track, node_dict)
+        Creates a new node including all track path.
+
+    add_child(track, child_name, child_node)
+        Adds a child node. The track path must exist.
+
+    insert_child(track, index, child_name, child_node)
+        Inserts a child node at a specific position. Useful for sorting.
+
+    delete_node(track)
+        Deletes a node from its parent branch.
+
+    rename_node(track, new_name)
+        Renames a node while preserving its contents.
+
+    move_node(source_track, destination_track)
+        Moves a node between branches.
+
+    ----------------------------------------------------------------------
+    Traversal API
+    ----------------------------------------------------------------------
+
+    walk(node=None)
+        Recursively iterates through nodes.
+
+    get_all_tracks()
+        Returns all available node paths.
+
+    find_nodes(condition)
+        Searches nodes matching a user supplied condition.
+
+    remove_property_from_all_nodes(node, property_name)
+        Removes a property recursively from the structure.
+
+    ----------------------------------------------------------------------
+    Condition Engine Integration
+    ----------------------------------------------------------------------
+
+    The tracker provides the storage layer used by ConditionEngine.
+
+    Conditions may access nodes through:
+
+        node_get(path)
+
+    and modify nodes through:
+
+        me_set(property, value)
+
+
+    Example:
+
+        node_get('Settings[Show[value]]')
+
+        me_set('meta[hidden]', True)
+
+
+    Condition metadata is stored inside:
+
+        node["meta"]["conditions"]
+
+    and evaluated externally by ConditionEngine.
+
+    ----------------------------------------------------------------------
+    Design Notes
+    ----------------------------------------------------------------------
+
+    TreeStructTracker intentionally contains no knowledge of:
+
+        - Qt widgets
+        - models/delegates
+        - rendering
+        - layouts
+
+    It is a pure data model layer.
+
+    Any frontend can consume the canonical structure:
+        - QTreeView
+        - QTableView
+        - JSON serializer
+        - configuration editor
+        - command line tools
+
 """
+
 class TreeStructTracker(QtCore.QObject):
     """
     TreeStructTracker
@@ -224,6 +487,95 @@ class TreeStructTracker(QtCore.QObject):
 
     move_node(source_track, dest_track)
         Moves a node from one branch to another.
+    ----------------------------------------------------------------------
+    Additional Public API
+    ----------------------------------------------------------------------
+
+    ensure_path(track)
+        Ensures that all branches required by a track exist.
+
+        Missing intermediate nodes are created using canonical branch rules.
+        Existing nodes are preserved.
+
+        This is used when dynamically building structures from external data
+        such as JSON configurations.
+
+
+    set_or_create_value(track, value, subtype='')
+        Sets a value if the node exists.
+
+        If the path does not exist, creates the required structure first.
+
+        Unlike set_value(), this method is allowed to modify the tree layout.
+
+
+    set_or_create_property(track, property_name, value)
+        Sets a node property.
+
+        If the target node does not exist, the required branches are created.
+
+        Useful for adding metadata or dynamic fields after a structure has
+        already been generated.
+
+
+    add_property_to_all_nodes(node, property_name, value)
+        Recursively adds a property to every node below the supplied node.
+
+        Used for global structure modifications such as:
+            - adding metadata
+            - applying temporary flags
+            - preparing nodes for processing
+
+
+    remove_property_from_all_nodes(node, property_name)
+        Recursively removes a property from every node below the supplied node.
+
+        Useful for clearing temporary processing fields, for example:
+            - condition evaluation markers
+            - UI-only metadata
+
+
+    copy_node(source_track, destination_track)
+        Copies a node and inserts the copy at the destination.
+
+        The original node remains unchanged.
+
+
+    merge(structure)
+        Merges another canonical structure into the current structure.
+
+        Existing compatible nodes are updated while preserving canonical rules.
+
+
+    diff(structure)
+        Compares another structure against the current structure.
+
+        Returns dictionary of differences between structures.
+
+
+    collapse_at(track)
+        Converts a branch representation into a simplified form when possible.
+
+
+    collapse_branches()
+        Simplifies redundant branch structures throughout the tree.
+
+
+    get_struct_item_depth(track)
+        Returns the depth of a track in the hierarchy.
+
+
+    get_root()
+        Returns the current canonical root structure.
+    
+    validate_node() 
+        Returns a structural description of the node at the given track 
+        is also used as a defensive layer.
+        
+        The tracker accepts multiple canonical representations and attempts to
+        resolve invalid or incomplete structures without raising exceptions.
+        Validation provides enough information for higher-level systems
+        (ConditionEngine, editors, serializers) to make decisions safely.
 
     ----------------------------------------------------------------------
     Signals

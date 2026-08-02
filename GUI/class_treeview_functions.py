@@ -17,7 +17,7 @@ try:
     log = LM.get_logger_with_handler(tv_fun_name,
                                      "debug",
                                      True,
-                                     "%(asctime)s [%(levelname)s] (%(name)s) %(message)s", propagate = True)
+                                     "%(asctime)s [%(levelname)s] (%(name)s) %(message)s")
     log.info(f"{tv_fun_name} Logger started")
 except (AttributeError, ImportError):
     # set up logging to file - see previous section for more details

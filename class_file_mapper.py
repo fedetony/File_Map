@@ -40,7 +40,7 @@ MAP_TYPES_LIST=["Device Map","Selection Map","Backup Map","Remove","Keep","Sorte
 class FileMapper:
     """Class for Mapping functions in a specific database"""
 
-    def __init__(self, db_filepath, key_filepath, password):
+    def __init__(self, db_filepath, key_filepath, password, log_print=True):
         self.password = password
         self.db_path_file = db_filepath
         self.db_file = FileManipulate.extract_filename(db_filepath, True)
@@ -60,17 +60,19 @@ class FileMapper:
         # connect
         self.db.create_connection()
         self.active_devices = []
+        self.device_monitor = DeviceMonitor(log_print=log_print)
         self.look_for_active_devices()
         self.mapper_reference_table = "__File_Mapper_Reference__"
 
-    def look_for_active_devices(self):
+    def look_for_active_devices(self,log_print=True):
         """Looks for devices mounted sets the device, serial list to active_devices"""
-        md = DeviceMonitor(log_print=True)
-        for _, serial in md.devices:
+        self.device_monitor.refresh(log_print)            
+        for _, serial in self.device_monitor.devices:
             if not serial or serial == 'None':
-                md.check_none_devices()
-        self.active_devices = md.devices
-        print(f"Found devices: {self.active_devices}")
+                self.device_monitor.check_none_devices()
+        self.active_devices = self.device_monitor.devices
+        if log_print:
+            print(f"Found devices: {self.active_devices}")
 
     @staticmethod
     def start_db(db_path_file, key_filepath, password=None):
@@ -241,6 +243,7 @@ class FileMapper:
         Returns:
             tuple: (mount, serial)
         """
+        return self.device_monitor.find_mount_serial_of_path(path)
         # find mounting point
         mount = ""
         serial = ""

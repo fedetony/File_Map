@@ -13,14 +13,18 @@ from PyQt6.QtWidgets import (
     QTextEdit,
 )
 
+from class_icons import Icons
+from controllers.class_filemap_cli_manager import FileMapCliManager
+from widgets.ask_confirmation_dialog import ConfirmationDialog
+# from class_table_widget_functions import TableWidgetFunctions
 
 class DevicesPage(QWidget):
 
-    def __init__(self,fmap, parent=None):
+    def __init__(self,fmap: FileMapCliManager, parent=None):
         super().__init__(parent)
-        self.fmap=fmap
+        self.fmap = fmap
+        self.dev_m = self.fmap.device_monitor
         self.create_ui()
-
 
     # --------------------------------------------------
     # UI
@@ -30,11 +34,7 @@ class DevicesPage(QWidget):
 
         layout = QVBoxLayout(self)
 
-
-        title = QLabel(
-            "Devices"
-        )
-        
+        title = QLabel("Devices")
         title.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Preferred,
             QtWidgets.QSizePolicy.Policy.Fixed
@@ -45,51 +45,25 @@ class DevicesPage(QWidget):
             font-weight:bold;
             """
         )
-
-        layout.addWidget(
-            title
-        )
-
+        layout.addWidget(title)
 
         toolbar = QHBoxLayout()
+        self.scan_button = QPushButton("Rescan Devices")
 
-
-        self.scan_button = QPushButton(
-            "Rescan Devices"
-        )
-
-
-        toolbar.addWidget(
-            self.scan_button
-        )
-
+        toolbar.addWidget(self.scan_button)
         toolbar.addStretch()
 
-
-        layout.addLayout(
-            toolbar
-        )
-
+        layout.addLayout(toolbar)
 
         splitter = QSplitter()
 
-
         # Device list
+        devices_group = QGroupBox("Detected Devices")
 
-        devices_group = QGroupBox(
-            "Detected Devices"
-        )
-
-        devices_layout = QVBoxLayout(
-            devices_group
-        )
-
+        devices_layout = QVBoxLayout(devices_group)
 
         self.device_table = QTableWidget()
-
-        self.device_table.setColumnCount(
-            5
-        )
+        self.device_table.setColumnCount(5)
 
         self.device_table.setHorizontalHeaderLabels(
             [
@@ -101,66 +75,25 @@ class DevicesPage(QWidget):
             ]
         )
 
-
-        devices_layout.addWidget(
-            self.device_table
-        )
-
+        devices_layout.addWidget(self.device_table)
 
         # Details
-
-        details_group = QGroupBox(
-            "Device Information"
-        )
-
-        details_layout = QVBoxLayout(
-            details_group
-        )
-
-
+        details_group = QGroupBox("Device Information")
+        details_layout = QVBoxLayout(details_group)
         self.details = QTextEdit()
+        self.details.setReadOnly(True)
+        self.details.setText("Select a device...")
 
-        self.details.setReadOnly(
-            True
-        )
-
-        self.details.setText(
-            "Select a device..."
-        )
+        details_layout.addWidget(self.details)
+        splitter.addWidget(devices_group)
+        splitter.addWidget(details_group)
 
 
-        details_layout.addWidget(
-            self.details
-        )
-
-
-        splitter.addWidget(
-            devices_group
-        )
-
-        splitter.addWidget(
-            details_group
-        )
-
-
-        splitter.setStretchFactor(
-            0,
-            3
-        )
-
-        splitter.setStretchFactor(
-            1,
-            1
-        )
-
-
-        layout.addWidget(
-            splitter
-        )
-
+        splitter.setStretchFactor(0,3)
+        splitter.setStretchFactor(1,1)
+        layout.addWidget(splitter)
 
         self.load_demo()
-
 
     # --------------------------------------------------
     # Demo
@@ -200,12 +133,8 @@ class DevicesPage(QWidget):
         self.device_table.setRowCount(
             len(devices)
         )
-
-
         for row, data in enumerate(devices):
-
             for col, value in enumerate(data):
-
                 self.device_table.setItem(
                     row,
                     col,
@@ -218,10 +147,8 @@ class DevicesPage(QWidget):
     # --------------------------------------------------
 
     def activate(self):
-
         pass
 
 
     def deactivate(self):
-
         pass

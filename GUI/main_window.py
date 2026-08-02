@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
     QMenuBar,
     QLabel,
     QVBoxLayout,
+    QTreeView,
 )
 # gui/
 #     main_window.py
@@ -44,7 +45,8 @@ from pages.settings_page import SettingsPage
 from pages.about_page import AboutPage
 
 # -------- Widgets --------
-from widgets.navigation_tree import NavigationTree
+#from widgets.navigation_tree import NavigationTree
+from widgets.class_navigation_tree import NavigationMenu
 from widgets.status_widget import StatusWidget
 from widgets.logger_dock import LoggerDock
 
@@ -92,7 +94,7 @@ class MainWindow(QMainWindow):
         self.create_statusbar()
         self.create_menubar()
 
-        self.nav.pageSelected.connect(self.change_page)
+        self.nav_menu.pageSelected.connect(self.change_page)
         self.pages["Home"].openPage.connect(self.change_page)
 
         self.change_page("Home")
@@ -130,10 +132,12 @@ class MainWindow(QMainWindow):
     # --------------------------------------------------
 
     def create_navigation(self):
-        self.nav = NavigationTree()
+        # self.nav = NavigationTree()
+        self.nav_tv_obj = QTreeView()
+        self.nav_menu = NavigationMenu(self.nav_tv_obj,None)
         self.navDock = QDockWidget("Navigation")
         self.navDock.setObjectName("Navigation")
-        self.navDock.setWidget(self.nav)
+        self.navDock.setWidget(self.nav_tv_obj)
         self.navDock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea)
 
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.navDock)

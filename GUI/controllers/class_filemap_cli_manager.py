@@ -6,9 +6,10 @@ from contextlib import redirect_stdout
 from controllers.class_configuration_manager import ConfigurationManager
 from controllers.class_database_manager import DatabaseManager
 
-from class_file_manipulate import FileManipulate
+from class_device_monitor import *
 from class_autocomplete_input import *
 from class_backup_actions import *
+from class_file_mapper import *
 from widgets.ask_confirmation_dialog import *
 from controllers.class_database_manager import *
 
@@ -48,6 +49,7 @@ class FileMapCliManager:
                 if activate:
                     self.cma.activate_databases(name)
             self.set_active_databases_in_dbm()
+            self.device_monitor = DeviceMonitor(log_print=True)
 
     def save_db_in_config(self, db_id_list, user=True):
         """
