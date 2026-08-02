@@ -46,7 +46,7 @@ from pages.about_page import AboutPage
 
 # -------- Widgets --------
 #from widgets.navigation_tree import NavigationTree
-from widgets.class_navigation_tree import NavigationMenu
+from GUI.widgets.class_navigation_menu import NavigationMenu
 from widgets.status_widget import StatusWidget
 from widgets.logger_dock import LoggerDock
 
