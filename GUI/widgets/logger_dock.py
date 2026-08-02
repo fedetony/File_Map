@@ -11,7 +11,7 @@ from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QFont
 from collections import deque
 from datetime import datetime
-from class_text_renderer import TextRenderer
+from functional.class_text_renderer import TextRenderer
 
 
 class LoggerDock(QDockWidget):

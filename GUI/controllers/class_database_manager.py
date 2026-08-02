@@ -9,7 +9,7 @@ from widgets.database_auth_dialog import DatabaseAuthDialog
 from class_file_manipulate import FileManipulate
 FM = FileManipulate()
 
-from class_LogHandler import LM
+from functional.class_LogHandler import LM
 log=LM.get_logger_with_handler("DBManager","debug",True,None)
 
 class DatabaseManager:

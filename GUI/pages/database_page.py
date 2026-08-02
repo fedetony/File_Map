@@ -16,12 +16,12 @@ from PyQt6.QtWidgets import (
     QMenu,
 
 )
-from class_icons import Icons
+from functional.class_icons import Icons
 from controllers.class_database_manager import *
 from controllers.class_filemap_cli_manager import FileMapCliManager
 from widgets.ask_db_authentication_dialog import DatabaseAuthTypeDialog
 from widgets.ask_confirmation_dialog import ConfirmationDialog
-from class_table_widget_functions import TableWidgetFunctions
+from functional.class_table_widget_functions import TableWidgetFunctions
 
 class DatabasePage(QWidget):
 

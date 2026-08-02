@@ -13,7 +13,7 @@ import re
 tv_fun_name = "Treeview Functions"
 # Add logger
 try:
-    from class_LogHandler import get_appPath, LM
+    from functional.class_LogHandler import get_appPath, LM
     log = LM.get_logger_with_handler(tv_fun_name,
                                      "debug",
                                      True,
@@ -38,7 +38,7 @@ except (AttributeError, ImportError):
 
 from typing import Dict, Any, List, Optional
 from typing import Any, Dict, List, Tuple, Optional
-import class_struct_tracker
+from functional.class_struct_tracker import *
 
 USER_ROLE = int(QtCore.Qt.ItemDataRole.UserRole)
 # Architectural Notes:
@@ -115,7 +115,7 @@ class TreeviewFunctions(QtWidgets.QWidget):
         self.expansion_depth = 1
         QtCore.QTimer.singleShot(0, lambda: self.expand_to_depth_manual(self.expansion_depth))  
         #Set tracker
-        self.tracker = class_struct_tracker.TreeStructTracker(self.main_struct)
+        self.tracker = TreeStructTracker(self.main_struct)
         self.tracker.data_changed.connect(self._signal_data_change)
         self._add_missing_fields_to_main_struct()
 
@@ -1453,7 +1453,7 @@ class TreeviewFunctions(QtWidgets.QWidget):
             do_refresh = True
         else:
             # Temporary tracker for external structures
-            tracker = class_struct_tracker.TreeStructTracker(dict_struct)
+            tracker = TreeStructTracker(dict_struct)
             if  emitsignal:
                 tracker.data_changed.connect(self._signal_data_change)
             do_refresh = False
@@ -1921,7 +1921,7 @@ class TreeviewFunctions(QtWidgets.QWidget):
         Returns:
             Any: The resolved value, or None if the path cannot be navigated.
         """
-        tracker = class_struct_tracker.TreeStructTracker(any_struct)
+        tracker = TreeStructTracker(any_struct)
         return tracker.get_value(track)
 
     def get_dict_max_depth(self, adict, depth: int = 0) -> int:
@@ -1929,7 +1929,7 @@ class TreeviewFunctions(QtWidgets.QWidget):
         Compute the maximum depth of real items in the canonical structure.
         Uses the tracker's depth logic, which ignores meta and children wrappers.
         """
-        tracker = class_struct_tracker.TreeStructTracker(adict)
+        tracker = TreeStructTracker(adict)
         return tracker.get_struct_item_depth(tracker.struct, depth)
     
     def get_depth_from_paths(self):

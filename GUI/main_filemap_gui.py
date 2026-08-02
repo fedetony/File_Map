@@ -1,13 +1,11 @@
 import os,sys
-from PyQt6.QtCore import Qt
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, parent_dir)
-import yaml
 
 #Configure logger before importing classes (so they become child loggers)
-import class_LogHandler
+from functional.class_LogHandler import *
 log_file = None # do stream handler
-LM = class_LogHandler.init_logger_manager(log_file,emit_record = True)
+LM = init_logger_manager(log_file,emit_record = True)
 log = LM.get_logger(__name__)
 log.info("Application starting...")
 

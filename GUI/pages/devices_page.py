@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QTextEdit,
 )
 
-from class_icons import Icons
+from functional.class_icons import Icons
 from controllers.class_filemap_cli_manager import FileMapCliManager
 from widgets.ask_confirmation_dialog import ConfirmationDialog
 # from class_table_widget_functions import TableWidgetFunctions

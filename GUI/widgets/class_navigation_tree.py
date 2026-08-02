@@ -2,9 +2,9 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import *
 
-import class_treeview_functions
-import class_struct_conditioner
-from class_struct_tracker import TreeStructTracker
+from functional.class_treeview_functions import *
+from functional.class_struct_conditioner import *
+from functional.class_struct_tracker import TreeStructTracker
 
 
 FIELDS_POSITION=[
@@ -59,15 +59,15 @@ class NavigationMenu(QtCore.QObject):
         Sets up treeview behavior, connects edit signals, evaluates conditions, and refreshes the UI.
         """
         self._do_evaluation=False
-        self.nav_tv=class_treeview_functions.TreeviewFunctions(self.nav_tv_obj,self.nav_struct,FIELDS_POSITION)
+        self.nav_tv=TreeviewFunctions(self.nav_tv_obj,self.nav_struct,FIELDS_POSITION)
         # attach delegate to VALUE column (1)
-        delegate = class_treeview_functions.TypedItemDelegate(self.nav_tv)
+        delegate = TypedItemDelegate(self.nav_tv)
         self.nav_tv_obj.setItemDelegateForColumn(1, delegate)
         self.nav_tv.data_change[list,object,str,str].connect(self.on_tree_item_edited)
         self.nav_tv.struct_data_change[list,object,str,str].connect(self.on_struct_item_edited)
         #self.nav_tv.expand_to_depth(1) #333) #Expand all
         # Condition Engine
-        self.nav_ce=class_struct_conditioner.ConditionEngine(self.nav_tv.tracker)
+        self.nav_ce=ConditionEngine(self.nav_tv.tracker)
         self._evaluate_conditions()
         self.nav_tv.item_clicked.connect(self.item_clicked)
         

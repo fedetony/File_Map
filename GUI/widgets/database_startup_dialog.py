@@ -15,11 +15,11 @@ from PyQt6.QtWidgets import (
     QFileDialog,
     QGroupBox,
 )
-from class_icons import *
+from functional.class_icons import *
 from controllers.class_database_manager import DatabaseManager, DatabaseInfo
 from controllers.class_configuration_manager import ConfigurationManager
 
-from class_LogHandler import LM
+from functional.class_LogHandler import LM
 log=LM.get_logger_with_handler("DBStartup","debug",True,None)
 
 class DatabaseStartupDialog(QDialog):

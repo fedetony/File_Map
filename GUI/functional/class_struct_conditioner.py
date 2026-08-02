@@ -8,9 +8,9 @@ import copy
 from PyQt6 import QtCore
 import deepdiff
 
-from class_struct_tracker import TreeStructTracker
+from functional.class_struct_tracker import TreeStructTracker
 
-from class_LogHandler import LM
+from functional.class_LogHandler import LM
 log=LM.get_logger_with_handler("ConditionEngine","debug",True,None)
 
 class ConditionEngine:

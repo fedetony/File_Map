@@ -54,9 +54,9 @@ from controllers.class_configuration_manager import ConfigurationManager
 from controllers.class_database_manager import DatabaseManager
 from controllers.class_filemap_cli_manager import FileMapCliManager
 # icons
-from class_icons import Icons
+from functional.class_icons import Icons
 # looger
-from class_LogHandler import LM
+from functional.class_LogHandler import LM
 log=LM.get_logger_with_handler("MainWindow","debug",True,None)
 log.info("Main Window Logger started")
 

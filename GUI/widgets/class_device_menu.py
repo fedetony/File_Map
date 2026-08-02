@@ -1,12 +1,12 @@
 from PyQt6 import QtCore, QtGui, QtWidgets 
 from PyQt6.QtWidgets import *
 
-import class_treeview_functions
-import class_struct_conditioner
-from class_struct_tracker import TreeStructTracker
+from functional.class_treeview_functions import *
+from functional.class_struct_conditioner import *
+from functional.class_struct_tracker import TreeStructTracker
 from controllers.class_filemap_cli_manager import *
 
-from class_LogHandler import LM
+from functional.class_LogHandler import LM
 log=LM.get_logger_with_handler("DeviceMenuTree","debug",True,None)
 
 
@@ -47,15 +47,15 @@ class DeviceMenu(QtCore.QObject):
         Sets up treeview behavior, connects edit signals, evaluates conditions, and refreshes the UI.
         """
         self._do_evaluation=False
-        self.dev_tv=class_treeview_functions.TreeviewFunctions(self.dev_tv_obj,self.dev_struct,FIELDS_POSITION)
+        self.dev_tv=TreeviewFunctions(self.dev_tv_obj,self.dev_struct,FIELDS_POSITION)
         # attach delegate to VALUE column (1)
-        delegate = class_treeview_functions.TypedItemDelegate(self.dev_tv)
+        delegate = TypedItemDelegate(self.dev_tv)
         self.dev_tv_obj.setItemDelegateForColumn(1, delegate)
         self.dev_tv.data_change[list,object,str,str].connect(self.on_tree_item_edited)
         self.dev_tv.struct_data_change[list,object,str,str].connect(self.on_struct_item_edited)
         #self.dev_tv.expand_to_depth(1) #333) #Expand all
         # Condition Engine
-        self.dev_ce=class_struct_conditioner.ConditionEngine(self.dev_tv.tracker)
+        self.dev_ce=ConditionEngine(self.dev_tv.tracker)
         self._evaluate_conditions()
         
         # Add cache tooltip, icons, backgrounds, styles

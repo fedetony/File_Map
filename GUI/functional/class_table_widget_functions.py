@@ -7,12 +7,12 @@ import logging
 import re
 from PyQt6 import QtCore, QtWidgets, QtGui
 
-import class_check_restrictions
+from functional.class_check_restrictions import *
 
 tw_fun_name = "Tablewidget Functions"
 # Add logger
 try:
-    from class_LogHandler import get_appPath, LM
+    from functional.class_LogHandler import get_appPath, LM
     log = LM.get_logger_with_handler(tw_fun_name,
                                      "debug",
                                      True,
@@ -137,7 +137,7 @@ class TableWidgetFunctions(QtWidgets.QWidget):
         else:
             self.reference_track = []
         # Set restriction checker
-        self.check_restrictions = class_check_restrictions.CheckRestrictions()
+        self.check_restrictions = CheckRestrictions()
         # displayed on tableWidget
         self.show_dict = {}
         self.set_show_dict()

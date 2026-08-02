@@ -2,7 +2,7 @@
 
 from PyQt6 import QtCore, QtGui, QtWidgets
 
-from class_db_tree_viewer import DBTreeView, DBTreeNode
+from functional.class_db_tree_viewer import DBTreeView, DBTreeNode
 from class_backup_actions import BackupActions
 
 
