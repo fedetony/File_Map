@@ -291,6 +291,8 @@ class Icons:
         "home": ":/icons/Ahmadhania-Spherical-Home.128.png",
         "pin": ":/icons/Ahmadhania-Spherical-Pin.128.png",
         "details": ":/icons/Ahmadhania-Spherical-Target.128.png",
+
+        "mapping":":/icons/Ahmadhania-Spherical-Sitemap.128.png",
         
     }
 

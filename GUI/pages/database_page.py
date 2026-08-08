@@ -1,5 +1,5 @@
 # database_page.py
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6 import QtGui, QtCore, QtWidgets
 from PyQt6.QtWidgets import (
     QWidget,
@@ -22,8 +22,11 @@ from controllers.class_filemap_cli_manager import FileMapCliManager
 from widgets.ask_db_authentication_dialog import DatabaseAuthTypeDialog
 from widgets.ask_confirmation_dialog import ConfirmationDialog
 from functional.class_table_widget_functions import TableWidgetFunctions
+from functional.class_ST import SignalTracker
 
 class DatabasePage(QWidget):
+
+    databasesActivationChange = pyqtSignal(bool)
 
     def __init__(self, filemapcli:FileMapCliManager,parent=None ):
         super().__init__(parent)
@@ -295,13 +298,13 @@ class DatabasePage(QWidget):
             act = self._add_action_to_menu(
                 f"AutoLoad OFF {autoload}",True, self.icons.icon("folder not ok"))
             act.triggered.connect(
-                lambda: self.__set_autoload(autoload, False))
+                lambda: self._set_autoload(autoload, False))
 
         if not_autoload:
             act = self._add_action_to_menu(
                 f"AutoLoad ON {not_autoload}",True, self.icons.icon("folder ok"))
             act.triggered.connect(
-                lambda: self.__set_autoload(not_autoload, True))
+                lambda: self._set_autoload(not_autoload, True))
 
         self.item_menu.addSeparator()
     
@@ -514,20 +517,22 @@ class DatabasePage(QWidget):
                 self.fmap.add_database(db_filepath, password, keyfile)
         self.refresh_table()
     
-    def __set_name(self,db_id,new_name:str):
+    def _set_name(self,db_id,new_name:str):
         self.fmap.set_db_name(db_id, new_name)
         self.refresh_table()
 
-    def __set_autoload(self, autoload_list, set_auto:bool):
+    def _set_autoload(self, autoload_list, set_auto:bool):
         self.fmap.set_autoload(autoload_list, set_auto)
         self.refresh_table()
 
     def _activate_databases(self,active_db_list):
         self.fmap.activate_databases(active_db_list)
+        self.databasesActivationChange.emit(True)
         self.refresh_table()
     
     def _deactivate_databases(self,unactive_db_list):
         self.fmap.deactivate_databases(unactive_db_list)
+        self.databasesActivationChange.emit(False)
         self.refresh_table()
 
     def _save_db_in_config(self, a_list, user):    

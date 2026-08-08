@@ -20,6 +20,12 @@ class FileManipulate:
         self.file = None
 
     @staticmethod
+    def normalize_path(path:str)->str:
+        """Normalize path
+        """
+        return os.path.normpath(path)
+
+    @staticmethod
     def path_to_file_structure_dict(path:str,file_tup,set_list:bool=False):
         """Converts a path string in filepath of a map into a file structure dictionary
 

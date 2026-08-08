@@ -1,6 +1,7 @@
 # FileMap Cli Manager
 import io
 import logging
+from typing import Callable, Any
 from contextlib import redirect_stdout
 
 from controllers.class_configuration_manager import ConfigurationManager
@@ -33,6 +34,8 @@ class FileMapCliManager:
         """ 
         with redirect_stdout(LoggerWriter(log)):    
             # Get Filemap's inputs
+            self.gui_db_map_size_cache = {} # "db":{"map":size | None }
+            self._updating_databases=False
             self.cfg = conf_manager
             self.dbm = dbm
             (self.file_list, self.password_list, 
@@ -50,6 +53,11 @@ class FileMapCliManager:
                     self.cma.activate_databases(name)
             self.set_active_databases_in_dbm()
             self.device_monitor = DeviceMonitor(log_print=True)
+            
+    
+    # -------------------------------------------------------
+    # Databases Actions
+    # -------------------------------------------------------
 
     def save_db_in_config(self, db_id_list, user=True):
         """
@@ -107,6 +115,7 @@ class FileMapCliManager:
         """
         Activate the selected databases in FileMap and update their active state.
         """
+        self._updating_databases = True
         activation_list=[]
         the_dbs=self._get_db_list_from_id_list(db_id_list)
         for db in the_dbs:
@@ -121,11 +130,13 @@ class FileMapCliManager:
         for dbfname in activation_list:
             self.cma.activate_databases(dbfname)
         self.set_active_databases_in_dbm()
+        self._updating_databases = False
     
     def deactivate_databases(self,db_id_list):
         """
         Deactivate the selected databases in FileMap and update their active state.
         """
+        self._updating_databases = True
         deactivation_list=[]
         the_dbs=self._get_db_list_from_id_list(db_id_list)
         for db in the_dbs:
@@ -134,6 +145,7 @@ class FileMapCliManager:
         for dbfname in deactivation_list:
             self.cma.deactivate_databases(dbfname)
         self.set_active_databases_in_dbm()
+        self._updating_databases = False
     
     def get_authentication_list(self,db_id_list:list[str])->list[tuple]:
         """
@@ -154,6 +166,7 @@ class FileMapCliManager:
         """
         Remove the selected databases from FileMap and the DatabaseManager.
         """
+        self._updating_databases = True
         removal_list=[]
         the_dbs=self._get_db_list_from_id_list(db_id_list)
         for db in the_dbs:
@@ -166,11 +179,13 @@ class FileMapCliManager:
         for db in the_dbs:
             self.dbm.remove_database(db)
         self.set_active_databases_in_dbm()
+        self._updating_databases = False
     
     def add_database(self,file_path,a_pwd=None,keyfile=None,activate=False):
         """
         Create a DatabaseInfo entry and register it with FileMap.
         """
+        self._updating_databases = True
         # Add to database manager
         file_we=FM.extract_filename(file_path,with_extension=True)
         file_woe=FM.extract_filename(file_path,with_extension=False)
@@ -200,6 +215,7 @@ class FileMapCliManager:
             self.cma.activate_databases(file_path)
 
         self.set_active_databases_in_dbm()
+        self._updating_databases = False
 
     def get_autoload_db_id_list(self,db_id_list):
         """
@@ -274,7 +290,150 @@ class FileMapCliManager:
                     db.active=True
                 else:
                     db.active=False
+        self.refresh_map_size_cache()
+        
+    def get_active_databases_in_dbm(self)->list[DatabaseInfo]:
+        return self.dbm.databases
+    
+    # -------------------------------------------------------
+    # Mapping Actions
+    # -------------------------------------------------------
 
+    def map_validation(self,name)->bool:
+        """Validates map
+        """
+        not_allowed = '"/'+"'|><={}[]()" #r'[":$\/\{\}\[\]\|\& \]'
+        for char in name:
+            if char in not_allowed:
+                log.warning(f'Map name does not allow these characters "{str(not_allowed)}".') 
+                return False
+        for a_db in self.cma.active_databases:
+            if not self.cma.validate_new_map(name,a_db['file']):
+                log.warning(f'Map "{name}" already exists. Please enter a non existing map name')
+                return False
+        return True
+    
+    def is_map_in_db(self,database:str,map_name)->bool:
+        if not map_name:
+            return False
+        if map_name in self.cma.get_maps_in_db(str(database)):   
+            return True
+        return False
+    
+    def get_maps_in_db(self,database:str)->list:
+        return self.cma.get_maps_in_db(str(database))
+    
+    def get_all_maps_info_dict_in_db(self,database:str)->list:
+        info_list=[]
+        database=str(database)
+        for a_map in self.get_maps_in_db(database):
+            info_dict=self.cma.get_map_info_dict(database,a_map)
+            info_list.append(info_dict)
+        return info_list
+            
+    def create_new_map(self,database,
+                        table_name: str,
+                        path_to_map: str,
+                        log_print: bool = True,
+                        progress_bar: Callable | None = None,
+                        shallow_map: bool = False,
+                        press_to_continue: bool = False
+                        ):
+        """Create a new New map"""
+        selected_db=database
+        if not selected_db:    
+            return False
+        # path_to_map=path_to_map.replace('//','/')
+        path_to_map=FM.normalize_path(path_to_map)
+        if self.map_validation(table_name):
+            table_name=self.cma.format_new_table_name(table_name,path_to_map)
+            fm=self.cma.get_file_map(selected_db)
+            if table_name not in ['',None]+fm.db.tables_in_db():   
+                fm.db.create_connection()    
+                fm.map_a_path_to_db(table_name=table_name,
+                                    path_to_map=path_to_map,
+                                    log_print=log_print, 
+                                    progress_bar=progress_bar,
+                                    shallow_map=shallow_map,
+                                    press_to_continue=press_to_continue)
+                self.refresh_map_size_cache()
+                return True
+        return False
+    
+    def get_map_info_datamanage(self,a_database)->DataManage:
+        fm=self.cma.get_file_map(a_database)
+        if isinstance(fm,FileMapper):
+            table_list=fm.db.get_data_from_table(fm.mapper_reference_table,'*')
+            table_list_size=[]
+            #field_list=['id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype']
+            field_list=fm.db.get_column_list_of_table(fm.mapper_reference_table)+['mapsize']
+            for table_info in table_list:
+                a_map=table_info[4]
+                size= self.get_map_size(a_database,a_map)
+                #size=fm.db.get_number_or_rows_in_table(a_map)
+                table_list_size.append(table_info+(size,))
+            if len(table_list_size)>0:
+                data_manage=DataManage(table_list_size,field_list)
+                return data_manage
+        return None
+    # -------------------------------------------------------
+    # DB Map Size Cache
+    # -------------------------------------------------------    
+
+    def refresh_map_size_cache(self):
+        """
+        Keeps gui_db_map_size_cache information up to date:
+        set a size to None to recalculate the size
+        gui_db_map_size_cache:
+            {
+            database1: {map1:size1,
+                        map2:size2... },
+            database2: {map1:size1,
+                        map2:size2... }, 
+            ....}
+        """
+        for iii, db in enumerate(self.dbm.databases):
+            if isinstance(db,DatabaseInfo):
+                database=str(db.database_filepath) # pathlib object
+                cache_db=self.gui_db_map_size_cache.get(database)
+                if not isinstance(cache_db,dict):
+                    #add db to cache
+                    self.gui_db_map_size_cache[database]={}
+                    cache_db=self.gui_db_map_size_cache.get(database)
+                if db in self.get_active_databases_in_dbm():
+                    map_list=self.get_maps_in_db(database)
+                    if isinstance(cache_db,dict):
+                        #remove non existing maps from cache
+                        for c_map in list(cache_db.keys()):
+                            if c_map and c_map not in map_list:
+                                cache_db.pop(c_map)
+                        # add or refresh sizes
+                        for a_map in map_list:
+                            if a_map in cache_db:
+                                size_val=cache_db[a_map]
+                                if size_val is None:
+                                    # refresh size
+                                    cache_db[a_map] = self.cma.get_map_size(database,a_map)
+                            else:
+                                cache_db[a_map] = self.cma.get_map_size(database,a_map) 
+                    else:
+                        # add maps and sizes
+                        for a_map in map_list:
+                            cache_db[a_map] = self.cma.get_map_size(database,a_map) 
+                else:
+                    # Remove unactive database from cache
+                    if isinstance(cache_db,dict):
+                        self.gui_db_map_size_cache.pop(database)
+
+
+    def get_map_size(self,database:str,a_map:str):
+        database=str(database)
+        db_cache=self.gui_db_map_size_cache.get(database)
+        size = None
+        if isinstance(db_cache,dict):
+            size=db_cache.get(a_map)
+        return size
+            
 
 
 class LoggerWriter(io.TextIOBase):

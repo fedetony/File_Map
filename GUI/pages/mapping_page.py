@@ -14,15 +14,24 @@ from PyQt6.QtWidgets import (
     QSplitter,
     QGroupBox,
     QTextEdit,
+    QTreeView,
 )
 
+from functional.class_icons import Icons
+from controllers.class_filemap_cli_manager import FileMapCliManager
+from widgets.ask_confirmation_dialog import ConfirmationDialog
+from widgets.class_mapping_menu import MappingMenu
 
 class MappingPage(QWidget):
 
-    def __init__(self, parent=None):
+    def __init__(self, fmap:FileMapCliManager, parent=None):
         super().__init__(parent)
+        
+        self.icons =Icons()
+        self.fmap = fmap
 
         self.create_ui()
+        self.connect_objects()
 
 
     # --------------------------------------------------
@@ -32,19 +41,25 @@ class MappingPage(QWidget):
     def create_ui(self):
 
         layout = QVBoxLayout(self)
-        title = QLabel("Map Explorer / Mapping")
-        title.setSizePolicy(
-            QtWidgets.QSizePolicy.Policy.Preferred,
-            QtWidgets.QSizePolicy.Policy.Fixed
-        )
+        # Header
+        header= QHBoxLayout()
+        icon = QLabel()
+        icon.setPixmap(self.icons.icon("mapping").pixmap(32, 32))
+        title = QLabel("Mapping")
         title.setStyleSheet(
             """
             font-size:24px;
             font-weight:bold;
             """
         )
-        layout.addWidget(title)
-
+        title.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Preferred,
+            QtWidgets.QSizePolicy.Policy.Fixed
+        )
+        header.addWidget(icon)
+        header.addWidget(title)
+        header.addStretch()
+        layout.addLayout(header)
 
         # -----------------------------
         # Search toolbar
@@ -75,25 +90,11 @@ class MappingPage(QWidget):
         maps_group = QGroupBox("Available Maps")
         maps_layout = QVBoxLayout(maps_group)
 
-        self.maps_table = QTableWidget()
+        self.mapping_tv_obj = QTreeView()
+        self.mapping_menu = MappingMenu(self.fmap,self.mapping_tv_obj)
 
-        self.maps_table.setColumnCount(5)
-
-        self.maps_table.setHorizontalHeaderLabels(
-            [
-                "Name",
-                "Files",
-                "Size",
-                "Last Scan",
-                "Active"
-            ]
-        )
-
-        self.maps_table.setSelectionBehavior(self.maps_table.SelectionBehavior.SelectRows)
-        self.maps_table.setSelectionMode(self.maps_table.SelectionMode.ExtendedSelection)
-
-        maps_layout.addWidget(self.maps_table)
-
+        maps_layout.addWidget(self.mapping_tv_obj)
+        
         # Details
         details_group = QGroupBox("Map Details")
 
@@ -133,53 +134,14 @@ class MappingPage(QWidget):
 
         buttons.addStretch()
         layout.addLayout(buttons)
-        self.load_demo()
+    
+    def connect_objects(self):
+        #self.mapping_menu.__signal__.connect(self.change_page)
+        pass
 
-    # --------------------------------------------------
-    # Demo data
-    # --------------------------------------------------
-
-    def load_demo(self):
-        maps = [
-
-            (
-                "Music",
-                "120000",
-                "850 GB",
-                "2025-01-10",
-                "Yes"
-            ),
-
-            (
-                "Photos",
-                "90000",
-                "400 GB",
-                "2025-02-03",
-                "Yes"
-            ),
-
-            (
-                "Backup",
-                "25000",
-                "2 TB",
-                "2024-12-01",
-                "No"
-            ),
-
-        ]
-        self.maps_table.setRowCount(
-            len(maps)
-        )
-
-
-        for row, data in enumerate(maps):
-            for col, value in enumerate(data):
-                self.maps_table.setItem(
-                    row,
-                    col,
-                    QTableWidgetItem(value)
-                )
-
+    def refresh_mapping_struct(self,activate_deactivate:bool=None):
+        self.mapping_menu.generate_mapping_struct()
+        
     # --------------------------------------------------
     # Page lifecycle
     # --------------------------------------------------

@@ -227,6 +227,8 @@ class MappingActions():
             list: list of map's (table names)
         """
         fm=self.get_file_map(database)
+        if not fm:
+            return []
         tables=fm.db.tables_in_db()
         referenced_tables=fm.get_referenced_attribute('tablename')
         # print(referenced_tables)
@@ -363,7 +365,9 @@ class MappingActions():
             int: number of rows
         """
         fm=self.get_file_map(database)
-        return fm.db.get_number_or_rows_in_table(a_map)
+        if fm:
+            return fm.db.get_number_or_rows_in_table(a_map)
+        return -1
 
     def get_map_info(self,database,a_map):
         """returns the map table information

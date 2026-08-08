@@ -89,6 +89,7 @@ class MainWindow(QMainWindow):
 
         self.create_logger()
         self.create_pages()
+        self.connect_pages()
         self.create_central()
         self.create_navigation()
         self.create_statusbar()
@@ -109,12 +110,25 @@ class MainWindow(QMainWindow):
             "Home": HomePage(),
             "Devices": DevicesPage(self.fmap),
             "Databases": DatabasePage(self.fmap),
-            "Mapping": MappingPage(),
+            "Mapping": MappingPage(self.fmap),
             "Map Explorer": MapExplorerPage(),
             "Sort": SortPage(),
             "Settings": SettingsPage(),
             "About": AboutPage(),
         }
+    
+    def connect_pages(self):
+        devicespage = self.pages["Devices"]
+        dbpage=self.pages["Databases"]
+        mappingpage=self.pages["Mapping"]
+        if isinstance(dbpage,DatabasePage):
+            pass 
+        if isinstance(mappingpage,MappingPage):
+            pass
+        if isinstance(devicespage,DevicesPage):
+            pass
+        # When Activating/Deactivating databases refresh Mapping
+        dbpage.databasesActivationChange.connect(mappingpage.refresh_mapping_struct) 
 
     # --------------------------------------------------
     # Central Widget
