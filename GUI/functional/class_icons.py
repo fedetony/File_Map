@@ -293,6 +293,11 @@ class Icons:
         "details": ":/icons/Ahmadhania-Spherical-Target.128.png",
 
         "mapping":":/icons/Ahmadhania-Spherical-Sitemap.128.png",
+        "device map":":/icons/Ahmadhania-Spherical-Time.128.png",
+        "keep map":":/icons/Ahmadhania-Spherical-Ok.128.png",
+        "remove map":":/icons/Ahmadhania-Spherical-Close.128.png",
+        "selection map":":/icons/Ahmadhania-Spherical-Mouse-curser.128.png",
+        "backup map":":/icons/Ahmadhania-Spherical-Palm-print.128.png",
         
     }
 

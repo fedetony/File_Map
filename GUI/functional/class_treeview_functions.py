@@ -59,6 +59,20 @@ class TreeviewFunctions(QtWidgets.QWidget):
     # signal on right click:  index, stored
     item_right_clicked = QtCore.pyqtSignal(QtCore.QModelIndex, dict)  
 
+    roles_map={
+            "DisplayRole":(QtCore.Qt.ItemDataRole.DisplayRole,str), 
+            "ToolTipRole":(QtCore.Qt.ItemDataRole.ToolTipRole,str),
+            "StatusTipRole":(QtCore.Qt.ItemDataRole.StatusTipRole,str),
+            "WhatsThisRole":(QtCore.Qt.ItemDataRole.WhatsThisRole,str),
+            "DecorationRole":(QtCore.Qt.ItemDataRole.DecorationRole,QtGui.QIcon),
+            "ForegroundRole":(QtCore.Qt.ItemDataRole.ForegroundRole,QtGui.QColor),
+            "BackgroundRole":(QtCore.Qt.ItemDataRole.BackgroundRole,QtGui.QColor),
+            "FontRole":(QtCore.Qt.ItemDataRole.FontRole,QtGui.QFont),
+            "TextAlignmentRole":(QtCore.Qt.ItemDataRole.TextAlignmentRole,QtCore.Qt.AlignmentFlag),
+            "CheckStateRole":(QtCore.Qt.ItemDataRole.CheckStateRole,QtCore.Qt.CheckState),
+            "SizeHintRole":(QtCore.Qt.ItemDataRole.SizeHintRole,QtCore.QSize),
+            }
+    
     def __init__(self,
                  treeviewobj: QtWidgets.QTreeView,
                  to_tree_struct: Dict[str, Any],
@@ -95,6 +109,7 @@ class TreeviewFunctions(QtWidgets.QWidget):
         self.style_dict = {}
         self.tooltip_dict = {}
         self.backgroundcolor_dict = {}
+        self.foregroundcolor_dict = {}
         # flags
         self._populating = False
 
@@ -810,16 +825,48 @@ class TreeviewFunctions(QtWidgets.QWidget):
             color = self.backgroundcolor_dict[bg_key]
             brush = QtGui.QBrush(QtGui.QColor(color))
             self._set_role_item_index(model,brush,item,index,QtCore.Qt.ItemDataRole.BackgroundRole)
+        
+        # ---------------------------------------------------------
+        # FOREGROUND via fg_key
+        # ---------------------------------------------------------
+        fg_key = node.get("fg_key")
+        if fg_key and fg_key in self.foregroundcolor_dict:
+            color = self.foregroundcolor_dict[fg_key]
+            brush = QtGui.QBrush(QtGui.QColor(color))
+            self._set_role_item_index(model,brush,item,index,QtCore.Qt.ItemDataRole.ForegroundRole)
             
         # ---------------------------------------------------------
-        # STYLE via style_key (e.g., {"bg": "#ffaa00"})
+        # STYLE via style_key (e.g., {"ForegroundRole": QtGui.QBrush(QtGui.QColor("#ffaa00"))})
         # ---------------------------------------------------------
         style_key = node.get("style_key")
         if style_key and style_key in self.style_dict:
-            style = self.style_dict[style_key]
-            if "bg" in style:
-                brush = QtGui.QBrush(QtGui.QColor(style["bg"]))
-                self._set_role_item_index(model,brush,item,index,QtCore.Qt.ItemDataRole.BackgroundRole)
+            cached_style = self.style_dict[style_key]
+            if isinstance(cached_style, dict):
+                all_styles = [cached_style]
+            elif isinstance(cached_style, list):
+                all_styles = cached_style
+            else:
+                all_styles = []
+
+            for style in all_styles:    
+                if "field" in style:
+                    col = self._get_column_from_fields_name(style["field"])
+                    if col is not None:
+                        idx = index.sibling(index.row(), col)
+                    else:
+                        idx = index    
+                else:
+                    idx = index
+                if "bg" in style:
+                    brush = QtGui.QBrush(QtGui.QColor(style["bg"]))
+                    self._set_role_item_index(model,brush,None,idx,QtCore.Qt.ItemDataRole.BackgroundRole)
+                if "fg" in style:
+                    brush = QtGui.QBrush(QtGui.QColor(style["fg"]))
+                    self._set_role_item_index(model,brush,None,idx,QtCore.Qt.ItemDataRole.ForegroundRole)
+                for role_txt,(role, role_type) in self.roles_map.items():
+                    if role_txt in style:
+                        if isinstance(style[role_txt],role_type):
+                            self._set_role_item_index(model,style[role_txt],None,idx,role)
 
         # ---------------------------------------------------------
         # TOOLTIP via tooltip_key
@@ -906,20 +953,38 @@ class TreeviewFunctions(QtWidgets.QWidget):
     
     def set_style_cache(self, style_dict: Dict[str, Any]):
         """
-        Set the reference cache for styles.
+        Set the reference cache for item styles.
 
-        Styles define visual attributes such as background or foreground colors.
-        Nodes may specify a "style_key" field, and this cache maps that key to
-        a style dictionary, e.g. {"bg": "#cccccc", "fg": "#ff0000"}.
+        Nodes store only a ``style_key``; the cache maps that key to either
+        a style dictionary or a list of style dictionaries. Each style may
+        optionally specify ``field`` to target another column else is applied to column 0.
 
         Example:
-            self.set_style_cache({
-                "gray_red": {"bg": "#cccccc", "fg": "#ff0000"},
-                "highlight": {"bg": "#ffffaa"}
-            })
+            {
+                "Device Map": [
+                    {"field": "MAPTYPE", "ForegroundRole": QtGui.QColor("#3498db")},
+                    {"field": "MAPTYPE", "DecorationRole": device_map_icon},
+                ],
+                "Warning": {"field": "MAPTYPE", "ForegroundRole": QtGui.QColor("#e67e22")},
+            }
+
+        Role -> Type
+        --------------
+            DisplayRole         -> str
+            ToolTipRole         -> str
+            StatusTipRole       -> str
+            WhatsThisRole       -> str
+            DecorationRole      -> QIcon | QPixmap
+            ForegroundRole      -> QColor | QBrush
+            BackgroundRole      -> QColor | QBrush
+            FontRole            -> QFont
+            TextAlignmentRole   -> Qt.AlignmentFlag
+            CheckStateRole      -> Qt.CheckState
+            SizeHintRole        -> QSize
+            UserRole+N          -> anything
 
         Args:
-            style_dict (Dict[str, Any]): Mapping of style_key -> style definition dict.
+            style_dict: Mapping of style_key to a style dict or list of styles.
         """
         self.style_dict = style_dict or {}
         self.do_refresh()
@@ -943,6 +1008,26 @@ class TreeviewFunctions(QtWidgets.QWidget):
         """
         self.backgroundcolor_dict = backgroundcolor_dict or {}
         self.do_refresh()
+    
+    def set_foregroundcolor_cache(self, foregroundcolor_dict: Dict[str, Any]):
+        """
+        Set the reference cache for foreground colors.
+
+        Nodes may specify a "fg_key" field, and this cache maps that key to a
+        color string (e.g. "#ff0000") or a QBrush instance. This is a simpler
+        alternative to style_dict when only background color is needed.
+
+        Example:
+            self.set_backgroundcolor_cache({
+                "error": "#ffcccc",
+                "disabled": "#dddddd"
+            })
+
+        Args:
+            Foregroundcolor_dict (Dict[str, Any]): Mapping of bg_key -> color string or QBrush.
+        """
+        self.foregroundcolor_dict = foregroundcolor_dict or {}
+        self.do_refresh()
 
     def set_icon_to_item(self, itm: QtGui.QStandardItem):
         """Backward-compatible helper: set icon for a single QStandardItem using icon_dict."""
@@ -956,6 +1041,12 @@ class TreeviewFunctions(QtWidgets.QWidget):
         if itm is None:
             return
         self.apply_background(itm)
+    
+    def set_foregroundcolor_to_item(self, itm: QtGui.QStandardItem):
+        """Backward-compatible helper: set foreground for a single QStandardItem using foregroundcolor_dict."""
+        if itm is None:
+            return
+        self.apply_foreground(itm)
 
 
     def set_tooltiptext(self, index: QtCore.QModelIndex):
@@ -1009,7 +1100,7 @@ class TreeviewFunctions(QtWidgets.QWidget):
         if key_item:
             key_item.setEditable(False)
             # Decorate only the key item (icon, style, tooltip, background)
-            self.decorate_item(key_item)
+            self.decorate_item(key_item,True,index)
 
         # If no value column or click is not on value column, nothing more to do
         if not (idx_val and index.column() == idx_val.column() and val_item):
@@ -1056,6 +1147,10 @@ class TreeviewFunctions(QtWidgets.QWidget):
         # self.treeviewobj.setCurrentIndex(idx_val)
         # print("Clicked index (row,col):", idx_val.row(), idx_val.column())
         # self.treeviewobj.edit(idx_val)
+
+    def get_column_from_fields_name(self, name: str) -> int | None:
+        """Return column number in model"""
+        return self._get_column_from_fields_name(name)
 
     def _get_column_from_fields_name(self, name: str) -> int | None:
         """Return column number in model"""
@@ -2019,6 +2114,28 @@ class TreeviewFunctions(QtWidgets.QWidget):
         except AttributeError:
             pass
     
+    def apply_foreground(self, item: QtGui.QStandardItem):
+        """Apply to item an foreground
+
+        Args:
+            item (QtGui.QStandardItem): item
+        """
+        try:
+            stored = item.data(USER_ROLE)
+            if not isinstance(stored, dict):
+                return
+
+            node = stored.get("node", {})
+            if not isinstance(node, dict):
+                return
+            fg_key = node.get("fg_key")
+
+            if fg_key and fg_key in self.backgroundcolor_dict:
+                color = self.foregroundcolor_dict[fg_key]
+                item.setData(QtGui.QBrush(QtGui.QColor(color)), QtCore.Qt.ItemDataRole.ForegroundRole)
+        except AttributeError:
+            pass
+    
     def apply_style(self, item: QtGui.QStandardItem):
         """Apply to item a style
 
@@ -2039,21 +2156,115 @@ class TreeviewFunctions(QtWidgets.QWidget):
                 style = self.style_dict[style_key]
                 if "bg" in style:
                     item.setData(QtGui.QBrush(QtGui.QColor(style["bg"])), QtCore.Qt.ItemDataRole.BackgroundRole)
+                self._get_index_key_for_item
+                # track = self.track_key_tree(item)
+                # index = self.index_from_track(track)
+                for role_txt,(role, role_type) in self.roles_map.items():
+                    if role_txt in style:
+                        if isinstance(style[role_txt],role_type):
+                            self._set_role_item_index(self.modelobj,style[role_txt],item,None,role)
         except AttributeError as eee:
             print("decorate error -> ",eee)
             pass
+
+    def set_role_by_track(self, model: QtCore.QAbstractItemModel, track:list, 
+                          column:int, obj, role: QtCore.Qt.ItemDataRole)->bool:
+        """Sets a role to one or more items in the track
+
+        Args:
+            model (QtCore.QAbstractItemModel): model object
+            track (list): track list
+            column (int): column number to apply
+            obj (any): object of type according to role
+            role (QtCore.Qt.ItemDataRole): 
+            DisplayRole         -> str
+            ToolTipRole         -> str
+            StatusTipRole       -> str
+            WhatsThisRole       -> str
+            DecorationRole      -> QIcon | QPixmap
+            ForegroundRole      -> QColor | QBrush
+            BackgroundRole      -> QColor | QBrush
+            FontRole            -> QFont
+            TextAlignmentRole   -> Qt.AlignmentFlag
+            CheckStateRole      -> Qt.CheckState
+            SizeHintRole        -> QSize
+            UserRole+N          -> anything
+            
+        Returns:
+            bool: True when applied else False
+        """
+        _, _, _, index_list= self.get_item_from_track(model, track)
+
+        if not index_list:
+            return False
+        
+        for index in index_list:
+            idx = index.sibling(index.row(), column)
+            model.setData(idx, obj, role)
+        return True
     
-    def decorate_item(self, item: QtGui.QStandardItem,with_icon=True):
+    def apply_column_styles(self, index: QtCore.QModelIndex, column: int =None):
+        """Set style on a column using an index from the same row.
+
+        Args:
+            index (QtCore.QModelIndex): index of item
+            column (int, optional): column to style. None sets the same column as index column. 
+                Defaults to None.
+        """
+        if column is None:
+            column = index.column()
+        idx = index.sibling(index.row(), column)
+        if not idx.isValid():
+            return
+        key_dict=self._get_index_key_for_item(idx)
+        if not key_dict.get("item") and not key_dict.get("column"):
+            for child_field, child_dict in key_dict.items():
+                if child_dict["column"] == column:
+                    item=child_dict["item"]        
+                    break
+        else:                
+            item=key_dict["item"]
+        stored = item.data(USER_ROLE)
+        if not isinstance(stored, dict):
+            return
+
+        node = stored.get("node", {})
+        if not isinstance(node, dict):
+            return
+        style_key = node.get("style_key")
+        
+        style = None
+        if style_key and style_key in self.style_dict:
+            style = self.style_dict[style_key]
+        if not style:
+            return
+
+        for role_txt, (role, role_type) in self.roles_map.items():
+            if role_txt not in style:
+                continue
+            obj = style[role_txt]
+            if isinstance(obj, role_type):
+                self._set_role_item_index(self.modelobj, obj, None, idx, role)
+
+    def decorate_item(self, item: QtGui.QStandardItem,with_icon=True, 
+                      index: QtCore.QModelIndex = None):
         """Decorate an item sets icon,tooltip, background and style.
 
         Args:
             item (QtGui.QStandardItem): item
+            index (QtCore.QModelIndex) : index contains row,column, parent information. Item is just the ro
         """
+        if item is None and index is not None:
+            key_dict= self._get_index_key_for_item(index)
+            item = key_dict["item"]
         if with_icon:
             self.apply_icon(item)
         self.apply_tooltip(item)
         self.apply_background(item)
+        self.apply_foreground(item)
         self.apply_style(item)
+        if item  and index is not None:
+            self.apply_column_styles(index,index.column())
     
     
 
