@@ -57,7 +57,7 @@ class TreeviewFunctions(QtWidgets.QWidget):
     # signal on click: item, index, stored
     item_clicked = QtCore.pyqtSignal(QtGui.QStandardItem, QtCore.QModelIndex, dict) 
     # signal on right click:  index, stored
-    item_right_clicked = QtCore.pyqtSignal(QtCore.QModelIndex, dict)  
+    item_right_clicked = QtCore.pyqtSignal(QtCore.QModelIndex, dict, QtCore.QPoint)  
 
     roles_map={
             "DisplayRole":(QtCore.Qt.ItemDataRole.DisplayRole,str), 
@@ -565,7 +565,7 @@ class TreeviewFunctions(QtWidgets.QWidget):
         # optionally extract the stored node info (USER_ROLE)
         stored = src_idx.data(USER_ROLE)
         # emit the source index or the stored data for the main to build the menu
-        self.item_right_clicked.emit(src_idx,stored)
+        self.item_right_clicked.emit(src_idx,stored,pos)
 
     def treeview_fit_to_contents(self, index: QtCore.QModelIndex):
         """Optional: handle expand/collapse events (placeholder)."""

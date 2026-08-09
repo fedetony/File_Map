@@ -17,7 +17,7 @@ import keyboard
 
 import concurrent.futures
 from rich import print  # pylint: disable=redefined-builtin
-from rich.progress import Progress
+from class_map_progress import MapProgress, RichMapProgress
 
 from class_file_structurer import FileStructurer
 from class_sqlite_database import SQLiteDatabase
@@ -393,7 +393,7 @@ class FileMapper:
         print(f'Time elapsed: {self.calculate_time_elapsed(start,datetime.now())} s')
         return {mappath: map_list}
     
-    def map_to_file_structure_concurrent(self, df) -> list:
+    def map_to_file_structure_concurrent(self, df, prograss_callable=None) -> list:
         """
         Generates a folder-only file structure from map information.
 
@@ -421,8 +421,10 @@ class FileMapper:
                         if new_key not in result_dict:
                             result_dict[new_key] = []
                         self.map_to_file_structure_concurrent(df, df.loc[df["filepath"] == new_key, "filepath"].iloc[0])     
-
-            A_C.print_cycle(int(an_id),df_length)
+            if not prograss_callable:
+                A_C.print_cycle(int(an_id),df_length)
+            else:
+                prograss_callable(int(an_id),df_length)
             return [result_dict]
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -436,7 +438,10 @@ class FileMapper:
         merged_list=[]
         df_length=len(map_list)
         for iii,file_list in enumerate(map_list):
-            A_C.print_cycle(iii,df_length)
+            if not prograss_callable:
+                A_C.print_cycle(iii,df_length)
+            else:
+                prograss_callable(iii,df_length)
             merged_list=fi_ma.merge_file_structure_lists(merged_list, file_list)
         return merged_list
     
@@ -647,6 +652,8 @@ class FileMapper:
             Defaults to False.
         """
         db = self.db
+        progress = None
+        line_data_tup=tuple()
         try:
             self.add_table_to_mapper_index(table_name, path_to_map)
             self._create_map_in_db(table_name)
@@ -656,42 +663,70 @@ class FileMapper:
             mount, _ = self.find_mount_serial_of_path(path_to_map)
             start_datetime = datetime.now()
             num_files, num_folders = self.count_files_in_path(path_to_map)
-            with Progress() as progress:
-                exit_key = "ctrl+c"
-                if os.name == "nt":
-                    exit_key = "F12"
-                task1 = progress.add_task(f"[blue]Initial Mapping [red]({exit_key} to Exit)", total=num_files)
-                delta = datetime.now() - start_datetime
-                print(f"Counted: {num_files} files and {num_folders} folders in {delta.total_seconds()} sec")
-                for dirpath, _, filenames in os.walk(path_to_map):
-                    # Get the data for each file
-                    for file in filenames:
-                        line_data_tup = self.get_mapping_info_data_from_file(
-                            mount, dirpath, file, log_print, f"{files_processed}. ", shallow_map
-                        )
-                        data.append(line_data_tup)
-                        iii = iii + 1
-                        if os.name == "nt":
-                            if keyboard.is_pressed("F12"):
-                                return "[red] User Interrupt"
-                        if iii >= DATA_ADVANCE:
-                            if log_print:
-                                delta = datetime.now() - start_datetime
-                                print("+" * 10 + f" Time elapsed: {str(delta).split('.',  maxsplit=1)[0]}" + "+" * 10)
-                            was_inserted = db.insert_data_to_table(table_name, data)
-                            if not was_inserted:
-                                time.sleep(0.333)
-                                if not db.insert_data_to_table(table_name, data):
-                                    raise ValueError(f"Could not insert data in {table_name}")
-                            progress.update(task1, advance=DATA_ADVANCE)
-                            data = []
-                            iii = 0
-                        files_processed = files_processed + 1
-                db.insert_data_to_table(table_name, data)
-                progress.update(task1, completed=num_files)
+            if progress_bar is None:
+                progress_bar = RichMapProgress()
+            if isinstance(progress_bar, MapProgress):
+                progress = progress_bar
+            
+            if progress:
+                progress.start(
+                    num_files,
+                    "[blue]Initial Mapping",
+                )
+            # with Progress() as progress:
+            exit_key = "ctrl+c"
+            if os.name == "nt":
+                exit_key = "F12"
+            #     task1 = progress.add_task(f"[blue]Initial Mapping [red]({exit_key} to Exit)", total=num_files)
+            if progress:
+                progress.update(
+                    current=files_processed,
+                    description=f"[blue]Mapping: [white][red]({exit_key} to Exit)",
+                )
+
+            delta = datetime.now() - start_datetime
+            print(f"Counted: {num_files} files and {num_folders} folders in {delta.total_seconds()} sec")
+            for dirpath, _, filenames in os.walk(path_to_map):
+                # Get the data for each file
+                for file in filenames:
+                    line_data_tup = self.get_mapping_info_data_from_file(
+                        mount, dirpath, file, log_print, f"{files_processed}. ", shallow_map
+                    )
+                    data.append(line_data_tup)
+                    iii = iii + 1
+                    if os.name == "nt":
+                        if keyboard.is_pressed("F12"):
+                            return "[red] User Interrupt"
+                    if iii >= DATA_ADVANCE:
+                        if log_print:
+                            delta = datetime.now() - start_datetime
+                            print("+" * 10 + f" Time elapsed: {str(delta).split('.',  maxsplit=1)[0]}" + "+" * 10)
+                        was_inserted = db.insert_data_to_table(table_name, data)
+                        if not was_inserted:
+                            time.sleep(0.333)
+                            if not db.insert_data_to_table(table_name, data):
+                                raise ValueError(f"Could not insert data in {table_name}")
+                        if progress:
+                            progress.update(
+                                advance=DATA_ADVANCE,
+                                description=f"[blue]Mapping: [white][red]({exit_key} to Exit)",
+                            )
+                        data = []
+                        iii = 0
+                    files_processed = files_processed + 1
+            # insert last batch
+            db.insert_data_to_table(table_name, data)
+            if progress:
+                progress.update(
+                    current=num_files,
+                    description="[green]Shallow Mapping complete")
+            
+            ####################################
             time.sleep(0.333)
             # db.print_all_rows(table_name)
             if not shallow_map:
+                if progress:
+                    progress.stop()
                 self.remap_map_in_thread_to_db(table_name, progress_bar, False)
             if log_print:
                 # time_elapsed = (datetime.now() - start_datetime).total_seconds()
@@ -714,6 +749,9 @@ class FileMapper:
                 print("@" * 100, "\nPress any Key to continue\n", "@" * 100)
                 getch()
             return f"[red]Error Mapping: {eee}"
+        finally:
+            if progress:
+                progress.stop()
         return ''
 
     def map_a_list_of_paths_to_db(
@@ -818,6 +856,23 @@ class FileMapper:
                 getch()
             return f"[red]Error Mapping: {eee}"
         return ''
+    
+    def _progress_update(self, progress_bar, task_id, current=None, description=None, advance=None):
+        if progress_bar is None:
+            return
+
+        kwargs = {}
+
+        if current is not None:
+            kwargs["completed"] = current
+
+        if description is not None:
+            kwargs["description"] = description
+
+        if advance is not None:
+            kwargs["advance"] = advance
+
+        progress_bar.update(task_id, **kwargs)
 
     @staticmethod
     def count_files_in_path(path):
@@ -1568,7 +1623,7 @@ class FileMapper:
             progress.update(task1, completed=total_count)
         return repeat_list
 
-    def combinatorial_compare(self, field_list: list, comp_dict: dict, d_list: list[tuple]) -> tuple[dict]:
+    def combinatorial_compare(self, field_list: list, comp_dict: dict, d_list: list[tuple], progress_callback=None) -> tuple[dict]:
         """Compares all combinations in list.
 
         Args:
@@ -1588,7 +1643,10 @@ class FileMapper:
         while lendlist > 1:
             data1 = d_list.pop(0)
             if total > 100:
-                A_C.print_cycle(iii, total)
+                if not progress_callback:
+                    A_C.print_cycle(iii, total)
+                else:
+                    progress_callback(iii, total)
             for data2 in d_list:
                 if self.compare_data_tuple(comp_dict, data1, data2):
                     if not repeat_node:

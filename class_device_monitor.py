@@ -69,10 +69,10 @@ class DeviceMonitor:
         serial = ""
         longest_match = -1
 
-        if not isinstance(self.active_devices, list):
+        if not isinstance(self.devices, list):
             return mount, serial
 
-        for device_mount, device_serial in self.active_devices:
+        for device_mount, device_serial in self.devices:
 
             if platform.system() == 'Windows':
                 # Windows does not consistently report drive letters with the same case

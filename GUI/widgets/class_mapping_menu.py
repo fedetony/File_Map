@@ -8,6 +8,7 @@ from functional.class_icons import Icons
 from functional.class_struct_tracker import TreeStructTracker
 from controllers.class_filemap_cli_manager import *
 from widgets.class_date_delegate import DateDelegate
+from controllers.mapping_worker_thread import *
 
 from functional.class_LogHandler import LM
 log=LM.get_logger_with_handler("MappingMenuTree","debug",True,None)
@@ -68,6 +69,7 @@ class MappingMenu(QtCore.QObject):
         self.fmap = fmap
         self.map_tv_obj = treeview_obj
         self.icons=Icons()
+        self.worker_manager = WorkerManager()
         self.all_icons_dict={}
         self._set_icons_dict()
         self._set_style_dict()
@@ -168,7 +170,7 @@ class MappingMenu(QtCore.QObject):
         # Right click Menu 
         self.map_tv.treeviewobj.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
         self.map_tv.treeviewobj.customContextMenuRequested.connect(self.map_tv._on_context_menu)
-        #self.map_tv.item_right_clicked.connect(self.on_item_right_clicked)
+        self.map_tv.item_right_clicked.connect(self.on_item_right_clicked)
         
         self.map_tv.do_refresh()
 
@@ -321,6 +323,379 @@ class MappingMenu(QtCore.QObject):
             # add the node
             self.tracker.set_value(track+[key],child_node)
     
+
+    def on_item_right_clicked(self,index:QtCore.QModelIndex, info_dict: dict, pos: QtCore.QPoint):
+        """Right click menu"""
+        self.build_context_menu(index,info_dict,pos)
+        return
+
+        track_field = self.map_tv.track_from_index(index) # property track
+        aprop=track_field[-1]
+        field=str(aprop).upper()
+        # info_dict contains all dictionary ...
+        node = info_dict["node"]
+        track = info_dict["path"] # -> node track
+        val=self.tracker.get_value(track+[field.lower()])
+        log.debug(f"Right clicked -> row,col =({index.row()},{index.column()}), {field} , {track}, {val}")
+        selected_indexes = self.map_tv_obj.selectionModel().selectedIndexes()
+        # 
+        selected=[]
+        for idx in selected_indexes:
+            if idx.column() == index.column():
+                selected.append(idx)
+                log.debug(f"RClick selected -> {idx.row()},{idx.column()},{self.map_tv.track_from_index(idx)}")
+
+        context = {
+            "index": index,
+            "field": field,
+            "property": aprop,
+            "value": val,
+            "track": track,
+            "node": node,
+            "selected": selected,
+        }
+
+    def build_context_menu(self, index: QtCore.QModelIndex, info_dict: dict, pos: QtCore.QPoint):
+        """Build and display the context menu for the selected map(s)."""
+        if not index.isValid():
+            return
+        selection_model = self.map_tv_obj.selectionModel()
+        if selection_model is None:
+            return
+        # ---------------------------------------------------------
+        # Selected rows
+        # ---------------------------------------------------------
+        selected_indexes = selection_model.selectedRows(index.column())
+        selected_maps = []
+        for idx in selected_indexes:
+            stored = idx.data(USER_ROLE)
+            if not isinstance(stored, dict):
+                continue
+
+            selected_maps.append({
+                "index": idx,
+                "node": stored.get("node", {}),
+                "track": stored.get("path", []),
+                "stored": stored,
+            })
+
+        # Make sure the right-clicked item is represented.
+        if not selected_maps:
+            selected_maps.append({
+                "index": index,
+                "node": info_dict.get("node", {}),
+                "track": info_dict.get("path", []),
+                "stored": info_dict,
+            })
+
+        # ---------------------------------------------------------
+        # Context
+        # ---------------------------------------------------------
+        context = {
+            "index": index,
+            "node": info_dict.get("node", {}),
+            "track": info_dict.get("path", []),
+            "stored": info_dict,
+            "field": str(
+                self.map_tv.track_from_index(index)[-1]
+            ).upper(),
+            "selected_maps": selected_maps,
+        }
+
+        # ---------------------------------------------------------
+        # Build menu
+        # ---------------------------------------------------------
+        menu = None
+        count = len(selected_maps)
+        if count == 1:
+            menu = self.build_single_map_menu(
+                selected_maps[0],
+                context
+            )
+        elif count == 2:
+            menu = self.build_two_map_menu(
+                selected_maps,
+                context
+            )
+        elif count > 2:
+            menu = self.build_multi_map_menu(
+                selected_maps,
+                context
+            )
+
+        # ---------------------------------------------------------
+        # Show menu
+        # ---------------------------------------------------------
+        if menu is not None and menu.actions():
+            menu.exec(self.map_tv_obj.viewport().mapToGlobal(pos))
+
+    def build_single_map_menu( self, selected_map: dict, context: dict) -> QtWidgets.QMenu:
+        """Build context menu for a single selected map."""
+
+        menu = QtWidgets.QMenu()
+
+        map_name = selected_map["track"][-1]
+        menu.setTitle(f'Map "{map_name}"')
+
+        # ---------------------------------------------------------
+        # Map operations
+        # ---------------------------------------------------------
+        self._add_action_to_menu(
+            menu,
+            "Rename Map",
+            lambda: self._menu_rename_map(context),
+        )
+
+        self._add_action_to_menu(
+            menu,
+            "Clone Map",
+            lambda: self._menu_clone_map(context),
+        )
+
+        self._add_action_to_menu(
+            menu,
+            "Delete Map",
+            lambda: self._menu_delete_map(context),
+        )
+
+        self._add_action_to_menu(
+            menu,
+            "Update Map",
+            lambda: self._menu_update_map(context),
+        )
+
+        self._add_action_to_menu(
+            menu,
+            "Continue Mapping",
+            lambda: self._menu_continue_mapping(context),
+        )
+
+        menu.addSeparator()
+
+        # ---------------------------------------------------------
+        # Search / analysis
+        # ---------------------------------------------------------
+        self._add_action_to_menu(
+            menu,
+            "Find Duplicates",
+            lambda: self._menu_find_duplicates(context),
+        )
+
+        self._add_action_to_menu(
+            menu,
+            "Find Repeated",
+            lambda: self._menu_find_repeated(context),
+        )
+
+        self._add_action_to_menu(
+            menu,
+            "Search Map",
+            lambda: self._menu_search_map(context),
+        )
+
+        menu.addSeparator()
+
+        # ---------------------------------------------------------
+        # Browse
+        # ---------------------------------------------------------
+        browse_menu = menu.addMenu("Browse")
+
+        self._add_action_to_menu(
+            browse_menu,
+            "Tree",
+            lambda: self._menu_browse_tree(context),
+        )
+
+        self._add_action_to_menu(
+            browse_menu,
+            "Directory",
+            lambda: self._menu_browse_directory(context),
+        )
+
+        # ---------------------------------------------------------
+        # Export
+        # ---------------------------------------------------------
+        export_menu = browse_menu.addMenu("Export")
+
+        self._add_action_to_menu(
+            export_menu,
+            "Tree",
+            lambda: self._menu_export_tree(context),
+        )
+
+        self._add_action_to_menu(
+            export_menu,
+            "Directory",
+            lambda: self._menu_export_directory(context),
+        )
+
+        self._add_action_to_menu(
+            export_menu,
+            "File Structure",
+            lambda: self._menu_export_file_structure(context),
+        )
+
+        self._add_action_to_menu(
+            export_menu,
+            "Data List",
+            lambda: self._menu_export_data_list(context),
+        )
+
+        menu.addSeparator()
+
+        # ---------------------------------------------------------
+        # Selection
+        # ---------------------------------------------------------
+        self._add_action_to_menu(
+            menu,
+            "Do a Selection",
+            lambda: self._menu_do_selection(context),
+        )
+
+        menu.addSeparator()
+
+        # ---------------------------------------------------------
+        # Deepen
+        # ---------------------------------------------------------
+        self._add_action_to_menu(
+            menu,
+            "Deepen Shallow Map",
+            lambda: self._menu_deepen_shallow_map(context),
+        )
+
+        return menu
+    
+    def build_two_map_menu(self, selected_maps: list, context: dict) -> QtWidgets.QMenu:
+        """Build context menu for two selected maps."""
+
+        menu = QtWidgets.QMenu()
+        menu.setTitle("2 Maps Selected")
+
+        self._add_action_to_menu(
+            menu,
+            "Shallow Compare",
+            lambda: self._menu_compare_shallow(context),
+        )
+
+        self._add_action_to_menu(
+            menu,
+            "Deep Compare",
+            lambda: self._menu_compare_deep(context),
+        )
+
+        menu.addSeparator()
+
+        self._add_action_to_menu(
+            menu,
+            "Deepen Shallow Map",
+            lambda: self._menu_deepen_shallow_map(context),
+        )
+
+        return menu
+    
+    def build_multi_map_menu(self, selected_maps: list, context: dict) -> QtWidgets.QMenu:
+        """Build context menu for more than two selected maps."""
+
+        menu = QtWidgets.QMenu()
+
+        menu.setTitle(
+            f"{len(selected_maps)} Maps Selected"
+        )
+
+        self._add_action_to_menu(
+            menu,
+            "Delete Selected Maps",
+            lambda: self._menu_delete_maps(context),
+        )
+
+        self._add_action_to_menu(
+            menu,
+            "Update Selected Maps",
+            lambda: self._menu_update_maps(context),
+        )
+        return menu
+    
+    def _add_action_to_menu(self,
+        menu: QtWidgets.QMenu, text: str, callback=None, 
+        is_enabled: bool = True, an_icon: QtGui.QIcon = None) -> QtGui.QAction:
+        """Create and configure a menu action."""
+        action = menu.addAction(text)
+        if an_icon is not None:
+            action.setIcon(an_icon)
+
+        action.setEnabled(is_enabled)
+        if callback is not None:
+            action.triggered.connect(callback)
+        return action
+    
+    def _menu_rename_map(self, context):
+        pass
+
+    def _menu_clone_map(self, context):
+        pass
+
+    def _menu_delete_map(self, context):
+        pass
+
+    def _menu_update_map(self, context):
+        pass
+
+    def _menu_continue_mapping(self, context):
+        pass
+
+    def _menu_find_duplicates(self, context):
+
+        track = context["selected_maps"][0]["track"]
+
+        worker = self.worker_manager.start(
+            self.fmap.find_duplicates,
+            track,
+        )
         
-       
+
+    def _menu_find_repeated(self, context):
+        pass
+
+    def _menu_search_map(self, context):
+        pass
+
+    def _menu_browse_tree(self, context):
+        pass
+
+    def _menu_browse_directory(self, context):
+        pass
+
+    def _menu_export_tree(self, context):
+        pass
+
+    def _menu_export_directory(self, context):
+        pass
+
+    def _menu_export_file_structure(self, context):
+        pass
+
+    def _menu_export_data_list(self, context):
+        pass
+
+    def _menu_do_selection(self, context):
+        pass
+
+    def _menu_deepen_shallow_map(self, context):
+        pass
+
+    def _menu_compare_shallow(self, context):
+        pass
+
+    def _menu_compare_deep(self, context):
+        pass
+
+    def _menu_delete_maps(self, context):
+        pass
+
+    def _menu_update_maps(self, context):
+        pass
+
+    
+        
+    
         

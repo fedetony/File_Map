@@ -20,7 +20,8 @@ from class_file_manipulate import FileManipulate
 from class_sqlite_database import SQLiteDatabase
 from class_data_manage import DataManage
 from rich import print
-from rich.progress import Progress
+# from rich.progress import Progress
+from class_map_progress import MapProgress, RichMapProgress
 sys.path.append(os.path.realpath("."))
 
 F_M=FileManipulate()
@@ -198,17 +199,28 @@ class QueueCalcStream(threading.Thread):
 
 
     def run(self):
-        """thread loop"""                
+        """thread loop"""
         print('[green]'+'<'*10+'Successfully Started calculation Thread'+'>'*10)
         count=0
+        progress=None
         has_filled_data=False
-        with Progress() as progress:
-            if not self.pbar_stream:
-                exit_key="ctrl+c"
-                if os.name == 'nt':
-                    exit_key="F12"
-                task1 = progress.add_task(f"[blue]{self.table} [red](Press {exit_key} to Exit)", total=100)
-            while not self.killer_event.wait(self.cycle_time):   
+        progress_bar = self.pbar_stream
+        if progress_bar is None:
+            progress_bar = RichMapProgress()
+        if isinstance(progress_bar, MapProgress):
+            progress = progress_bar
+
+        exit_key="ctrl+c"
+        if os.name == 'nt':
+            exit_key="F12"
+        #task1 = progress.add_task(f"[blue]{self.table} [red](Press {exit_key} to Exit)", total=100)
+        if progress:
+            progress.start(
+                100,
+                description=f"[blue]{self.table} [red](Press {exit_key} to Exit)",
+            )
+        try:
+            while not self.killer_event.wait(self.cycle_time):
                 try:
                     if not has_filled_data and self.queue_pathfile.empty():
                         self.fill_queue_with_files()
@@ -221,7 +233,7 @@ class QueueCalcStream(threading.Thread):
                         break
                     else:
                         self.calculate_for_next_file_in_queue()
-                    
+
                     count=count+1
                     # print(count)
 
@@ -230,24 +242,32 @@ class QueueCalcStream(threading.Thread):
                     per=self.Get_Progress_Percentage(items_left,self.items_total,0,100)
                     if not self.pbar_stream:
                         #progress.update(task1, advance=1)
-                        progress.update(task1, completed=per)
+                        if progress:
+                            progress.update(
+                                current=per,
+                                description=f"[blue]{self.table} [red](Press {exit_key} to Exit)",
+                            )
                     else:
-                        self.Pbar_Set_Status(self.pbar_stream,per)     
+                        self.Pbar_Set_Status(self.pbar_stream,per)
                 except KeyboardInterrupt:
                     self.killer_event.set()
-                    log.info('User Cancel')     
+                    log.info('User Cancel')
                 except Exception as e:
                     self.killer_event.set()
                     log.error(e)
-                    log.error("Stream calculation fatal error! exiting thread!")                                         
-                    raise  
+                    log.error("Stream calculation fatal error! exiting thread!")
+                    raise
+        finally:
+            if progress:
+                progress.stop()
+
         if self.killer_event.is_set():
-            log.info("Stream calculation Killing event Detected!")                        
-        log.info("Stream calculation Ended successfully!")  
-        if self.pbar_stream:           
-            self.Pbar_Set_Status(self.pbar_stream,100)    
-         
-        self.killer_event.set()   
+            log.info("Stream calculation Killing event Detected!")
+        log.info("Stream calculation Ended successfully!")
+        if self.pbar_stream:
+            self.Pbar_Set_Status(self.pbar_stream,100)
+
+        self.killer_event.set()
         #  self.db.print_all_rows(self.table)
         #self.quit() 
     
