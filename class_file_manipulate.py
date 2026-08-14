@@ -12,6 +12,7 @@ import psutil
 import json
 import numpy as np
 from rich.progress import Progress
+import tempfile
 
 ALLOWED_CHARS = 'áéíóúüöäÜÖÄÁÉÍÓÚçÇabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_ -'
 
@@ -19,6 +20,15 @@ class FileManipulate:
     def __init__(self):
         self.file = None
 
+    @staticmethod
+    def get_temp_directory_path(suffix: str | None = None,
+                            prefix: str | None = None,
+                            dir: tempfile.TemporaryDirectory | None = None) -> str:
+        """Get Makes and returs a Temporary path
+        """
+        temp_dir = tempfile.mkdtemp(prefix=prefix,suffix=suffix,dir=dir)
+        return temp_dir
+        
     @staticmethod
     def normalize_path(path:str)->str:
         """Normalize path

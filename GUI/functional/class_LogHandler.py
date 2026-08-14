@@ -90,6 +90,7 @@ class LoggerManager:
         self.normal_handlers= None
         self.gui_handlers = None
         self.update_thread = None
+        self.st_handlers = None
 
     def attach_gui_handler(self, parent, emit_record=False):
         """On log emit runs write_GUI_Log function on gui_panel
@@ -145,25 +146,51 @@ class LoggerManager:
                 self.root.removeHandler(handler)
                 self.gui_handlers.remove(handler)
     
-    def attach_signaltracker_handler(self, parent, signal_tracker):
+    def attach_signaltracker_handler(self, parent, signal_tracker, specific_logger:logging.Logger = None):
         """Sends emitted record through signal tracker Log_To_Main process (log_to_main signal)
 
         Args:
             parent (any): Not used* 
             signal_tracker (class_ST.SignalTracker): SignalTracker object connected to main log
+            specific_logger (logging.Logger): If specific_logger is None, the handler is attached 
+            to the root logger. Otherwise, it is attached only to specific_logger.
+            Returns:
+                logging.Handler | None
         """
         if not HAS_SIGNAL_TRACKER:
-            return
+            return None
         if not isinstance(signal_tracker,class_ST.SignalTracker):
-            return
+            return None
         handler = SignalTrackerHandler(parent, signal_tracker)
         handler.setLevel(logging.DEBUG)
         handler.setFormatter(logging.Formatter(
             "%(asctime)s [%(levelname)s] (%(name)s) %(message)s",
             "%y-%m-%d %H:%M"
         ))
+        if not specific_logger:
+            self.root.addHandler(handler)
+        else:
+            specific_logger.addHandler(handler)
+        # Create the list the first time
+        if not hasattr(self, "st_handlers") or not isinstance(self.st_handlers,list):
+            self.st_handlers = []
+        self.st_handlers.append((handler, specific_logger))
+        return handler
+    
+    def remove_signaltracker_handler(
+        self,
+        handler,
+        specific_logger: logging.Logger = None,
+        ):
+        """Remove a SignalTracker handler."""
 
-        self.root.addHandler(handler)
+        if handler is None:
+            return
+
+        if specific_logger is None:
+            self.root.removeHandler(handler)
+        else:
+            specific_logger.removeHandler(handler)
     
     @staticmethod
     def _get_level(level: str):

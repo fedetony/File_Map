@@ -7,8 +7,11 @@ from functional.class_struct_conditioner import *
 from functional.class_icons import Icons
 from functional.class_struct_tracker import TreeStructTracker
 from controllers.class_filemap_cli_manager import *
-from widgets.class_date_delegate import DateDelegate
+from widgets.class_delegates import DateDelegate, ColoredTextDelegate
 from controllers.mapping_worker_thread import *
+from widgets.class_qt_map_progress import QtMapProgress
+from widgets.mapping_dialog import MappingDialog
+from widgets.class_file_dialogs import DeleteConfirmDialog
 
 from functional.class_LogHandler import LM
 log=LM.get_logger_with_handler("MappingMenuTree","debug",True,None)
@@ -71,6 +74,7 @@ class MappingMenu(QtCore.QObject):
         self.icons=Icons()
         self.worker_manager = WorkerManager()
         self.all_icons_dict={}
+        self.db_db_key_register = {}
         self._set_icons_dict()
         self._set_style_dict()
         self.map_struct=MAP_STRUCT_EXAMPLE.copy()
@@ -112,6 +116,8 @@ class MappingMenu(QtCore.QObject):
             "Backup": [{"field":'maptype'.upper(), "ForegroundRole":QtGui.QColor("#e67e22"), 
                         "DecorationRole":self.icons.icon("backup map")}],
             "Selection Map": [{"field":'maptype'.upper(),"ForegroundRole":QtGui.QColor("#9b59b6"), 
+                               "DecorationRole":self.icons.icon("selection map")}], 
+            "Incomplete": [{"field":'maptype'.upper(),"ForegroundRole":QtGui.QColor("#b11717"), 
                                "DecorationRole":self.icons.icon("selection map")}],            
         }
         active_map = [{
@@ -131,7 +137,9 @@ class MappingMenu(QtCore.QObject):
             new_key = key +" Active"
             new_style_list = style_list + active_map
             self.style_dict[new_key]= new_style_list
-            
+        
+        self.style_dict["Shallow"]=[{"field":'mapsize'.upper(), "ForegroundRole":QtGui.QColor("#9a15d8")}]
+        self.style_dict["Calculate"]=[{"field":'mapsize'.upper(), "ForegroundRole":QtGui.QColor("#e2c338")}]
             
 
     @property
@@ -148,10 +156,13 @@ class MappingMenu(QtCore.QObject):
         # attach delegate to VALUE column (1)
         delegate = TypedItemDelegate(self.map_tv)
         date_delegate = DateDelegate(self.map_tv,output_format="%d %b %Y %H:%M")
+        color_size_delegate = ColoredTextDelegate(self.map_tv_obj) 
         self.map_tv_obj.setItemDelegateForColumn(1, delegate)
         for col, field in enumerate(FIELDS_POSITION):
             if str(field["name"]).startswith("dt_".upper()):
                  self.map_tv_obj.setItemDelegateForColumn(col, date_delegate)
+            if str(field["name"])=="mapsize".upper():
+                 self.map_tv_obj.setItemDelegateForColumn(col, color_size_delegate)
 
         self.map_tv.data_change[list,object,str,str].connect(self.on_tree_item_edited)
         self.map_tv.struct_data_change[list,object,str,str].connect(self.on_struct_item_edited)
@@ -271,12 +282,13 @@ class MappingMenu(QtCore.QObject):
     def generate_mapping_struct(self):
         db_list=self.fmap.get_active_databases_in_dbm()
         self.map_struct=MAP_STRUCT_EXAMPLE.copy() #clear struct
-
+        self.db_db_key_register = {}
         for db_id,db in enumerate(db_list):
             if not isinstance(db,DatabaseInfo):
                 continue
             #self.tracker.delete_node(["Databases",f"{map_id}"])
             db_key=f"{db_id} {db.name}"
+            self.db_db_key_register[db_key]=db
             log.debug(f"generate maping -> {db_key}")
             self._add_db_maps_to_struct(db,db_key)
         print(self.tracker.get_root())
@@ -311,12 +323,17 @@ class MappingMenu(QtCore.QObject):
             for field in datamanage.fields:
                 if field =='maptype':
                     child_node["icon_key"]=str(df[field][idx])
-                    child_node["style_key"]=str(df[field][idx])
                     # check if is active
+                    is_active=False
                     devices=self.fmap.device_monitor.devices
                     for mount,serial in devices:
                         if str(df['mount'][idx]) ==mount and str(df['serial'][idx])==serial:
-                            child_node["style_key"]=str(df[field][idx])+" Active"        
+                            id_active=True
+                            break
+                    if is_active:
+                        child_node["style_key"]=str(df[field][idx])+" Active"   
+                    else:
+                        child_node["style_key"]=str(df[field][idx])
                     
                 if field !='tablename':
                     child_node[field]=str(df[field][idx])
@@ -440,6 +457,12 @@ class MappingMenu(QtCore.QObject):
         # ---------------------------------------------------------
         # Map operations
         # ---------------------------------------------------------
+        self._add_action_to_menu(
+            menu,
+            "Create Map",
+            lambda: self._menu_create_map(context),
+        )
+
         self._add_action_to_menu(
             menu,
             "Rename Map",
@@ -635,7 +658,14 @@ class MappingMenu(QtCore.QObject):
         pass
 
     def _menu_delete_map(self, context):
-        pass
+        database = self._get_db_from_context(context)
+        a_map = self._get_map_from_context(context)
+        size_tup=self.fmap.get_map_size(database,a_map)
+        count=size_tup[0]
+        msg=f"Sure to DELETE Map {a_map} with {count} elements?"
+        if self.fmap.user_dialogs.ask_confirmation(msg,False):
+            self.fmap.delete_map_from_db(database,a_map,log_print=True)
+            self._update_regenerate()
 
     def _menu_update_map(self, context):
         pass
@@ -690,10 +720,97 @@ class MappingMenu(QtCore.QObject):
         pass
 
     def _menu_delete_maps(self, context):
-        pass
+        dbmap_pair_list = self._get_dbmap_pairs_from_context(context)
+        map_list = self._get_maps_from_context(context)
+
+        dialog = DeleteConfirmDialog(
+            f"{map_list}",
+            self,
+            "Delete many files",
+        )
+
+        if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
+            return
+
+        for database, a_map in dbmap_pair_list:
+            self.fmap.delete_map_from_db(
+                database,
+                a_map,
+                log_print=True,
+            )
+
+        self._update_regenerate()
 
     def _menu_update_maps(self, context):
         pass
+
+    def _menu_create_map(self,context):
+        # get database
+        database = self._get_db_from_context(context)
+        
+        dialog = MappingDialog(
+            self.fmap,
+            self.worker_manager,
+            database,
+            parent=self.parent_widget,
+        )
+        dialog.refresh_mapping_tree.connect(self.generate_mapping_struct)
+        dialog.exec()
+
+    def _get_db_from_context(self,context)->str:
+        track=context["track"]
+        if not track or len(track)<1:
+            return
+        db_key=track[1]
+        db=self.db_db_key_register.get(db_key)
+        if not isinstance(db,DatabaseInfo):
+            return
+        return str(db.database_filepath)
+    
+    def _get_dbs_from_context(self,context)->list[str]:
+        dbs_list=[]
+        for cnot in context["selected_maps"]:
+            track=cnot["track"]
+            if not track or len(track)<1:
+                return
+            db_key=track[1]
+            db=self.db_db_key_register.get(db_key)
+            if not isinstance(db,DatabaseInfo):
+                continue
+            a_db=str(db.database_filepath)
+            if a_db not in dbs_list:
+                dbs_list.append(a_db)
+        return dbs_list
+    
+    def _get_dbmap_pairs_from_context(self,context)->tuple[str]:
+        dbmappair_list=[]
+        for cnot in context["selected_maps"]:
+            track=cnot["track"]
+            a_map=self.tracker.get_value(track+["value"])
+            if not track or len(track)<1:
+                return
+            db_key=track[1]
+            db=self.db_db_key_register.get(db_key)
+            if not isinstance(db,DatabaseInfo):
+                continue
+            a_db=str(db.database_filepath)
+            dbmappair_list.append((a_db,a_map))
+        return dbmappair_list
+    
+    def _get_map_from_context(self,context)->str:
+        a_map=self.tracker.get_value(context["track"]+["value"])
+        return a_map
+    
+    def _get_maps_from_context(self,context)->list[str]:
+        map_list=[]
+        for cnot in context["selected_maps"]:
+            a_map=self.tracker.get_value(cnot["track"]+["value"])
+            map_list.append(a_map)
+        return map_list
+    
+    def _update_regenerate(self):
+        self.fmap.set_active_databases_in_dbm()
+        self.generate_mapping_struct()
 
     
         

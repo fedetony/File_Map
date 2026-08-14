@@ -4,9 +4,12 @@ import threading
 
 from thread_queue_calculation_stream import QueueCalcStream
 
+from PyQt6 import QtCore
+
+
 class MappingWorker(QtCore.QObject):
 
-    progress = QtCore.pyqtSignal(int)
+    progress = QtCore.pyqtSignal(object)
     status = QtCore.pyqtSignal(str)
 
     finished = QtCore.pyqtSignal(object)
@@ -20,19 +23,19 @@ class MappingWorker(QtCore.QObject):
         self.args = args
         self.kwargs = kwargs
 
-        self._stop_requested = False
+        #self._stop_requested = False
+        self.kill_ev = threading.Event()
 
     @QtCore.pyqtSlot()
     def run(self):
-
         try:
             result = self.function(
                 *self.args,
                 **self.kwargs,
-                worker=self,
+                kill_ev=self.kill_ev,
             )
 
-            if self._stop_requested:
+            if self.stop_requested:
                 self.stopped.emit()
             else:
                 self.finished.emit(result)
@@ -41,11 +44,17 @@ class MappingWorker(QtCore.QObject):
             self.error.emit(exc)
 
     def stop(self):
-        self._stop_requested = True
+        """
+        Request that the mapping stops.
+        """
+        self.kill_ev.set()
 
     @property
-    def stop_requested(self):
-        return self._stop_requested
+    def stop_requested(self)->bool:
+        return self.kill_ev.is_set()
+
+    def should_stop(self)->bool:
+        return self.kill_ev.is_set()
 
 class WorkerManager(QtCore.QObject):
 
@@ -212,3 +221,33 @@ class FunctionWorker(QtCore.QObject):
 
     def should_stop(self):
         return self._stop_event.is_set()
+
+class WorkerMapProgress:
+
+    def __init__(self, worker:MappingWorker):
+        self.worker = worker
+
+    def start(self, total, description):
+        self.worker.progress.emit(
+            ("start", total, description)
+        )
+
+    def update(
+        self,
+        current=None,
+        advance=None,
+        description=None,
+    ):
+        self.worker.progress.emit(
+            (
+                "update",
+                current,
+                advance,
+                description,
+            )
+        )
+
+    def stop(self):
+        self.worker.progress.emit(
+            ("stop",)
+        )

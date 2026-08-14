@@ -205,5 +205,8 @@ class LoggerDock(QDockWidget):
     
     def write_GUI_Log(self, text):
         """Called by ConsolePanelHandler in class_LogHandler"""
-        print(f"Got-> {text}")
+        try:
+            self.append_record(text)
+        except:
+            print(f"Got-> {text}")
         #self.log_message(text)

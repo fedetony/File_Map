@@ -35,7 +35,7 @@ MD5_CALC = "***Calculate***"
 MD5_SHALLOW = "***Shallow***"
 DATA_ADVANCE = 50  # gather 50 records before writting to db
 SINGLE_MULTIPLE_SEARCH = 15  # use single search or generalized search limit
-MAP_TYPES_LIST=["Device Map","Selection Map","Backup Map","Remove","Keep","Sorted Map"]
+MAP_TYPES_LIST=["Device Map","Selection Map","Backup Map","Remove","Keep","Sorted Map","Incomplete"]
 
 class FileMapper:
     """Class for Mapping functions in a specific database"""
@@ -507,7 +507,7 @@ class FileMapper:
     #         df['filepath'] = df['filepath'].apply(remove_mappath)
     #     return in_all_paths, df
 
-    def remap_map_in_thread_to_db(self, table_name, progress_bar=None, wait_for_key_press=False):
+    def remap_map_in_thread_to_db(self, table_name, progress_bar=None, wait_for_key_press=False, log_callback=None,kill_ev=None):
         """Starts a thread that looks inside the table for '***Calculate***' md5.
             Calculates the correspondant md5 and updates the value in the database.
 
@@ -518,6 +518,8 @@ class FileMapper:
         Returns:
             str: message to print
         """
+        if not log_callback:
+            log_callback=print
         db_info = {
             "name": self.db_path_file,
             "key": self.key_filepath,
@@ -526,11 +528,12 @@ class FileMapper:
         }
         mount, mount_active, mappath_exists = self.check_if_map_device_active(self.db, table_name, False)
         if mount_active and mappath_exists:
-            kill_ev = threading.Event()
+            if not kill_ev:
+                kill_ev = threading.Event()
             kill_ev.clear()
             cycle_time = 0.1
             start_datetime = datetime.now()
-            qstream = QueueCalcStream(db_info, table_name, mount, cycle_time, kill_ev, progress_bar)
+            qstream = QueueCalcStream(db_info, table_name, mount, cycle_time, kill_ev, progress_bar, log_callback=log_callback)
             qstream.start()
             try:
                 was_user_exit = False
@@ -545,13 +548,13 @@ class FileMapper:
                 kill_ev.set()
             took = self.calculate_time_elapsed(start_datetime, datetime.now())
             if was_user_exit:
-                print(f"Thread exit from user after {self.time_seconds_to_hhmmss(took)}")
+                log_callback(f"Thread exit from user after {self.time_seconds_to_hhmmss(took)}")
             else:
-                print(f"Thread Mapping finished after {self.time_seconds_to_hhmmss(took)}")
+                log_callback(f"Thread Mapping finished after {self.time_seconds_to_hhmmss(took)}")
             if wait_for_key_press:
-                print("+" * 33)
-                print("Press any key to continue")
-                print("+" * 33)
+                log_callback("+" * 33)
+                log_callback("Press any key to continue")
+                log_callback("+" * 33)
                 getch()
             return ""
         return "Mount not available!"
@@ -572,6 +575,22 @@ class FileMapper:
                 return True
             return False
         return None
+    
+    def set_maptype_to_map(self,table_name,new_maptype):
+        """Sets maptype to the new_maptype value:
+        "Device Map","Selection Map","Backup Map","Remove","Keep","Sorted Map","Incomplete"
+
+        Args:
+            table_name(str):  table name
+            new_maptype (_type_): one of the possible map types
+
+        Returns:
+            bool: True if it was changed.
+        """
+        if new_maptype not in MAP_TYPES_LIST:
+            return False
+        an_id=self.get_table_id(table_name)
+        return self.db.edit_value_in_table(self.mapper_reference_table, an_id ,'maptype',new_maptype)
 
     def map_an_id_selection(self,selection_name:str, origin_map:str, id_list:list, map_type:str=None):
         """Makes a selection map from id list
@@ -640,6 +659,8 @@ class FileMapper:
         progress_bar=None,
         shallow_map=False,
         press_to_continue=True,
+        log_callback = None,
+        kill_ev:threading.Event=None,
     ):
         """Maps a path in a device into a table in the database.
 
@@ -654,6 +675,9 @@ class FileMapper:
         db = self.db
         progress = None
         line_data_tup=tuple()
+        finished_shallow=False
+        if not log_callback:
+            log_callback=print
         try:
             self.add_table_to_mapper_index(table_name, path_to_map)
             self._create_map_in_db(table_name)
@@ -681,17 +705,19 @@ class FileMapper:
             if progress:
                 progress.update(
                     current=files_processed,
-                    description=f"[blue]Mapping: [white][red]({exit_key} to Exit)",
+                    description=f"[blue]Mapping: [/blue][red]({exit_key} to Exit)",
                 )
 
             delta = datetime.now() - start_datetime
-            print(f"Counted: {num_files} files and {num_folders} folders in {delta.total_seconds()} sec")
+            log_callback(f"Counted: {num_files} files and {num_folders} folders in {delta.total_seconds()} sec")
             for dirpath, _, filenames in os.walk(path_to_map):
                 # Get the data for each file
                 for file in filenames:
+                    if kill_ev and kill_ev.is_set():
+                        raise KeyboardInterrupt("User Cancelled")
                     line_data_tup = self.get_mapping_info_data_from_file(
-                        mount, dirpath, file, log_print, f"{files_processed}. ", shallow_map
-                    )
+                        mount, dirpath, file, log_print, f"{files_processed}. ", shallow_map, 
+                        log_callback=log_callback)
                     data.append(line_data_tup)
                     iii = iii + 1
                     if os.name == "nt":
@@ -700,7 +726,7 @@ class FileMapper:
                     if iii >= DATA_ADVANCE:
                         if log_print:
                             delta = datetime.now() - start_datetime
-                            print("+" * 10 + f" Time elapsed: {str(delta).split('.',  maxsplit=1)[0]}" + "+" * 10)
+                            log_callback("+" * 10 + f" Time elapsed: {str(delta).split('.',  maxsplit=1)[0]}" + "+" * 10)
                         was_inserted = db.insert_data_to_table(table_name, data)
                         if not was_inserted:
                             time.sleep(0.333)
@@ -720,36 +746,38 @@ class FileMapper:
                 progress.update(
                     current=num_files,
                     description="[green]Shallow Mapping complete")
-            
+            finished_shallow=True
             ####################################
             time.sleep(0.333)
             # db.print_all_rows(table_name)
             if not shallow_map:
                 if progress:
                     progress.stop()
-                self.remap_map_in_thread_to_db(table_name, progress_bar, False)
+                self.remap_map_in_thread_to_db(table_name, progress_bar, False, log_callback = log_callback, kill_ev=kill_ev)
             if log_print:
                 # time_elapsed = (datetime.now() - start_datetime).total_seconds()
                 delta = datetime.now() - start_datetime
-                print("+" * 33)
+                log_callback("+" * 33)
                 n_r = db.get_number_or_rows_in_table(table_name)
-                print(f'[green]Successfully Mapped {n_r} files in {str(delta).split(".", maxsplit=1)[0]}')
+                log_callback(f'[green]Successfully Mapped {n_r} files in {str(delta).split(".", maxsplit=1)[0]}')
                 if press_to_continue:
-                    print("+" * 33, "\nPress any Key to continue\n", "+" * 33)
+                    log_callback("+" * 33, "\nPress any Key to continue\n", "+" * 33)
                     getch()
                 return f'[green]Successfully Mapped {n_r} files in {str(delta).split(".", maxsplit=1)[0]}'
         except KeyboardInterrupt:
-            print("[magenta]User cancel")
-            print("@" * 100, "\nPress any Key to continue\n", "@" * 100)
+            log_callback("[magenta]User cancel")
+            log_callback("@" * 100, "\nPress any Key to continue\n", "@" * 100)
             return "[red] User Interrupt"
         except Exception as eee:  # pylint: disable=broad-exception-caught
-            print(f"[red]Error Mapping: {eee}")
-            print(type(eee), line_data_tup)
+            log_callback(f"[red]Error Mapping: {eee}")
+            log_callback(type(eee), line_data_tup)
             if press_to_continue:
-                print("@" * 100, "\nPress any Key to continue\n", "@" * 100)
+                log_callback("@" * 100, "\nPress any Key to continue\n", "@" * 100)
                 getch()
             return f"[red]Error Mapping: {eee}"
         finally:
+            if not finished_shallow:
+                self.set_maptype_to_map(table_name,MAP_TYPES_LIST[6]) # "Incomplete"
             if progress:
                 progress.stop()
         return ''
@@ -931,7 +959,7 @@ class FileMapper:
 
     def get_mapping_info_data_from_file(
         self, mount: str, dirpath: str, file: str, log_print: bool = False, count_print="", shallow_map=False
-    ) -> tuple:
+    , log_callback = None) -> tuple:
         """gets tuple with map table info from inputs
 
         Args:
@@ -944,6 +972,8 @@ class FileMapper:
         Returns:
             tuple: (dt_data_created,dt_data_modified,dirpath_nm,file,the_md5,the_size,dt_file_c,dt_file_a,dt_file_m)
         """
+        if not log_callback:
+            log_callback=print
         dt_data_created, dt_data_modified, dirpath_nm, the_md5, dt_file_c, dt_file_a, dt_file_m = [None] * 7
         the_size = -1
         f_m = FileManipulate()
@@ -962,7 +992,7 @@ class FileMapper:
                 t_est = self.time_seconds_to_hhmmss(
                     self.estimate_mapping_time_sec(904.29, 16.08, the_size, "MB", "bytes")
                 )
-                print(f"Calculating md5 for {file}...{str_size} Estimating: {t_est}")
+                log_callback(f"Calculating md5 for {file}...{str_size} Estimating: {t_est}")
             if the_size > 50 * 1024 * 1024:  # leave to calculate with the thread
                 the_md5 = self.calculate_md5(joined_file, True, shallow_map)
             else:
@@ -977,9 +1007,9 @@ class FileMapper:
                 # use () not [] because rich looks for commands inside []
                 str_just = f_m.get_string_justified(f"{count_print}({str_size})", False, 11 + 3 + 4)
                 time_elapsed = (dt_data_modified - dt_data_created).total_seconds()
-                print(f"{str_just} ({the_md5}) \t{dirpath+os.sep+file} ... ({time_elapsed:.3f}s)")
+                log_callback(f"{str_just} ({the_md5}) \t{dirpath+os.sep+file} ... ({time_elapsed:.3f}s)")
         except (FileExistsError, PermissionError, FileNotFoundError, NotADirectoryError, TypeError, OSError) as eee:
-            print(f"{mount}{dirpath}{file} Error: {eee}")
+            log_callback(f"{mount}{dirpath}{file} Error: {eee}")
             if not the_md5:
                 the_md5 = "::UNKNOWN::"
             if not the_size:

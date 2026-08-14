@@ -36,6 +36,7 @@ class FileMapCliManager:
             # Get Filemap's inputs
             self.gui_db_map_size_cache = {} # "db":{"map":size | None }
             self._updating_databases=False
+            self.mapping_to_pair = (None,None)
             self.cfg = conf_manager
             self.dbm = dbm
             (self.file_list, self.password_list, 
@@ -299,19 +300,24 @@ class FileMapCliManager:
     # Mapping Actions
     # -------------------------------------------------------
 
-    def map_validation(self,name)->bool:
-        """Validates map
-        """
-        not_allowed = '"/'+"'|><={}[]()" #r'[":$\/\{\}\[\]\|\& \]'
-        for char in name:
+    def map_validation(self, database,table_name):
+        """Validate a new map name. 
+        Returns:
+            tuple (bool, message)"""
+
+        not_allowed = '"/' + "'|><={}[]()"
+        for char in table_name:
             if char in not_allowed:
-                log.warning(f'Map name does not allow these characters "{str(not_allowed)}".') 
-                return False
-        for a_db in self.cma.active_databases:
-            if not self.cma.validate_new_map(name,a_db['file']):
-                log.warning(f'Map "{name}" already exists. Please enter a non existing map name')
-                return False
-        return True
+                message=f'Map name does not allow these characters "{str(not_allowed)}".'
+                log.warning(message)
+                return False, message
+
+        if not self.cma.validate_new_map(table_name, database):
+            message = f'Map "{table_name}" already exists in database. Please enter a non existing map name'
+            log.warning(message)
+            return False, message
+
+        return True, ""
     
     def is_map_in_db(self,database:str,map_name)->bool:
         if not map_name:
@@ -337,29 +343,90 @@ class FileMapCliManager:
                         log_print: bool = True,
                         progress_bar: Callable | None = None,
                         shallow_map: bool = False,
-                        press_to_continue: bool = False
+                        press_to_continue: bool = False,
+                        log_callback: Callable | None = None,
+                        kill_ev: threading.Event | None = None
                         ):
         """Create a new New map"""
         selected_db=database
+        self.mapping_to_pair = (None,None)
         if not selected_db:    
             return False
         # path_to_map=path_to_map.replace('//','/')
         path_to_map=FM.normalize_path(path_to_map)
-        if self.map_validation(table_name):
+        is_ok,msg=self.map_validation(database,table_name)
+        if is_ok:
+            temp_folder=FM.get_temp_directory_path(prefix="__filemap__",suffix=table_name)
+            temp_db=FM.extract_filename(selected_db,False)+"_temp.db"
+            
+            temp_db_filepath=os.path.join(temp_folder,temp_db)
+            # self.cma.create_filemap_database(temp_db_filepath) this asks for pwd
+            fm=FileMapper(temp_db_filepath,None,None,False) #->creates new database and assigns mapper
+            self.cma.file_list.append(temp_db_filepath)
+            self.cma.password_list.append(None)
+            self.cma.key_list.append(None)
+            self.cma.activate_databases(temp_db_filepath)
+            if not isinstance(fm,FileMapper):
+                if log_callback:
+                    log_callback(f"[red]Error creating database @ {temp_db_filepath}")
+                return False
+            if log_callback:
+                log_callback(f"[yellow]Created temporary database @ {temp_db_filepath}")
+
             table_name=self.cma.format_new_table_name(table_name,path_to_map)
-            fm=self.cma.get_file_map(selected_db)
-            if table_name not in ['',None]+fm.db.tables_in_db():   
+            if table_name not in ['',None]+fm.db.tables_in_db():  
+                self.mapping_to_pair=(temp_db_filepath, table_name)
+                if log_callback:
+                    log_callback(f"[yellow]Created temporary Map {table_name}")
                 fm.db.create_connection()    
                 fm.map_a_path_to_db(table_name=table_name,
                                     path_to_map=path_to_map,
                                     log_print=log_print, 
                                     progress_bar=progress_bar,
                                     shallow_map=shallow_map,
-                                    press_to_continue=press_to_continue)
-                self.refresh_map_size_cache()
+                                    press_to_continue=press_to_continue,
+                                    log_callback=log_callback,
+                                    kill_ev=kill_ev,
+                                    )
                 return True
         return False
     
+    def delete_map_from_db(self,selected_db,tablename,log_print=True):
+        """Deletes the map from the database"""
+        fm=self.cma.get_file_map(selected_db) 
+        if fm:
+            fm.db.create_connection()
+            fm.delete_map(tablename,log_print)
+    
+    def copy_table_from_to_database(self,dbfrom,table_name_from,db_to,table_name_to):
+        log.debug("Entered copy_table_from_to_database ")
+        try:
+            is_ok, _ =self.map_validation(db_to,table_name_to)
+            if not is_ok:
+                # ensure the name is unique
+                table_name_to=self.cma.format_new_table_name("%_"+table_name_to,"")
+            (cloned_db,cloned_map)=self.cma.clone_map((dbfrom,table_name_from),db_to,return_pair=True)
+            fm=self.cma.get_file_map(cloned_db)
+            if isinstance(fm,FileMapper):
+                fm.rename_map(cloned_map,table_name_to)
+        except Exception as eee:
+            log.debug(f"copy_table_from_to_database ->{eee}")
+            return False
+        self.refresh_map_size_cache()
+        return True
+    
+    def delete_temporal_database(self):
+        (temp_db_filepath, temp_table_name)= self.mapping_to_pair
+        was_removed=False
+        if temp_db_filepath:
+            # remove from register lists
+            self.cma.remove_database_file(temp_db_filepath)
+            # remove from active directory
+            (file_exist, is_file)=self.fm.validate_path_file(temp_db_filepath)
+            if file_exist and is_file:
+                was_removed=self.fm.delete_file(temp_db_filepath)
+        return was_removed
+   
     def get_map_info_datamanage(self,a_database)->DataManage:
         fm=self.cma.get_file_map(a_database)
         if isinstance(fm,FileMapper):
@@ -369,13 +436,20 @@ class FileMapCliManager:
             field_list=fm.db.get_column_list_of_table(fm.mapper_reference_table)+['mapsize']
             for table_info in table_list:
                 a_map=table_info[4]
-                size= self.get_map_size(a_database,a_map)
-                #size=fm.db.get_number_or_rows_in_table(a_map)
-                table_list_size.append(table_info+(size,))
+                size_tup= self.get_map_size(a_database,a_map)
+                if size_tup is not None:
+                    (size, shallow_count, calc_count) = size_tup
+                    num_rows=f'{size}'
+                    if calc_count:
+                        num_rows=f'{size}({calc_count})'
+                    if shallow_count:
+                        num_rows=f'{size}[{shallow_count}]'
+                table_list_size.append(table_info+(num_rows,))
             if len(table_list_size)>0:
                 data_manage=DataManage(table_list_size,field_list)
                 return data_manage
         return None
+        
     # -------------------------------------------------------
     # DB Map Size Cache
     # -------------------------------------------------------    
@@ -386,10 +460,10 @@ class FileMapCliManager:
         set a size to None to recalculate the size
         gui_db_map_size_cache:
             {
-            database1: {map1:size1,
-                        map2:size2... },
-            database2: {map1:size1,
-                        map2:size2... }, 
+            database1: {map1:(size, shallow_count, calc_count),
+                        map2: (size, shallow_count, calc_count),... },
+            database2: {map1:(size, shallow_count, calc_count),
+                        map2:(size, shallow_count, calc_count),... }, 
             ....}
         """
         for iii, db in enumerate(self.dbm.databases):
@@ -413,26 +487,48 @@ class FileMapCliManager:
                                 size_val=cache_db[a_map]
                                 if size_val is None:
                                     # refresh size
-                                    cache_db[a_map] = self.cma.get_map_size(database,a_map)
+                                    cache_db[a_map] = self._get_sizes_tuple(database,a_map)
                             else:
-                                cache_db[a_map] = self.cma.get_map_size(database,a_map) 
+                                cache_db[a_map] = self._get_sizes_tuple(database,a_map) 
                     else:
                         # add maps and sizes
                         for a_map in map_list:
-                            cache_db[a_map] = self.cma.get_map_size(database,a_map) 
+                            cache_db[a_map] = self._get_sizes_tuple(database,a_map) 
                 else:
                     # Remove unactive database from cache
                     if isinstance(cache_db,dict):
                         self.gui_db_map_size_cache.pop(database)
 
+    def _get_sizes_tuple(self,database,a_map):
+        """Returns the size tuple for amount of rows in map, rows with shallow, rows with calc
 
-    def get_map_size(self,database:str,a_map:str):
+        Args:
+            database (str): database
+            a_map (str): map
+
+        Returns:
+            tuple: (size, shallow_count, calc_count)
+        """
+        (shallow_count, calc_count)=self.cma.get_shallow_calc_map_count(database,a_map)
+        size = self.cma.get_map_size(database,a_map)
+        return size, shallow_count, calc_count
+
+    def get_map_size(self,database:str,a_map:str)->(tuple[int] | None):
+        """Searches in cache for a size tuple 
+
+         Args:
+            database (str): database
+            a_map (str): map
+
+        Returns:
+            tuple: (size, shallow_count, calc_count) | None
+        """
         database=str(database)
         db_cache=self.gui_db_map_size_cache.get(database)
-        size = None
+        size_tup = None
         if isinstance(db_cache,dict):
-            size=db_cache.get(a_map)
-        return size
+            size_tup=db_cache.get(a_map)
+        return size_tup
             
 
 

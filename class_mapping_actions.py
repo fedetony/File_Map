@@ -324,13 +324,15 @@ class MappingActions():
                 table_list_size=[]
                 for table_info in table_list:
                     #field_list=['id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype']
-                    data=fm.db.get_data_from_table(table_info[4],'*',f'md5="{MD5_CALC}"')
-                    shallow_data=fm.db.get_data_from_table(table_info[4],'*',f'md5="{MD5_SHALLOW}"')
+                    tablename=table_info[4]
+                    (shallow_count, calc_count)=self.get_shallow_calc_map_count(a_db,tablename)
+                    # data=fm.db.get_data_from_table(table_info[4],'*',f'md5="{MD5_CALC}"')
+                    # shallow_data=fm.db.get_data_from_table(table_info[4],'*',f'md5="{MD5_SHALLOW}"')
                     num_rows=str(fm.db.get_number_or_rows_in_table(table_info[4]))
-                    if len(data)>0:
-                        num_rows=f'{num_rows}({len(data)})'
-                    if len(shallow_data)>0:
-                        num_rows=f'{num_rows}[{len(shallow_data)}]'
+                    if calc_count:
+                        num_rows=f'{num_rows}({calc_count})'
+                    if shallow_count:
+                        num_rows=f'{num_rows}[{shallow_count}]'
                     table_list_size.append(table_info+(num_rows,))
                 if len(table_list_size)>0:
                     field_list=['id','Date Time Created','Date Time Modified','Map Path','Table Name','Mount','Serial','Map Name','Map Type']+['Items']
@@ -368,6 +370,30 @@ class MappingActions():
         if fm:
             return fm.db.get_number_or_rows_in_table(a_map)
         return -1
+    
+    def get_shallow_calc_map_count(self,database,a_map)->tuple[int]:
+        """Count the amount of rows containing Shallow or Calculate keywords
+        
+        Args:
+            database (str): database
+            a_map (str): Table name
+        
+        Returns:
+            tuple: (shallow_count, calc_count)
+         """
+        calc_count=0
+        shallow_count=0
+        fm=self.get_file_map(database)
+        if isinstance(fm,FileMapper):
+            calc_count_t=fm.db.get_data_from_table(a_map,'COUNT(*)',f'md5="{MD5_CALC}"')
+            shallow_count_t=fm.db.get_data_from_table(a_map,'COUNT(*)',f'md5="{MD5_SHALLOW}"')
+            if calc_count_t and len(calc_count_t)>0:
+                calc_count=calc_count_t[0][0]
+            if shallow_count_t and len(shallow_count_t)>0:
+                shallow_count=shallow_count_t[0][0]
+
+        return shallow_count,calc_count
+                
 
     def get_map_info(self,database,a_map):
         """returns the map table information

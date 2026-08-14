@@ -38,9 +38,16 @@ class QueueCalcStream(threading.Thread):
     """
         A thread class to buffer and deliver the Gcode for streaming
     """                  
-    def __init__(self,db_info:dict,table:str,mount:str,cycle_time:float,kill_event:threading.Event,Pbar_Stream=None,table_column='md5'):
+    def __init__(self,db_info:dict,table:str,mount:str,cycle_time:float,kill_event:threading.Event,
+                 Pbar_Stream=None,table_column='md5',log_callback=None):
         threading.Thread.__init__(self, name="Stream Calculate thread")        
-        
+        if not log_callback:
+            self.log_callback=print
+            self.use_logger=True
+        else:
+            self.log_callback=log_callback
+            self.use_logger=False
+
         self.db = SQLiteDatabase(db_info["name"],db_info["encrypt"],db_info["key"],db_info["pwd"])
         self.cycle_time=cycle_time
         self.killer_event = kill_event
@@ -60,8 +67,7 @@ class QueueCalcStream(threading.Thread):
         self.table_column=table_column
 
     
-    @staticmethod
-    def calculate_md5(file_path):
+    def calculate_md5(self,file_path):
         """
         Calculate the MD5 hash of a file.
         
@@ -80,12 +86,12 @@ class QueueCalcStream(threading.Thread):
         except (PermissionError):
             return ':::NoPermission:::'
         except (FileNotFoundError):
-            print(f"File {file_path} not found.")
+            self.log_callback(f"File {file_path} not found.")
             return ':::FileNotFound:::'
             exit(1)
 
-    @staticmethod
-    def calculate_sha1(file_path):
+    
+    def calculate_sha1(self,file_path):
         """
         Calculate the SHA128 hash of a file.
         
@@ -103,11 +109,10 @@ class QueueCalcStream(threading.Thread):
                 return sha1.hexdigest()
 
         except FileNotFoundError:
-            print(f"File {file_path} not found.")
+            self.log_callback(f"File {file_path} not found.")
             exit(1)
 
-    @staticmethod
-    def calculate_sha256(file_path):
+    def calculate_sha256(self,file_path):
         """
         Calculate the SHA256 hash of a file.
         
@@ -125,7 +130,7 @@ class QueueCalcStream(threading.Thread):
                 return sha256.hexdigest()
 
         except FileNotFoundError:
-            print(f"File {file_path} not found.")
+            self.log_callback(f"File {file_path} not found.")
             exit(1)   
 
     def Pbar_Set_Status(self,Pbar,val):
@@ -151,7 +156,11 @@ class QueueCalcStream(threading.Thread):
         """Fills the queue with the filenames"""
         tables=self.db.tables_in_db()
         if self.table not in tables:
-            log.error(f'{self.table} is not in database!')
+            msg=f'{self.table} is not in database!'
+            if self.use_logger:
+                log.error(msg)
+            else:
+                self.log_callback(msg)
             self.is_data=False
             return
         data=self.db.get_data_from_table(self.table,'*','md5="***Calculate***"')
@@ -177,7 +186,7 @@ class QueueCalcStream(threading.Thread):
             self.processing_file=line
             size_str=F_M.get_size_str_formatted(size)
             if size > 349175808:
-                print(f"[yellow]Calculating... {size_str} {line}")
+                self.log_callback(f"[yellow]Calculating... {size_str} {line}")
             if self.table_column=='md5':
                 md5=self.calculate_md5(line)
                 self.db.edit_value_in_table(self.table,an_id,'md5',md5)
@@ -190,8 +199,8 @@ class QueueCalcStream(threading.Thread):
             else:
                 md5=self.calculate_md5(line)
                 self.db.edit_value_in_table(self.table,an_id,'md5',md5)
-            if not self.pbar_stream:
-                print(f"{self.items_total-self.queue_id.qsize()}/{self.items_total} ({md5}) ({an_id}) {size_str} {line}")
+            if not self.pbar_stream or not self.use_logger:
+                self.log_callback(f"{self.items_total-self.queue_id.qsize()}/{self.items_total} ({md5}) ({an_id}) {size_str} {line}")
             else:
                 log.info(f"{self.items_total-self.queue_id.qsize()}/{self.items_total} ({md5}) ({an_id}) {size_str} {line}")
         except queue.Empty:                    
@@ -200,7 +209,7 @@ class QueueCalcStream(threading.Thread):
 
     def run(self):
         """thread loop"""
-        print('[green]'+'<'*10+'Successfully Started calculation Thread'+'>'*10)
+        self.log_callback('[green]'+'<'*10+'Successfully Started calculation Thread'+'>'*10)
         count=0
         progress=None
         has_filled_data=False
@@ -251,23 +260,39 @@ class QueueCalcStream(threading.Thread):
                         self.Pbar_Set_Status(self.pbar_stream,per)
                 except KeyboardInterrupt:
                     self.killer_event.set()
-                    log.info('User Cancel')
+                    msg='User Cancel'
+                    if self.use_logger:
+                        log.info(msg)
+                    else:
+                        self.log_callback(msg)
                 except Exception as e:
                     self.killer_event.set()
-                    log.error(e)
-                    log.error("Stream calculation fatal error! exiting thread!")
+                    msg=f"Stream calculation fatal error! exiting thread!:{e}"
+                    if self.use_logger:
+                        log.error(msg)
+                    else:
+                        self.log_callback(msg)
                     raise
         finally:
             if progress:
                 progress.stop()
 
         if self.killer_event.is_set():
-            log.info("Stream calculation Killing event Detected!")
-        log.info("Stream calculation Ended successfully!")
+            msg="Stream calculation Killing event Detected!"
+            if self.use_logger:
+                log.info(msg)
+            else:
+                self.log_callback(msg)
+        msg="Stream calculation Ended successfully!"
+        if self.use_logger:
+            log.info(msg)
+        else:
+            self.log_callback(msg)
         if self.pbar_stream:
             self.Pbar_Set_Status(self.pbar_stream,100)
 
-        self.killer_event.set()
+        if self.use_logger: # set flag when no logger
+            self.killer_event.set()
         #  self.db.print_all_rows(self.table)
         #self.quit() 
     
