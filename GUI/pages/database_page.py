@@ -251,12 +251,12 @@ class DatabasePage(QWidget):
 
         id_key_list, track_list = self._get_id_key_list_from_selection(track)
 
-        log.debug(
-            "Rightclick Selected-> id_key_list: %s, track_list %s, track %s",
-            id_key_list,
-            track_list,
-            track,
-        )
+        # log.debug(
+        #     "Rightclick Selected-> id_key_list: %s, track_list %s, track %s",
+        #     id_key_list,
+        #     track_list,
+        #     track,
+        # )
 
         self.item_menu = QtWidgets.QMenu()
 

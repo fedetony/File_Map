@@ -7,7 +7,7 @@ import threading
 
 from controllers.class_filemap_cli_manager import FileMapCliManager
 from controllers.mapping_worker_thread import WorkerManager
-
+from functional.class_icons import Icons
 from functional.class_text_renderer import TextRenderer
 
 
@@ -16,7 +16,11 @@ class MappingDialog(QtWidgets.QDialog):
     MAX_LOG_LINES = 1000
     LOG_FLUSH_INTERVAL = 100
     LOG_BATCH_SIZE = 200
+
     refresh_mapping_tree = QtCore.pyqtSignal()
+    mapping_is_running_signal = QtCore.pyqtSignal()
+    mapping_is_not_running_signal = QtCore.pyqtSignal()
+    dialog_exit = QtCore.pyqtSignal(str)
 
     def __init__(
         self,
@@ -31,6 +35,7 @@ class MappingDialog(QtWidgets.QDialog):
         self.worker_manager = worker_manager
         self.database = str(database)
 
+        self.icons = Icons()
         self.text_renderer = TextRenderer()
         self.log_buffer = MappingLogBuffer()
 
@@ -41,6 +46,11 @@ class MappingDialog(QtWidgets.QDialog):
 
         self.setWindowTitle("New Mapping")
         self.setMinimumSize(800, 600)
+        self.setWindowFlags( QtCore.Qt.WindowType.Window
+            | QtCore.Qt.WindowType.WindowMinimizeButtonHint
+            | QtCore.Qt.WindowType.WindowMaximizeButtonHint
+            | QtCore.Qt.WindowType.WindowCloseButtonHint
+        )
 
         self._create_ui()
 
@@ -60,9 +70,24 @@ class MappingDialog(QtWidgets.QDialog):
 
         the_db = self.fmap.fm.extract_filename(self.database)
 
-        database_label = QtWidgets.QLabel(
-            f"Database: {the_db}"
+        # Header
+        header= QtWidgets.QHBoxLayout()
+        icon = QtWidgets.QLabel()
+        icon.setPixmap(self.icons.icon("mapping").pixmap(32, 32))
+        title = QtWidgets.QLabel(f"New Mapping for Database: {the_db}")
+        title.setStyleSheet(
+            """
+            font-size:24px;
+            font-weight:bold;
+            """
         )
+        title.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Preferred,
+            QtWidgets.QSizePolicy.Policy.Fixed
+        )
+        header.addWidget(icon)
+        header.addWidget(title)
+        header.addStretch()
 
         table_label = QtWidgets.QLabel(
             "Table name:"
@@ -85,34 +110,21 @@ class MappingDialog(QtWidgets.QDialog):
             "Select folder to map"
         )
 
-        self.browse_button = QtWidgets.QPushButton(
-            "Browse..."
-        )
-        self.browse_button.clicked.connect(
-            self.browse_folder
-        )
+        self.browse_button = QtWidgets.QPushButton("Browse...")
+        self.browse_button.setIcon(self.icons.icon("search folder"))
+        self.browse_button.clicked.connect(self.browse_folder)
 
         path_layout = QtWidgets.QHBoxLayout()
-        path_layout.addWidget(
-            self.path_edit,
-            1
-        )
-        path_layout.addWidget(
-            self.browse_button
-        )
+        path_layout.addWidget(self.path_edit,1)
+        path_layout.addWidget(self.browse_button)
 
         # -------------------------------------------------
         # Progress
         # -------------------------------------------------
 
         self.progress_container = QtWidgets.QWidget()
-
-        self.progress_layout = QtWidgets.QVBoxLayout(
-            self.progress_container
-        )
-        self.progress_layout.setContentsMargins(
-            0, 0, 0, 0
-        )
+        self.progress_layout = QtWidgets.QVBoxLayout(self.progress_container)
+        self.progress_layout.setContentsMargins(0, 0, 0, 0)
 
         # -------------------------------------------------
         # Output
@@ -124,13 +136,9 @@ class MappingDialog(QtWidgets.QDialog):
 
         # This is important.
         # Qt will discard old blocks automatically.
-        self.output.document().setMaximumBlockCount(
-            self.MAX_LOG_LINES
-        )
+        self.output.document().setMaximumBlockCount(self.MAX_LOG_LINES)
 
-        self.output.setLineWrapMode(
-            QtWidgets.QTextEdit.LineWrapMode.NoWrap
-        )
+        self.output.setLineWrapMode(QtWidgets.QTextEdit.LineWrapMode.NoWrap)
 
         self.output.setStyleSheet("""
             QTextEdit {
@@ -145,39 +153,26 @@ class MappingDialog(QtWidgets.QDialog):
         # Buttons
         # -------------------------------------------------
 
-        self.start_button = QtWidgets.QPushButton(
-            "Start Mapping"
-        )
+        self.start_button = QtWidgets.QPushButton("Start Mapping")
+        self.start_button.setIcon(self.icons.icon("play"))
 
-        self.stop_button = QtWidgets.QPushButton(
-            "Stop"
-        )
+        self.stop_button = QtWidgets.QPushButton("Stop")
+        self.stop_button.setIcon(self.icons.icon("stop"))
 
-        self.shallow_chkb = QtWidgets.QCheckBox(
-            "Shallow Map"
-        )
+        self.shallow_chkb = QtWidgets.QCheckBox("Shallow Map")
+        self.shallow_chkb.setIcon(self.icons.icon("shallow"))
 
         self.stop_button.setEnabled(False)
 
-        self.start_button.clicked.connect(
-            self.start_mapping
-        )
+        self.start_button.clicked.connect(self.start_mapping)
 
-        self.stop_button.clicked.connect(
-            self.stop_mapping
-        )
+        self.stop_button.clicked.connect(self.stop_mapping)
 
         button_layout = QtWidgets.QHBoxLayout()
         button_layout.addStretch()
-        button_layout.addWidget(
-            self.shallow_chkb
-        )
-        button_layout.addWidget(
-            self.start_button
-        )
-        button_layout.addWidget(
-            self.stop_button
-        )
+        button_layout.addWidget(self.shallow_chkb)
+        button_layout.addWidget(self.start_button)
+        button_layout.addWidget(self.stop_button)
 
         # -------------------------------------------------
         # Main layout
@@ -185,25 +180,16 @@ class MappingDialog(QtWidgets.QDialog):
 
         layout = QtWidgets.QVBoxLayout(self)
 
-        layout.addWidget(database_label)
+        layout.addLayout(header)
 
         layout.addWidget(table_label)
-        layout.addWidget(
-            self.table_name_edit
-        )
+        layout.addWidget(self.table_name_edit)
 
         layout.addWidget(path_label)
         layout.addLayout(path_layout)
 
-        layout.addWidget(
-            self.progress_container
-        )
-
-        layout.addWidget(
-            self.output,
-            1
-        )
-
+        layout.addWidget(self.progress_container)
+        layout.addWidget(self.output,1)
         layout.addLayout(button_layout)
 
     # -----------------------------------------------------
@@ -295,18 +281,12 @@ class MappingDialog(QtWidgets.QDialog):
             return
 
         self._start_ui()
+        self.target_dbmap_pair = (self.database, table_name)
 
-        self.target_dbmap_pair = (
-            self.database,
-            table_name,
-        )
-
-        self.start_worker(
-            table_name,
-            path_to_map,
-        )
+        self.start_worker(table_name, path_to_map)
 
     def start_worker(self, table_name, path_to_map):
+        self.mapping_is_running_signal.emit()
 
         self.progress = QtMapProgress()
         self.progress_layout.addWidget(self.progress)
@@ -385,6 +365,7 @@ class MappingDialog(QtWidgets.QDialog):
         self.start_button.setEnabled(True)
         self.stop_button.setEnabled(False)
         self.stop_button.setText("Stop")
+        self.mapping_is_not_running_signal.emit()
 
     # -----------------------------------------------------
     # Stop
@@ -487,10 +468,10 @@ class MappingDialog(QtWidgets.QDialog):
             )
             event.ignore()
             return
-
+        self.dialog_exit.emit(self.database)
         if self.log_timer.isActive():
             self.log_timer.stop()
-
+            
         event.accept()
 
 

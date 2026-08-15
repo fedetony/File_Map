@@ -67,28 +67,18 @@ class TextRenderer:
 
 
     def has_rich_markup(self, text):
-        """
-        Detect likely Rich markup.
-
-        Rich allows tags such as:
-
-            [blue]Mapping...
-            [red]Warning
-            [green]Complete
-
-        without explicit closing tags.
-        """
+        """Detect likely Rich markup anywhere in the text."""
         if "[" not in text or "]" not in text:
             return False
 
-        # Explicit Rich closing tag
+        # Explicit closing markup
         if "[/" in text:
             return True
 
-        # Common Rich opening tag.
-        # Avoid treating ordinary "[text]" as markup.
+        # Opening/style markup, including combinations such as
+        # [bold red] or [italic green]
         return any(
-            text.startswith(f"[{tag}]")
+            f"[{tag}" in text
             for tag in (
                 "black",
                 "red",
@@ -108,23 +98,17 @@ class TextRenderer:
             )
         )
 
-    def ansi_to_html(self, text):
-        """
-        Convert terminal ANSI colors to HTML.
-        """
-        return self.ansi_converter.convert(text, full=False)
 
-    # def rich_to_html(self, text):
-    #     """
-    #     Convert Rich markup into HTML.
-    #     """
-    #     self.console.clear()
-    #     self.console.print(text, markup=True)
-    #     return self.console.export_html(inline=True)
     def rich_to_html(self, text):
         """
-        Convert arbitrary Rich markup into compact inline HTML suitable for Qt.
-        Rich handles the parsing and styling.
+        Convert Rich markup into compact inline HTML.
+
+        Supports both explicit closing tags and Rich's implicit
+        style continuation, for example:
+
+            [green]Hello
+            [green]Hello[/green]
+            [green]Hi [red]there [white]again
         """
         if not text:
             return ""
@@ -134,50 +118,57 @@ class TextRenderer:
             markup=True,
         )
 
-        if not rich_text.plain:
+        plain = rich_text.plain
+
+        if not plain:
             return ""
 
+        # Every span boundary is a point where the active style
+        # can change.
+        boundaries = {0, len(plain)}
+
+        for span in rich_text.spans:
+            boundaries.add(span.start)
+            boundaries.add(span.end)
+
+        boundaries = sorted(boundaries)
+
         parts = []
-        pos = 0
 
-        for span in sorted(
-            rich_text.spans,
-            key=lambda span: (span.start, span.end),
-        ):
+        for start, end in zip(boundaries, boundaries[1:]):
+            if start >= end:
+                continue
 
-            if span.start > pos:
-                parts.append(
-                    html.escape(rich_text.plain[pos:span.start])
+            content = html.escape(plain[start:end])
+
+            # Find all styles active for this section.
+            styles = [
+                str(span.style)
+                for span in rich_text.spans
+                if span.start <= start and span.end >= end
+            ]
+
+            if styles:
+                css = self._rich_style_to_css(
+                    " ".join(styles)
                 )
 
-            content = html.escape(
-                rich_text.plain[span.start:span.end]
-            )
-
-            css = self._rich_style_to_css(span.style)
-
-            if css:
-                content = (
-                    f'<span style="{css}">'
-                    f'{content}'
-                    f'</span>'
-                )
+                if css:
+                    content = (
+                        f'<span style="{css}">'
+                        f'{content}'
+                        f'</span>'
+                    )
 
             parts.append(content)
-            pos = max(pos, span.end)
-
-        if pos < len(rich_text.plain):
-            parts.append(
-                html.escape(rich_text.plain[pos:])
-            )
 
         return "".join(parts)
+
 
     def _rich_style_to_css(self, style):
         """
         Convert a Rich style string into Qt-compatible CSS.
         """
-
         if not style:
             return ""
 
@@ -205,34 +196,36 @@ class TextRenderer:
         }
 
         for item in styles:
-
             if item in colors:
-                css.append(
-                    f"color: {colors[item]};"
-                )
+                css.append(f"color: {colors[item]};")
 
             elif item == "bold":
-                css.append(
-                    "font-weight: bold;"
-                )
+                css.append("font-weight: bold;")
 
             elif item == "italic":
-                css.append(
-                    "font-style: italic;"
-                )
+                css.append("font-style: italic;")
 
             elif item == "underline":
-                css.append(
-                    "text-decoration: underline;"
-                )
+                css.append("text-decoration: underline;")
 
             elif item == "strike":
-                css.append(
-                    "text-decoration: line-through;"
-                )
+                css.append("text-decoration: line-through;")
 
         return " ".join(css)
-    
+
+    def ansi_to_html(self, text):
+        """
+        Convert terminal ANSI colors to HTML.
+        """
+        return self.ansi_converter.convert(text, full=False)
+
+    # def rich_to_html(self, text):
+    #     """
+    #     Convert Rich markup into HTML.
+    #     """
+    #     self.console.clear()
+    #     self.console.print(text, markup=True)
+    #     return self.console.export_html(inline=True)
 
     def rich_text_to_html(self, text):
         """

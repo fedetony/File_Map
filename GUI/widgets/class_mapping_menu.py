@@ -12,6 +12,7 @@ from controllers.mapping_worker_thread import *
 from widgets.class_qt_map_progress import QtMapProgress
 from widgets.mapping_dialog import MappingDialog
 from widgets.class_file_dialogs import DeleteConfirmDialog
+from widgets.map_cloneing_dialog import CloneMapDialog
 
 from functional.class_LogHandler import LM
 log=LM.get_logger_with_handler("MappingMenuTree","debug",True,None)
@@ -65,25 +66,61 @@ class MappingMenu(QtCore.QObject):
             "SizeHintRole":(QtCore.Qt.ItemDataRole.SizeHintRole,QtCore.QSize),
             }
 
+    mapping_running_state = QtCore.pyqtSignal(str,bool)
+
     def __init__(self, fmap:FileMapCliManager, treeview_obj:QTreeView, parent=None):
         super().__init__(parent)
         self.parent_widget = parent
         # Define main structure or use example
         self.fmap = fmap
+        self.menu_enabled_map = {}
+        self.dialog_register = {}
+        self.menu_icon_map = {}
         self.map_tv_obj = treeview_obj
         self.icons=Icons()
+        self._set_icons_to_menu_icon_map()
         self.worker_manager = WorkerManager()
-        self.all_icons_dict={}
+        self.all_icons_dict = {}
         self.db_db_key_register = {}
         self._set_icons_dict()
         self._set_style_dict()
         self.map_struct=MAP_STRUCT_EXAMPLE.copy()
         self._syncing_ui = False
-        self.info_cache=[] # list of info dicts
+        self.info_cache = [] # list of info dicts
         self._build_map_configuration_tree()
         self.map_struct=self.generate_mapping_struct()
+        
+    def _set_icons_to_menu_icon_map(self):
+        """Menu icons"""
+        self.menu_icon_map = {
+            "Create Map": self.icons.icon("mapping"),
+            "Rename Map": self.icons.icon("rename"),
+            "Clone Map": self.icons.icon("clone"),
+            "Delete Map": self.icons.icon("delete map"),
+            "Update Map": self.icons.icon("update map"),
+            "Continue Mapping": self.icons.icon("continue mapping"),
+            "Find Duplicates": self.icons.icon("find duplicates"),
+            "Find Repeated": self.icons.icon("find repeated"),
+            "Search Map": self.icons.icon("search map"),
 
+            "Tree": self.icons.icon("tree"),
+            "Directory": self.icons.icon("dir explore"),
+           
+            "File Structure": self.icons.icon("file struct"),
+            "Data List": self.icons.icon("data list"),
+        
+            "Shallow Compare": self.icons.icon("shallow compare"),
+            "Deep Compare": self.icons.icon("deep compare"),
+        
+            "Deepen Shallow Map":self.icons.icon("shallow"),
+            
+            "Delete Selected Maps": self.icons.icon("delete map"),
+            "Update Selected Maps": self.icons.icon("update map"),
+            "Do a Selection": self.icons.icon("selection map"),
+        }
+    
     def _set_icons_dict(self):
+        """Treeview cache icons"""
         self.all_icons_dict={
             "Device Map": self.icons.icon("device map"),
             "Keep": self.icons.icon("keep map"),
@@ -151,6 +188,8 @@ class MappingMenu(QtCore.QObject):
 
         Sets up treeview behavior, connects edit signals, evaluates conditions, and refreshes the UI.
         """
+        self._sort_field="tablename"
+        self._sort_ascending=True
         self._do_evaluation=False
         self.map_tv=TreeviewFunctions(self.map_tv_obj,self.map_struct,FIELDS_POSITION)
         # attach delegate to VALUE column (1)
@@ -158,6 +197,12 @@ class MappingMenu(QtCore.QObject):
         date_delegate = DateDelegate(self.map_tv,output_format="%d %b %Y %H:%M")
         color_size_delegate = ColoredTextDelegate(self.map_tv_obj) 
         self.map_tv_obj.setItemDelegateForColumn(1, delegate)
+        # Header sorting
+        header = self.map_tv_obj.header()
+        header.setSectionsClickable(True)
+        header.setSortIndicatorShown(True)
+        header.sectionClicked.connect(self._tree_header_clicked)
+
         for col, field in enumerate(FIELDS_POSITION):
             if str(field["name"]).startswith("dt_".upper()):
                  self.map_tv_obj.setItemDelegateForColumn(col, date_delegate)
@@ -165,7 +210,9 @@ class MappingMenu(QtCore.QObject):
                  self.map_tv_obj.setItemDelegateForColumn(col, color_size_delegate)
 
         self.map_tv.data_change[list,object,str,str].connect(self.on_tree_item_edited)
+        self.map_tv.data_change_old_new[list, object ,object, str, str].connect(self.on_tree_item_edited_old_new)
         self.map_tv.struct_data_change[list,object,str,str].connect(self.on_struct_item_edited)
+
         #self.map_tv.expand_to_depth(1) #333) #Expand all
         # Condition Engine
         self.map_ce=ConditionEngine(self.map_tv.tracker)
@@ -185,6 +232,27 @@ class MappingMenu(QtCore.QObject):
         
         self.map_tv.do_refresh()
 
+    def _tree_header_clicked(self, column: int):
+        if not 0 <= column < len(FIELDS_POSITION):
+            return
+        field = str(FIELDS_POSITION[column]["name"])
+
+        if field == "ITEM":
+            pro_field = None              # original database loading order
+        elif field == "VALUE":
+            pro_field = "tablename"
+        else:
+            pro_field = field.lower()
+
+        # Toggle direction when clicking the same column
+        if pro_field and getattr(self, "_sort_field", None) == pro_field:
+            self._sort_ascending = not self._sort_ascending
+        else:
+            self._sort_field = pro_field    
+            self._sort_ascending = True
+
+        self._update_regenerate()
+
     @QtCore.pyqtSlot(list, object, str, str)
     def on_struct_item_edited(self, track, value, typestr, subtype):
         # Decide what to do with item value changed from code
@@ -194,21 +262,30 @@ class MappingMenu(QtCore.QObject):
     @QtCore.pyqtSlot(list, object, object, str, str)
     def on_tree_item_edited_old_new(self, track, old_value, new_value, typestr, subtype):
         # Decide what to do with item value changed from user with old value
-        pass
+        if "value" in track:
+            self._update_menu_enabled_states()
+            # Rename was triggered
+            a_map = old_value #self.tracker.get_value(track)
+            db = self.db_db_key_register.get(track[1])
+            database = str(db.database_filepath)
+            if self._is_menu_action_enabled("Rename Map", database, a_map) in (True,None):
+                was_renamed = self.fmap.rename_map(database,old_value,new_value)
+                if not was_renamed:
+                    self._change_setting_trigger_evaluate_conditions(track, old_value)
+                else:
+                    QtCore.QTimer.singleShot(0, self._update_regenerate)
+            else:
+                log.warning("Renaming Not allowed while the database Mapping Dialog is open")
+
+                
+            
 
     @QtCore.pyqtSlot(list, object, str, str)
     def on_tree_item_edited(self, track, value, typestr, subtype):
         # Decide what to do with item value changed
         self._evaluate_conditions()
-        # name=track[0]
-        # obj=self._get_obj_from_track(track)
-        # if obj:            
-        #     self._build_map_dict()
-        #     self.apply_map_changes(name)
 
-        # here send signal to main
         print("on_tree_item_edited triggered ->",track, value, typestr, subtype)
-        pass
 
     def _change_setting_trigger_evaluate_conditions(self, track, value):
         """Set a tracked value and re-evaluate conditions if the update succeeds.
@@ -267,11 +344,18 @@ class MappingMenu(QtCore.QObject):
         datamanage=self.fmap.get_map_info_datamanage(db_filepath) # includes other fields as size
         # Here select behavior of mapping
         editable=True
+        if datamanage:
+            df = datamanage.get_selected_df()
+            editable = all(
+                self._is_menu_action_enabled("Rename Map", db_filepath, a_map)
+                in (True, None)
+                for a_map in df["tablename"]
+            )
         selectable=True
         hidden=False
         fields_to_tab=None
-        sort_by=None
-        ascending=True
+        sort_by=self._sort_field
+        ascending=self._sort_ascending
         # Form map structure
         self.tracker.delete_node(["Databases",db_key])
         self.add_map_to_struct(["Databases", db_key], 
@@ -289,7 +373,7 @@ class MappingMenu(QtCore.QObject):
             #self.tracker.delete_node(["Databases",f"{map_id}"])
             db_key=f"{db_id} {db.name}"
             self.db_db_key_register[db_key]=db
-            log.debug(f"generate maping -> {db_key}")
+            # log.debug(f"generate maping -> {db_key}")
             self._add_db_maps_to_struct(db,db_key)
         print(self.tracker.get_root())
         # refresh treeview
@@ -304,10 +388,19 @@ class MappingMenu(QtCore.QObject):
                           fields_to_tab=None,sort_by=None,ascending=True):
         if not datamanage:
             return
-        df=datamanage.get_selected_df(fields_to_tab,sort_by,ascending)
+        df=datamanage.get_selected_df(None,sort_by,ascending).copy()
+        if sort_by in ("dt_map_created", "dt_map_modified"):
+            df[sort_by]=pd.to_datetime(df[sort_by],errors="coerce")
+        elif sort_by == "mapsize":
+            df["_mapsize_sort"]=(df["mapsize"].astype(str)
+                .str.extract(r"^\s*([\d.]+)",expand=False).astype(int))
+            sort_by="_mapsize_sort"
+            df=DataManage.get_df_sorted(df, sort_by, 
+                        datamanage.fields + ["_mapsize_sort"], ascending)
         #field_list=['id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype'] +['mapsize']
         
-        for idx,tablename in enumerate(df['tablename']):
+        for idx,row in df.iterrows():
+            tablename=row['tablename']
             key = f"{idx}"
             self.tracker.ensure_path(track+[key])
             child_node = {
@@ -322,21 +415,21 @@ class MappingMenu(QtCore.QObject):
                     }
             for field in datamanage.fields:
                 if field =='maptype':
-                    child_node["icon_key"]=str(df[field][idx])
+                    child_node["icon_key"]=str(row[field])
                     # check if is active
                     is_active=False
                     devices=self.fmap.device_monitor.devices
                     for mount,serial in devices:
-                        if str(df['mount'][idx]) ==mount and str(df['serial'][idx])==serial:
-                            id_active=True
+                        if str(row['mount']) ==mount and str(row['serial'])==serial:
+                            is_active=True
                             break
                     if is_active:
-                        child_node["style_key"]=str(df[field][idx])+" Active"   
+                        child_node["style_key"]=str(row[field])+" Active"   
                     else:
-                        child_node["style_key"]=str(df[field][idx])
+                        child_node["style_key"]=str(row[field])
                     
                 if field !='tablename':
-                    child_node[field]=str(df[field][idx])
+                    child_node[field]=str(row[field])
             # add the node
             self.tracker.set_value(track+[key],child_node)
     
@@ -422,6 +515,8 @@ class MappingMenu(QtCore.QObject):
         # ---------------------------------------------------------
         # Build menu
         # ---------------------------------------------------------
+        if len(info_dict.get("path", []))<3:
+            return
         menu = None
         count = len(selected_maps)
         if count == 1:
@@ -446,216 +541,181 @@ class MappingMenu(QtCore.QObject):
         if menu is not None and menu.actions():
             menu.exec(self.map_tv_obj.viewport().mapToGlobal(pos))
 
-    def build_single_map_menu( self, selected_map: dict, context: dict) -> QtWidgets.QMenu:
-        """Build context menu for a single selected map."""
+    def build_single_map_menu(self, selected_map, context):
+        menu = QtWidgets.QMenu(f'Map "{selected_map["track"][-1]}"')
+        self._update_menu_enabled_states()
 
-        menu = QtWidgets.QMenu()
-
-        map_name = selected_map["track"][-1]
-        menu.setTitle(f'Map "{map_name}"')
-
-        # ---------------------------------------------------------
-        # Map operations
-        # ---------------------------------------------------------
-        self._add_action_to_menu(
-            menu,
-            "Create Map",
-            lambda: self._menu_create_map(context),
-        )
-
-        self._add_action_to_menu(
-            menu,
-            "Rename Map",
-            lambda: self._menu_rename_map(context),
-        )
-
-        self._add_action_to_menu(
-            menu,
-            "Clone Map",
-            lambda: self._menu_clone_map(context),
-        )
-
-        self._add_action_to_menu(
-            menu,
-            "Delete Map",
-            lambda: self._menu_delete_map(context),
-        )
-
-        self._add_action_to_menu(
-            menu,
-            "Update Map",
-            lambda: self._menu_update_map(context),
-        )
-
-        self._add_action_to_menu(
-            menu,
-            "Continue Mapping",
-            lambda: self._menu_continue_mapping(context),
-        )
+        for name, callback in [
+            ("Create Map", self._menu_create_map),
+            ("Rename Map", self._menu_rename_map),
+            ("Clone Map", self._menu_clone_map),
+            ("Delete Map", self._menu_delete_map),
+            ("Update Map", self._menu_update_map),
+            ("Continue Mapping", self._menu_continue_mapping),
+        ]:
+            self._add_action_to_menu(menu, name, callback, context)
 
         menu.addSeparator()
 
-        # ---------------------------------------------------------
-        # Search / analysis
-        # ---------------------------------------------------------
-        self._add_action_to_menu(
-            menu,
-            "Find Duplicates",
-            lambda: self._menu_find_duplicates(context),
-        )
-
-        self._add_action_to_menu(
-            menu,
-            "Find Repeated",
-            lambda: self._menu_find_repeated(context),
-        )
-
-        self._add_action_to_menu(
-            menu,
-            "Search Map",
-            lambda: self._menu_search_map(context),
-        )
+        for name, callback in [
+            ("Find Duplicates", self._menu_find_duplicates),
+            ("Find Repeated", self._menu_find_repeated),
+            ("Search Map", self._menu_search_map),
+        ]:
+            self._add_action_to_menu(menu, name, callback, context)
 
         menu.addSeparator()
 
-        # ---------------------------------------------------------
-        # Browse
-        # ---------------------------------------------------------
-        browse_menu = menu.addMenu("Browse")
+        browse = menu.addMenu("Browse")
 
-        self._add_action_to_menu(
-            browse_menu,
-            "Tree",
-            lambda: self._menu_browse_tree(context),
-        )
+        for name, callback in [
+            ("Tree", self._menu_browse_tree),
+            ("Directory", self._menu_browse_directory),
+        ]:
+            self._add_action_to_menu(browse, name, callback, context)
 
-        self._add_action_to_menu(
-            browse_menu,
-            "Directory",
-            lambda: self._menu_browse_directory(context),
-        )
+        export = browse.addMenu("Export")
 
-        # ---------------------------------------------------------
-        # Export
-        # ---------------------------------------------------------
-        export_menu = browse_menu.addMenu("Export")
-
-        self._add_action_to_menu(
-            export_menu,
-            "Tree",
-            lambda: self._menu_export_tree(context),
-        )
-
-        self._add_action_to_menu(
-            export_menu,
-            "Directory",
-            lambda: self._menu_export_directory(context),
-        )
-
-        self._add_action_to_menu(
-            export_menu,
-            "File Structure",
-            lambda: self._menu_export_file_structure(context),
-        )
-
-        self._add_action_to_menu(
-            export_menu,
-            "Data List",
-            lambda: self._menu_export_data_list(context),
-        )
+        for name, callback in [
+            ("Tree", self._menu_export_tree),
+            ("Directory", self._menu_export_directory),
+            ("File Structure", self._menu_export_file_structure),
+            ("Data List", self._menu_export_data_list),
+        ]:
+            self._add_action_to_menu(export, name, callback, context)
 
         menu.addSeparator()
-
-        # ---------------------------------------------------------
-        # Selection
-        # ---------------------------------------------------------
-        self._add_action_to_menu(
-            menu,
-            "Do a Selection",
-            lambda: self._menu_do_selection(context),
-        )
+        self._add_action_to_menu(menu, "Do a Selection", self._menu_do_selection, context)
 
         menu.addSeparator()
-
-        # ---------------------------------------------------------
-        # Deepen
-        # ---------------------------------------------------------
-        self._add_action_to_menu(
-            menu,
-            "Deepen Shallow Map",
-            lambda: self._menu_deepen_shallow_map(context),
-        )
+        self._add_action_to_menu(menu, "Deepen Shallow Map", self._menu_deepen_shallow_map, context)
 
         return menu
     
-    def build_two_map_menu(self, selected_maps: list, context: dict) -> QtWidgets.QMenu:
-        """Build context menu for two selected maps."""
-
-        menu = QtWidgets.QMenu()
-        menu.setTitle("2 Maps Selected")
-
-        self._add_action_to_menu(
-            menu,
-            "Shallow Compare",
-            lambda: self._menu_compare_shallow(context),
-        )
-
-        self._add_action_to_menu(
-            menu,
-            "Deep Compare",
-            lambda: self._menu_compare_deep(context),
-        )
+    def build_two_map_menu(self, selected_maps, context):
+        menu = QtWidgets.QMenu("2 Maps Selected")
+        self._update_menu_enabled_states()
+        for name, callback in [
+            ("Shallow Compare", self._menu_compare_shallow),
+            ("Deep Compare", self._menu_compare_deep),
+        ]:
+            self._add_action_to_menu(menu, name, callback, context)
 
         menu.addSeparator()
-
         self._add_action_to_menu(
-            menu,
-            "Deepen Shallow Map",
-            lambda: self._menu_deepen_shallow_map(context),
+            menu, "Deepen Shallow Map",
+            self._menu_deepen_shallow_map, context
         )
 
         return menu
-    
-    def build_multi_map_menu(self, selected_maps: list, context: dict) -> QtWidgets.QMenu:
-        """Build context menu for more than two selected maps."""
 
-        menu = QtWidgets.QMenu()
 
-        menu.setTitle(
-            f"{len(selected_maps)} Maps Selected"
-        )
+    def build_multi_map_menu(self, selected_maps, context):
+        menu = QtWidgets.QMenu(f"{len(selected_maps)} Maps Selected")
+        self._update_menu_enabled_states()
+        for name, callback in [
+            ("Delete Selected Maps", self._menu_delete_maps),
+            ("Update Selected Maps", self._menu_update_maps),
+        ]:
+            self._add_action_to_menu(menu, name, callback, context)
 
-        self._add_action_to_menu(
-            menu,
-            "Delete Selected Maps",
-            lambda: self._menu_delete_maps(context),
-        )
-
-        self._add_action_to_menu(
-            menu,
-            "Update Selected Maps",
-            lambda: self._menu_update_maps(context),
-        )
         return menu
-    
-    def _add_action_to_menu(self,
-        menu: QtWidgets.QMenu, text: str, callback=None, 
-        is_enabled: bool = True, an_icon: QtGui.QIcon = None) -> QtGui.QAction:
+
+    def _add_action_to_menu(self, menu, name, callback, context=None):
         """Create and configure a menu action."""
-        action = menu.addAction(text)
-        if an_icon is not None:
-            action.setIcon(an_icon)
+        action = menu.addAction(name)
+
+        if icon := self.menu_icon_map.get(name):
+            action.setIcon(icon)
+
+        is_enabled = self.menu_enabled_map.get(name, True)
+
+        if context and isinstance(is_enabled, dict):
+            is_enabled = all(
+                is_enabled.get(pair, True)
+                for pair in self._get_dbmap_pairs_from_context(context)
+            )
 
         action.setEnabled(is_enabled)
-        if callback is not None:
-            action.triggered.connect(callback)
+        action.triggered.connect(
+            lambda: callback(context) if context else callback()
+        )
+
         return action
     
+    # ---------------------------------------------------------
+    # Menu Actions
+    # ---------------------------------------------------------
+
     def _menu_rename_map(self, context):
-        pass
+        database = self._get_db_from_context(context)
+        a_map = self._get_map_from_context(context)
+
+        if not self._is_menu_action_enabled("Rename Map", database, a_map) in (True, None):
+            log.warning(
+                "Renaming not allowed while the database "
+                "Mapping Dialog is open"
+            )
+            return
+
+        new_name, ok = QtWidgets.QInputDialog.getText(
+            self.parent_widget,
+            "Rename Map",
+            f'Rename "{a_map}" to:',
+            QtWidgets.QLineEdit.EchoMode.Normal,
+            a_map,
+        )
+
+        if not ok:
+            return
+
+        new_name = new_name.strip()
+
+        if not new_name or new_name == a_map:
+            return
+        was_renamed = self.fmap.rename_map(database, a_map, new_name)
+
+        if not was_renamed:
+            QtWidgets.QMessageBox.warning(
+                self.parent_widget,
+                "Rename Map",
+                f'Could not rename "{a_map}" to "{new_name}".',
+            )
+            return
+        QtCore.QTimer.singleShot(0, self._update_regenerate)
+
 
     def _menu_clone_map(self, context):
-        pass
+        db_from = self._get_db_from_context(context)
+        map_from = self._get_map_from_context(context)
+
+        db_list = self.fmap.get_active_databases_in_dbm()
+
+        databases = [
+            (
+                str(db.database_filepath),
+                str(db.name),
+                str(db.db_file),
+            ) for db in db_list]
+
+        dialog = CloneMapDialog(self.fmap, databases, db_from, map_from, self.parent_widget)
+
+        if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
+            return
+
+        db_to, map_to = dialog.get_values()
+
+        if db_to == db_from and map_to == map_from:
+            return
+
+        if not self.fmap.copy_table_from_to_database( db_from, map_from, db_to, map_to):
+            QtWidgets.QMessageBox.warning(
+                self.parent_widget,
+                "Clone Map",
+                f'Could not clone "{map_from}".',
+            )
+            return
+        QtCore.QTimer.singleShot(0, self._update_regenerate)
 
     def _menu_delete_map(self, context):
         database = self._get_db_from_context(context)
@@ -725,7 +785,7 @@ class MappingMenu(QtCore.QObject):
 
         dialog = DeleteConfirmDialog(
             f"{map_list}",
-            self,
+            self.parent_widget,
             "Delete many files",
         )
 
@@ -744,35 +804,91 @@ class MappingMenu(QtCore.QObject):
     def _menu_update_maps(self, context):
         pass
 
-    def _menu_create_map(self,context):
-        # get database
+    def _menu_create_map(self, context):
         database = self._get_db_from_context(context)
-        
+        reg_db = self.dialog_register.get(database)
+        if reg_db:
+            dialog = reg_db["dialog"]
+            if dialog.isVisible():
+                dialog.raise_()
+                dialog.activateWindow()
+            else:
+                dialog.show()
+                dialog.raise_()
+                dialog.activateWindow()
+            return
+
+        db = self._get_databaseinfo_from_context(context)
         dialog = MappingDialog(
             self.fmap,
             self.worker_manager,
             database,
             parent=self.parent_widget,
         )
-        dialog.refresh_mapping_tree.connect(self.generate_mapping_struct)
-        dialog.exec()
 
+        dialog.refresh_mapping_tree.connect(lambda: self.generate_mapping_struct)
+        self.dialog_register[database] = {
+            "dbinfo": db,
+            "dialog": dialog,
+            "mapping": False,
+        }
+        # update tree after register to block renaming
+        self._update_regenerate()
+        # Mapping State
+        dialog.mapping_is_running_signal.connect(
+            lambda: self._set_mapping_state(database, True))
+        dialog.mapping_is_not_running_signal.connect(
+            lambda: self._set_mapping_state(database, False))
+
+        dialog.dialog_exit.connect(self._mapping_dialog_closed)
+        # dialog.exec() # blocks user until closing window
+        dialog.show() # allows user to change windows
+    
+    def _mapping_dialog_closed(self, database:str):
+        reg = self.dialog_register.get(database)
+        self.dialog_register.pop(database, None)
+        self._update_regenerate()
+        
+    def _set_mapping_state(self, database:str, is_mapping:bool):
+        reg = self.dialog_register.get(database)
+        if reg:
+            was_mapping = reg["mapping"]
+            reg["mapping"] = is_mapping
+            # refresh after each mapping is finished
+            if was_mapping and not is_mapping:
+                self._update_regenerate()
+        self.mapping_running_state.emit(database,is_mapping)
+    
+    # ---------------------------------------------------------
+    # Context helpers
+    # ---------------------------------------------------------
+    
     def _get_db_from_context(self,context)->str:
         track=context["track"]
-        if not track or len(track)<1:
-            return
+        if not track or len(track)<2:
+            return ""
         db_key=track[1]
         db=self.db_db_key_register.get(db_key)
         if not isinstance(db,DatabaseInfo):
-            return
+            return ""
         return str(db.database_filepath)
+    
+    def _get_databaseinfo_from_context(self,context)->DatabaseInfo:
+        track=context["track"]
+        if not track or len(track)<2:
+            return None
+        db_key=track[1]
+        db=self.db_db_key_register.get(db_key)
+        if not isinstance(db,DatabaseInfo):
+            return None
+        return db
     
     def _get_dbs_from_context(self,context)->list[str]:
         dbs_list=[]
         for cnot in context["selected_maps"]:
             track=cnot["track"]
-            if not track or len(track)<1:
-                return
+            if not track or len(track)<2:
+                return []
             db_key=track[1]
             db=self.db_db_key_register.get(db_key)
             if not isinstance(db,DatabaseInfo):
@@ -782,13 +898,27 @@ class MappingMenu(QtCore.QObject):
                 dbs_list.append(a_db)
         return dbs_list
     
-    def _get_dbmap_pairs_from_context(self,context)->tuple[str]:
+    def _get_databaseinfos_from_context(self,context)->list[str]:
+        dbs_list=[]
+        for cnot in context["selected_maps"]:
+            track=cnot["track"]
+            if not track or len(track)<2:
+                return []
+            db_key=track[1]
+            db=self.db_db_key_register.get(db_key)
+            if not isinstance(db,DatabaseInfo):
+                continue
+            if db not in dbs_list:
+                dbs_list.append(db)
+        return dbs_list
+    
+    def _get_dbmap_pairs_from_context(self,context)->list[tuple[str, str]]:
         dbmappair_list=[]
         for cnot in context["selected_maps"]:
             track=cnot["track"]
             a_map=self.tracker.get_value(track+["value"])
-            if not track or len(track)<1:
-                return
+            if not track or len(track)<2:
+                return []
             db_key=track[1]
             db=self.db_db_key_register.get(db_key)
             if not isinstance(db,DatabaseInfo):
@@ -808,9 +938,37 @@ class MappingMenu(QtCore.QObject):
             map_list.append(a_map)
         return map_list
     
+    # ---------------------------------------------------------
+    # General helpers
+    # ---------------------------------------------------------
+
     def _update_regenerate(self):
         self.fmap.set_active_databases_in_dbm()
+        self._update_menu_enabled_states()
         self.generate_mapping_struct()
+    
+    def _is_menu_action_enabled(self, name, database, a_map):
+        enabled = self.menu_enabled_map.get(name, True)
+
+        if isinstance(enabled, dict):
+            return enabled.get((database, a_map), True)
+
+        return enabled
+    
+    def _update_menu_enabled_states(self):
+        dbinfo_list=self.fmap.get_active_databases_in_dbm()
+        for db in dbinfo_list:
+            database=str(db.database_filepath)
+            # Renaming allowed
+            if database in self.dialog_register.keys():
+                map_list = self.fmap.get_maps_in_db(database)
+                for a_map in map_list:
+                    self.menu_enabled_map["Rename Map"]= { (database, a_map): False }
+            else:
+                # Renaming allowed
+                map_list = self.fmap.get_maps_in_db(database)
+                for a_map in map_list:
+                    self.menu_enabled_map["Rename Map"]= { (database, a_map): True }
 
     
         

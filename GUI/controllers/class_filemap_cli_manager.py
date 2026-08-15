@@ -299,6 +299,36 @@ class FileMapCliManager:
     # -------------------------------------------------------
     # Mapping Actions
     # -------------------------------------------------------
+    def rename_map(self,database,a_map,new_mapename):
+        selected_db=database
+        map_list=self.cma.get_maps_in_db(selected_db)
+        if len(map_list)==0:
+            log.warning('[yellow] No maps to rename!')
+            return False
+        if a_map not in map_list:
+            log.warning(f'[yellow]{a_map} is not in database!')
+            return False
+        info_txt=self.cma.get_map_info_text(selected_db,a_map)    
+        fm=self.cma.get_file_map(selected_db)
+        if not fm:
+            return False
+        data=fm.db.get_data_from_table(fm.mapper_reference_table,'*',f"tablename='{a_map}'")
+        #field_list=['id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype']
+        path_to_map=os.path.join(data[0][5],data[0][3])
+        new_tablename=self.cma.format_new_table_name(new_mapename,path_to_map)
+        is_ok,msg=self.map_validation(database,new_tablename)
+        if not is_ok:
+            log.warning(msg)
+            return False
+        fm.db.create_connection()
+        log.info(f'Renaming Map [yellow]"{a_map}"[/yellow] to [green]"{new_tablename}"')
+        was_renamed=fm.rename_map(a_map,new_tablename)
+        if was_renamed:
+            log.info(f'Renaming success to [green]"{new_tablename}"')
+            return True
+        log.warning(f'Renaming Failed [red]"{a_map}"')
+        return False
+
 
     def map_validation(self, database,table_name):
         """Validate a new map name. 
@@ -327,6 +357,7 @@ class FileMapCliManager:
         return False
     
     def get_maps_in_db(self,database:str)->list:
+        """Returns a list of maps in the database"""
         return self.cma.get_maps_in_db(str(database))
     
     def get_all_maps_info_dict_in_db(self,database:str)->list:
@@ -410,7 +441,7 @@ class FileMapCliManager:
             if isinstance(fm,FileMapper):
                 fm.rename_map(cloned_map,table_name_to)
         except Exception as eee:
-            log.debug(f"copy_table_from_to_database ->{eee}")
+            # log.debug(f"copy_table_from_to_database ->{eee}")
             return False
         self.refresh_map_size_cache()
         return True

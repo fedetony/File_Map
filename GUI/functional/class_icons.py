@@ -255,7 +255,7 @@ class Icons:
         "toggle":":/icons/toggle_icon.png",
         "purple toggle":":/icons/icons8-data-transfer-96.png",
         "db pink arrow":":/icons/icons8-database-restore-96.png",
-        "play":":/icons/button_play_icon.png",
+        "play blue":":/icons/button_play_icon.png",
         "white document":":/icons/document_icon.png",
         "document":":/icons/icons8-document-94.png",
         "search folder":":/icons/explorer_file_icon.png",
@@ -298,6 +298,27 @@ class Icons:
         "remove map":":/icons/Ahmadhania-Spherical-Close.128.png",
         "selection map":":/icons/Ahmadhania-Spherical-Mouse-curser.128.png",
         "backup map":":/icons/Ahmadhania-Spherical-Palm-print.128.png",
+
+        "stop":":/icons/Ahmadhania-Spherical-Stop.128.png",
+        "play":":/icons/Ahmadhania-Spherical-Play.128.png",
+        "shallow":":/icons/Ahmadhania-Spherical-Calculator.128.png",
+
+        "clone":":/icons/Ahmadhania-Spherical-Del.ico.us.128.png",
+        "rename":":/icons/Ahmadhania-Spherical-Keyboard.128.png",
+        "delete map":":/icons/Ahmadhania-Spherical-Delete.128.png",
+        "update map":":/icons/Ahmadhania-Spherical-Redo.128.png", 
+        "continue mapping":":/icons/Ahmadhania-Spherical-Blinklist.128.png", 
+        "find duplicates":":/icons/Ahmadhania-Spherical-File-copy.128.png", 
+        "find repeated":":/icons/icons8-versions-96.png", 
+        "search map":":/icons/icons8-view-94.png",
+        "tree" :":/icons/icons8-add-subnode-96.png",
+        "dir explore" :":/icons/explorer_file_icon.png",
+        "file struct" :":/icons/icons8-open-with-96.png",
+        "data list" :":/icons/Icojam-Blue-Bits-Document-checkbox.256.png",
+        "shallow compare" :":/icons/Ahmadhania-Spherical-Resize-hor.128.png",
+        "deep compare" :":/icons/Ahmadhania-Spherical-Resize-ver.128.png",
+        
+
         
     }
 

@@ -1204,6 +1204,9 @@ class MappingActions():
                 # same db
                 if selected_db == db_map_pair[0]:
                     fm.db.clone_table(db_map_pair[1],table_name)
+                    newdb_map_pair=(selected_db,table_name)
+                    if return_pair:
+                        return newdb_map_pair
                     return f'Successfully cloned {db_map_pair[1]} to {table_name} in {db_map_pair[0]}' 
                 else:
                     fmfrom=self.get_file_map(db_map_pair[0])
@@ -1225,7 +1228,11 @@ class MappingActions():
                         if return_pair:
                             return newdb_map_pair
                         return f'Successfully cloned {db_map_pair} to {newdb_map_pair}'  
+            if return_pair:
+                return (None,None)
             return "Unable to Index Table!"    
+        if return_pair:
+            return (None,None)
         return f"Table exists {table_name}"
         
 
