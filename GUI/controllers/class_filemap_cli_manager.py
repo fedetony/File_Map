@@ -3,6 +3,7 @@ import io
 import logging
 from typing import Callable, Any
 from contextlib import redirect_stdout
+from datetime import datetime
 
 from controllers.class_configuration_manager import ConfigurationManager
 from controllers.class_database_manager import DatabaseManager
@@ -92,7 +93,7 @@ class FileMapCliManager:
         # Add dummy table to generate a reference index map
         table_name="dummy"
         temp_folder=FM.extract_path(database_filepath)
-        temp_table_name=self.cma.format_new_table_name("___%__"+table_name,temp_folder)
+        temp_table_name=self.cma.format_new_table_name("___"+self._get_timestamp()+"___"+table_name,temp_folder)
         was_indexed=fm.add_table_to_mapper_index(temp_table_name,temp_folder,None)
         if was_indexed:
             if log_callback:
@@ -496,7 +497,8 @@ class FileMapCliManager:
         self.cma.activate_databases(temp_db_filepath)
         if log_callback:
             log_callback(f"[yellow]Created temporary database @ {temp_db_filepath}")
-        temp_table_name=self.cma.format_new_table_name("___%__"+table_name,temp_folder)
+        temp_table_name=self.cma.format_new_table_name(
+            "___"+self._get_timestamp()+"__"+table_name,temp_folder)
         was_indexed=fm.add_table_to_mapper_index(temp_table_name,temp_folder,None)
         if was_indexed:
             if log_callback:
@@ -620,7 +622,8 @@ class FileMapCliManager:
             return False
 
         # Copy source map into target DB under a temporary name        
-        temp_name = self.cma.format_new_table_name("%_" + source_map,"")
+        temp_name = self.cma.format_new_table_name(
+            self._get_timestamp()+"_" + source_map,"")
 
         can_replace = self.copy_table_from_to_database(
             source_db, source_map,
@@ -635,7 +638,8 @@ class FileMapCliManager:
             return False
         
         # Rename existing target map out of the way
-        temp_original_name = self.cma.format_new_table_name("%_" + target_map,"")
+        temp_original_name = self.cma.format_new_table_name(
+            self._get_timestamp()+"_" + target_map,"")
         was_original_renamed = self.rename_map(
             target_db, target_map, temp_original_name)
 
@@ -713,7 +717,8 @@ class FileMapCliManager:
             is_ok, _ =self.map_validation(db_to,table_name_to)
             if not is_ok:
                 # ensure the name is unique
-                table_name_to=self.cma.format_new_table_name("%_"+table_name_to,"")
+                table_name_to=self.cma.format_new_table_name(
+                    self._get_timestamp()+"_"+table_name_to,"")
             if log_callback:
                 log_callback("Cloning...")
             self.cma.activate_databases(db_to)
@@ -859,6 +864,10 @@ class FileMapCliManager:
         database=str(database)
         db_cache=self.gui_db_map_size_cache.get(database)
         db_cache[a_map] = None
+    
+    @staticmethod
+    def _get_timestamp():
+        return datetime.now().strftime("%Y%m%d_%H%M%S_%f")
             
 
 
