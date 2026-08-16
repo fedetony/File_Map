@@ -188,7 +188,7 @@ class MappingMenu(QtCore.QObject):
 
         Sets up treeview behavior, connects edit signals, evaluates conditions, and refreshes the UI.
         """
-        self._sort_field="tablename"
+        self._sort_field=None
         self._sort_ascending=True
         self._do_evaluation=False
         self.map_tv=TreeviewFunctions(self.map_tv_obj,self.map_struct,FIELDS_POSITION)
@@ -609,7 +609,6 @@ class MappingMenu(QtCore.QObject):
 
         return menu
 
-
     def build_multi_map_menu(self, selected_maps, context):
         menu = QtWidgets.QMenu(f"{len(selected_maps)} Maps Selected")
         self._update_menu_enabled_states()
@@ -734,15 +733,8 @@ class MappingMenu(QtCore.QObject):
         pass
 
     def _menu_find_duplicates(self, context):
-
-        track = context["selected_maps"][0]["track"]
-
-        worker = self.worker_manager.start(
-            self.fmap.find_duplicates,
-            track,
-        )
+        pass
         
-
     def _menu_find_repeated(self, context):
         pass
 
@@ -771,7 +763,52 @@ class MappingMenu(QtCore.QObject):
         pass
 
     def _menu_deepen_shallow_map(self, context):
-        pass
+        database = self._get_db_from_context(context)
+        a_map = self._get_map_from_context(context)
+        reg_db = self.dialog_register.get(database)
+        if reg_db:
+            dialog = reg_db["dialog"]
+            if dialog.isVisible():
+                dialog.raise_()
+                dialog.activateWindow()
+            else:
+                dialog.show()
+                dialog.raise_()
+                dialog.activateWindow()
+            return
+        
+        mappath = self.fmap.get_full_mount_path_of_map(database,a_map)
+        if not mappath:
+            return
+        modding_info={"mode":"deepening",
+                      "database":database,
+                      "path_to_map":mappath,
+                      "map_name":a_map}
+        db = self._get_databaseinfo_from_context(context)
+        dialog = MappingDialog(
+            self.fmap,
+            self.worker_manager,
+            modding_info,
+            parent=self.parent_widget,
+        )
+
+        dialog.refresh_mapping_tree.connect(lambda: self.generate_mapping_struct)
+        self.dialog_register[database] = {
+            "dbinfo": db,
+            "dialog": dialog,
+            "mapping": False,
+        }
+        # update tree after register to block renaming
+        self._update_regenerate()
+        # Mapping State
+        dialog.mapping_is_running_signal.connect(
+            lambda: self._set_mapping_state(database, True))
+        dialog.mapping_is_not_running_signal.connect(
+            lambda: self._set_mapping_state(database, False))
+
+        dialog.dialog_exit.connect(self._mapping_dialog_closed)
+        # dialog.exec() # blocks user until closing window
+        dialog.show() # allows user to change windows
 
     def _menu_compare_shallow(self, context):
         pass
@@ -817,12 +854,13 @@ class MappingMenu(QtCore.QObject):
                 dialog.raise_()
                 dialog.activateWindow()
             return
-
+        modding_info={"mode":"create",
+                      "database":database}
         db = self._get_databaseinfo_from_context(context)
         dialog = MappingDialog(
             self.fmap,
             self.worker_manager,
-            database,
+            modding_info,
             parent=self.parent_widget,
         )
 

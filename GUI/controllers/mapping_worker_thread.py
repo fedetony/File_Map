@@ -23,13 +23,15 @@ class MappingWorker(QtCore.QObject):
         self.args = args
         self.kwargs = kwargs
 
-        #self._stop_requested = False
         self.kill_ev = threading.Event()
+
+        self.result = None
+        self.exception = None
 
     @QtCore.pyqtSlot()
     def run(self):
         try:
-            result = self.function(
+            self.result = self.function(
                 *self.args,
                 **self.kwargs,
                 kill_ev=self.kill_ev,
@@ -38,22 +40,20 @@ class MappingWorker(QtCore.QObject):
             if self.stop_requested:
                 self.stopped.emit()
             else:
-                self.finished.emit(result)
+                self.finished.emit(self.result)
 
         except Exception as exc:
+            self.exception = exc
             self.error.emit(exc)
 
     def stop(self):
-        """
-        Request that the mapping stops.
-        """
         self.kill_ev.set()
 
     @property
-    def stop_requested(self)->bool:
+    def stop_requested(self) -> bool:
         return self.kill_ev.is_set()
 
-    def should_stop(self)->bool:
+    def should_stop(self) -> bool:
         return self.kill_ev.is_set()
 
 class WorkerManager(QtCore.QObject):
@@ -63,13 +63,8 @@ class WorkerManager(QtCore.QObject):
 
         self._workers = set()
         self._threads = set()
-        
-    def start(
-        self,
-        function,
-        *args,
-        **kwargs,
-    ):
+
+    def start(self, function, *args, **kwargs):
         thread = QtCore.QThread()
 
         worker = MappingWorker(
@@ -99,9 +94,8 @@ class WorkerManager(QtCore.QObject):
         thread.start()
 
         return worker
-    
-    def _cleanup(self, worker, thread):
 
+    def _cleanup(self, worker, thread):
         self._workers.discard(worker)
         self._threads.discard(thread)
 

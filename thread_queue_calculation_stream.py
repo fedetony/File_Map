@@ -4,302 +4,420 @@ F.Garcia
 MD5, SHA1, SHA256 calculating thread.
 Is alive meanwhile there is text to stream.
 '''
-import sys
 import os
+import sys
 import threading
 import queue
 import logging
-import time
-import re
 import hashlib
-#import io
-from common import *
-from datetime import datetime
 
+from common import *
 from class_file_manipulate import FileManipulate
 from class_sqlite_database import SQLiteDatabase
-from class_data_manage import DataManage
-from rich import print
-# from rich.progress import Progress
 from class_map_progress import MapProgress, RichMapProgress
+from rich import print
+
 sys.path.append(os.path.realpath("."))
 
-F_M=FileManipulate()
+F_M = FileManipulate()
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
-formatter=logging.Formatter('[%(levelname)s] (%(threadName)-10s) %(message)s')
-ahandler=logging.StreamHandler()
-ahandler.setLevel(logging.INFO)
-ahandler.setFormatter(formatter)
-log.addHandler(ahandler)
- 
+
+if not log.handlers:
+    formatter = logging.Formatter(
+        '[%(levelname)s] (%(threadName)-10s) %(message)s'
+    )
+    handler = logging.StreamHandler()
+    handler.setLevel(logging.INFO)
+    handler.setFormatter(formatter)
+    log.addHandler(handler)
+
+
 class QueueCalcStream(threading.Thread):
     """
-        A thread class to buffer and deliver the Gcode for streaming
-    """                  
-    def __init__(self,db_info:dict,table:str,mount:str,cycle_time:float,kill_event:threading.Event,
-                 Pbar_Stream=None,table_column='md5',log_callback=None):
-        threading.Thread.__init__(self, name="Stream Calculate thread")        
-        if not log_callback:
-            self.log_callback=print
-            self.use_logger=True
-        else:
-            self.log_callback=log_callback
-            self.use_logger=False
+    Background thread for calculating file hashes and updating the database.
+    """
 
-        self.db = SQLiteDatabase(db_info["name"],db_info["encrypt"],db_info["key"],db_info["pwd"])
-        self.cycle_time=cycle_time
+    CHUNK_SIZE = 1024 * 1024       # 1 MB file read chunks
+    DB_BATCH_SIZE = 100            # database updates per SQL command
+
+    def __init__(
+        self,
+        db_info: dict,
+        table: str,
+        mount: str,
+        cycle_time: float,
+        kill_event: threading.Event,
+        Pbar_Stream=None,
+        table_column='md5',
+        log_callback=None
+    ):
+        super().__init__(name="Stream Calculate thread")
+
+        self.log_callback = log_callback or print
+        self.use_logger = log_callback is None
+
+        self.db = SQLiteDatabase(
+            db_info["name"],
+            db_info["encrypt"],
+            db_info["key"],
+            db_info["pwd"]
+        )
+
+        self.cycle_time = cycle_time
         self.killer_event = kill_event
-        self.table=table
-        self.queue_pathfile = queue.Queue()  
-        self.queue_id = queue.Queue()   
-        self.queue_size = queue.Queue()   
-        self.Pbarini=0
-        self.Pbarend=100   
-        self.pbar_stream=Pbar_Stream 
-        self.mount=mount     
-        self.d_m=None     
-        self.is_data=True
-        self.calculation_finished=False    
-        self.items_total=0
-        self.processing_file=''
-        self.table_column=table_column
+        self.table = table
+        self.mount = mount
+        self.table_column = table_column
+        self.pbar_stream = Pbar_Stream
 
-    
-    def calculate_md5(self,file_path):
-        """
-        Calculate the MD5 hash of a file.
-        
-        Args:
-            file_path (str): The path to the file for which the MD5 hash is calculated.
-            
-        Returns:
-            str: The MD5 sum as a hexadecimal string.
-        """
+        self.queue = queue.Queue()
+
+        self.is_data = True
+        self.calculation_finished = False
+        self.items_total = 0
+        self.processing_file = ''
+
+    # ------------------------------------------------------------------
+    # Hashing
+    # ------------------------------------------------------------------
+
+    def calculate_hash(self, file_path):
+        """Calculate the requested hash using large read chunks."""
         try:
-            md5 = hashlib.md5()
-            with open(file_path, 'rb') as f:           
-                for chunk in iter(lambda: f.read(4096), b""):
-                    md5.update(chunk)  
-            return md5.hexdigest()
-        except (PermissionError):
+            hasher = {
+                'md5': hashlib.md5,
+                'sha1': hashlib.sha1,
+                'sha256': hashlib.sha256,
+            }.get(self.table_column, hashlib.md5)()
+
+            with open(file_path, 'rb') as f:
+                while not self.killer_event.is_set():
+                    chunk = f.read(self.CHUNK_SIZE)
+                    if not chunk:
+                        break
+                    hasher.update(chunk)
+
+            if self.killer_event.is_set():
+                return None
+
+            return hasher.hexdigest()
+
+        except PermissionError:
             return ':::NoPermission:::'
-        except (FileNotFoundError):
+
+        except FileNotFoundError:
             self.log_callback(f"File {file_path} not found.")
             return ':::FileNotFound:::'
-            exit(1)
 
-    
-    def calculate_sha1(self,file_path):
-        """
-        Calculate the SHA128 hash of a file.
-        
-        Args:
-            file_path (str): The path to the file for which the MD5 hash is calculated.
-            
-        Returns:
-            str: The SHA128 hash as a string.
-        """
-        try:
-            with open(file_path, 'rb') as f:
-                sha1 = hashlib.sha1()
-                while chunk := f.read(4096):
-                    sha1.update(chunk)  
-                return sha1.hexdigest()
+        except OSError as e:
+            self.log_callback(f"Error reading {file_path}: {e}")
+            return ':::ReadError:::'
 
-        except FileNotFoundError:
-            self.log_callback(f"File {file_path} not found.")
-            exit(1)
+    # ------------------------------------------------------------------
+    # Progress
+    # ------------------------------------------------------------------
 
-    def calculate_sha256(self,file_path):
-        """
-        Calculate the SHA256 hash of a file.
-        
-        Args:
-            file_path (str): The path to the file for which the MD5 hash is calculated.
-            
-        Returns:
-            str: The SHA256 hash as a string.
-        """
-        try:
-            with open(file_path, 'rb') as f:
-                sha256 = hashlib.sha256()
-                while chunk := f.read(4096):
-                    sha256.update(chunk)   
-                return sha256.hexdigest()
+    def Pbar_Set_Status(self, Pbar, val):
+        if Pbar is not None and 0 <= int(val) <= 100:
+            Pbar.SetStatus(int(val))
 
-        except FileNotFoundError:
-            self.log_callback(f"File {file_path} not found.")
-            exit(1)   
-
-    def Pbar_Set_Status(self,Pbar,val):
-        """Sets the value of The progress bar. If it is called from QT,can set the object, else will use rich progressbar"""
-        if  Pbar!=None and int(val)>=0 and int(val)<=100:   
-                Pbar.SetStatus(int(val))
-    
-    def quit(self):
-        self.killer_event.set()        
-
-    def Get_Progress_Percentage(self,sss,Numsss,Perini=0,Perend=100):
-        if sss>Numsss:            
+    def Get_Progress_Percentage(self, current, total, Perini=0, Perend=100):
+        if current > total:
             return Perend
-        if sss<0 or Numsss<=0:            
+
+        if current < 0 or total <= 0:
             return Perini
-        if (Perend-Perini)<=0:
-            Per=min(abs(Perini),abs(Perend))              
-            return Per 
-        Per=round(Perini+(sss/Numsss)*(Perend-Perini),2)        
-        return Per   
+
+        return round(Perini + (current / total) * (Perend - Perini),2)
+
+    # ------------------------------------------------------------------
+    # Queue
+    # ------------------------------------------------------------------
 
     def fill_queue_with_files(self):
-        """Fills the queue with the filenames"""
-        tables=self.db.tables_in_db()
+        """Load files requiring calculation into the work queue."""
+
+        tables = self.db.tables_in_db()
         if self.table not in tables:
-            msg=f'{self.table} is not in database!'
+            msg = f'{self.table} is not in database!'
+
             if self.use_logger:
                 log.error(msg)
             else:
                 self.log_callback(msg)
-            self.is_data=False
-            return
-        data=self.db.get_data_from_table(self.table,'*','md5="***Calculate***"')
-        if len(data)==0:
-            self.is_data=False
-            return
-        self.is_data=True
-        field_list=self.db.get_column_list_of_table(self.table)
-        self.d_m=DataManage(data,field_list)
-        self.items_total=len(self.d_m.df['filename'])
-        for filepath,filename,an_id,size in zip(self.d_m.df['filepath'],self.d_m.df['filename'],self.d_m.df['id'],self.d_m.df['size']):
-            line=os.path.join(self.mount,filepath,filename)
-            self.queue_pathfile.put(line)  
-            self.queue_id.put(an_id)
-            self.queue_size.put(size)
-            pass
-    
-    def calculate_for_next_file_in_queue(self):
-        try:        
-            line=self.queue_pathfile.get_nowait()
-            an_id=self.queue_id.get_nowait()
-            size=self.queue_size.get_nowait()
-            self.processing_file=line
-            size_str=F_M.get_size_str_formatted(size)
-            if size > 349175808:
-                self.log_callback(f"[yellow]Calculating... {size_str} {line}")
-            if self.table_column=='md5':
-                md5=self.calculate_md5(line)
-                self.db.edit_value_in_table(self.table,an_id,'md5',md5)
-            elif self.table_column=='sha1':
-                md5=self.calculate_sha1(line)
-                self.db.edit_value_in_table(self.table,an_id,'sha1',md5)
-            elif self.table_column=='sha256':
-                md5=self.calculate_sha256(line)
-                self.db.edit_value_in_table(self.table,an_id,'sha256',md5)
-            else:
-                md5=self.calculate_md5(line)
-                self.db.edit_value_in_table(self.table,an_id,'md5',md5)
-            if not self.pbar_stream or not self.use_logger:
-                self.log_callback(f"{self.items_total-self.queue_id.qsize()}/{self.items_total} ({md5}) ({an_id}) {size_str} {line}")
-            else:
-                log.info(f"{self.items_total-self.queue_id.qsize()}/{self.items_total} ({md5}) ({an_id}) {size_str} {line}")
-        except queue.Empty:                    
-            pass    
 
+            self.is_data = False
+            return
+
+        data = self.db.get_data_from_table(
+            self.table,'filepath, filename, id, size', 
+            f'{self.table_column}="***Calculate***"')
+
+        if not data:
+            self.is_data = False
+            self.items_total = 0
+            return
+
+        self.is_data = True
+        self.items_total = len(data)
+
+        for filepath, filename, an_id, size in data:
+            if self.killer_event.is_set():
+                return
+
+            full_path = os.path.join(self.mount, filepath, filename)
+            self.queue.put((full_path, an_id, size))
+
+    # ------------------------------------------------------------------
+    # Database
+    # ------------------------------------------------------------------
+
+    def update_database_batch(self, updates):
+        """
+        Update a batch of hashes using one SQL UPDATE statement.
+
+        updates:
+            [(id, hash), (id, hash), ...]
+        """
+
+        if not updates:
+            return
+
+        # CASE id
+        case_parts = []
+
+        # IDs used by the WHERE clause
+        ids = []
+
+        for an_id, hash_value in updates:
+            case_parts.append(
+                f"WHEN {an_id} THEN {self.db.quotes(hash_value)}"
+            )
+            ids.append(str(an_id))
+
+        sql = f"""
+            UPDATE {self.table}
+            SET {self.table_column} =
+                CASE id
+                    {' '.join(case_parts)}
+                END
+            WHERE id IN ({','.join(ids)})
+        """
+
+        self.db.send_sql_command(sql)
+
+    # ------------------------------------------------------------------
+    # Processing
+    # ------------------------------------------------------------------
+
+    def calculate_for_next_file(self, pending_updates):
+        """Calculate one file and append its result to the DB batch."""
+
+        try:
+            file_path, an_id, size = self.queue.get_nowait()
+        except queue.Empty:
+            return False
+
+        if self.killer_event.is_set():
+            return False
+
+        self.processing_file = file_path
+        size_str = F_M.get_size_str_formatted(size)
+
+        if size > 349175808:
+            self.log_callback(
+                f"[yellow]Calculating... {size_str} {file_path}[/yellow]"
+            )
+            size_str = f"[red]{size_str}[/red]"
+
+        hash_value = self.calculate_hash(file_path)
+
+        if hash_value is None:
+            return False
+
+        pending_updates.append((an_id, hash_value))
+
+        processed = self.items_total - self.queue.qsize()
+
+        self.log_callback(
+            f"[cyan]{processed}[/cyan]/"
+            f"[green]{self.items_total}[/green] "
+            f"([yellow]{hash_value}[/yellow]) "
+            f"({an_id}) "
+            f"{size_str} "
+            f"{file_path}"
+        )
+
+        return True
+
+    # ------------------------------------------------------------------
+    # Control
+    # ------------------------------------------------------------------
+
+    def quit(self):
+        self.killer_event.set()
+
+    # ------------------------------------------------------------------
+    # Main thread
+    # ------------------------------------------------------------------
 
     def run(self):
-        """thread loop"""
-        self.log_callback('[green]'+'<'*10+'Successfully Started calculation Thread'+'>'*10)
-        count=0
-        progress=None
-        has_filled_data=False
+        self.log_callback(
+            '[green]' +
+            '<' * 10 +
+            'Successfully Started calculation Thread' +
+            '>' * 10
+        )
+
+        progress = None
         progress_bar = self.pbar_stream
+
         if progress_bar is None:
             progress_bar = RichMapProgress()
+
         if isinstance(progress_bar, MapProgress):
             progress = progress_bar
 
-        exit_key="ctrl+c"
-        if os.name == 'nt':
-            exit_key="F12"
-        #task1 = progress.add_task(f"[blue]{self.table} [red](Press {exit_key} to Exit)", total=100)
+        exit_key = "F12" if os.name == 'nt' else "ctrl+c"
+
         if progress:
             progress.start(
                 100,
-                description=f"[blue]{self.table} [red](Press {exit_key} to Exit)",
+                description=(
+                    f"[blue]{self.table} "
+                    f"[red](Press {exit_key} to Exit)"
+                )
             )
+
+        pending_updates = []
+
         try:
-            while not self.killer_event.wait(self.cycle_time):
-                try:
-                    if not has_filled_data and self.queue_pathfile.empty():
-                        self.fill_queue_with_files()
-                        has_filled_data=True
-                    elif has_filled_data and self.queue_pathfile.empty():
-                        self.is_data = False
-                    if not self.is_data and self.queue_pathfile.empty():
-                        self.calculation_finished=True
-                        self.killer_event.set()
-                        break
-                    else:
-                        self.calculate_for_next_file_in_queue()
+            # ----------------------------------------------------------
+            # Load work
+            # ----------------------------------------------------------
 
-                    count=count+1
-                    # print(count)
+            self.fill_queue_with_files()
 
-                    # set progressbar status
-                    items_left=self.items_total-self.queue_id.qsize()
-                    per=self.Get_Progress_Percentage(items_left,self.items_total,0,100)
-                    if not self.pbar_stream:
-                        #progress.update(task1, advance=1)
-                        if progress:
-                            progress.update(
-                                current=per,
-                                description=f"[blue]{self.table} [red](Press {exit_key} to Exit)",
-                            )
-                    else:
-                        self.Pbar_Set_Status(self.pbar_stream,per)
-                except KeyboardInterrupt:
-                    self.killer_event.set()
-                    msg='User Cancel'
-                    if self.use_logger:
-                        log.info(msg)
-                    else:
-                        self.log_callback(msg)
-                except Exception as e:
-                    self.killer_event.set()
-                    msg=f"Stream calculation fatal error! exiting thread!:{e}"
-                    if self.use_logger:
-                        log.error(msg)
-                    else:
-                        self.log_callback(msg)
-                    raise
-        finally:
-            if progress:
-                progress.stop()
+            if not self.is_data:
+                self.calculation_finished = True
+                return
 
-        if self.killer_event.is_set():
-            msg="Stream calculation Killing event Detected!"
+            # ----------------------------------------------------------
+            # Process files continuously
+            # ----------------------------------------------------------
+
+            while not self.killer_event.is_set():
+
+                # Calculate one file.
+                #
+                # This also:
+                #   - gets the next file from the queue
+                #   - shows the >333 MB message
+                #   - calculates the hash
+                #   - adds the result to pending_updates
+                #   - prints the per-file result
+                #
+                if not self.calculate_for_next_file(pending_updates):
+                    break
+
+                # ------------------------------------------------------
+                # Write DB every DB_BATCH_SIZE files
+                # ------------------------------------------------------
+
+                if len(pending_updates) >= self.DB_BATCH_SIZE:
+                    self.update_database_batch(pending_updates)
+                    pending_updates.clear()
+
+                # ------------------------------------------------------
+                # Progress
+                # ------------------------------------------------------
+
+                processed = (self.items_total - self.queue.qsize())
+
+                per = self.Get_Progress_Percentage(
+                    processed, self.items_total)
+
+                if self.pbar_stream:
+                    self.Pbar_Set_Status(self.pbar_stream, per)
+
+                elif progress:
+                    progress.update(
+                        current=per,
+                        description=(
+                            f"[blue]{self.table} "
+                            f"[red](Press {exit_key} to Exit)"
+                        )
+                    )
+
+            # ----------------------------------------------------------
+            # Write remaining DB updates
+            # ----------------------------------------------------------
+
+            if not self.killer_event.is_set() and pending_updates:
+                self.update_database_batch(pending_updates)
+                pending_updates.clear()
+
+            self.calculation_finished = True
+
+        except KeyboardInterrupt:
+            self.killer_event.set()
+
+            msg = 'User Cancel'
+
             if self.use_logger:
                 log.info(msg)
             else:
                 self.log_callback(msg)
-        msg="Stream calculation Ended successfully!"
-        if self.use_logger:
-            log.info(msg)
-        else:
-            self.log_callback(msg)
-        if self.pbar_stream:
-            self.Pbar_Set_Status(self.pbar_stream,100)
 
-        if self.use_logger: # set flag when no logger
+        except Exception as e:
             self.killer_event.set()
-        #  self.db.print_all_rows(self.table)
-        #self.quit() 
-    
 
+            msg = (
+                f"Stream calculation fatal error! "
+                f"exiting thread!: {e}"
+            )
 
+            if self.use_logger:
+                log.exception(msg)
+            else:
+                self.log_callback(msg)
+
+        finally:
+            self.db.close_connection()
+            if progress:
+                progress.stop()
+
+        # --------------------------------------------------------------
+        # Finished / killed
+        # --------------------------------------------------------------
+
+        if self.killer_event.is_set():
+            msg = "Stream calculation Killing event Detected!"
+
+            if self.use_logger:
+                log.info(msg)
+            else:
+                self.log_callback(msg)
+
+        else:
+            msg = "Stream calculation Ended successfully!"
+
+            if self.use_logger:
+                log.info(msg)
+            else:
+                self.log_callback(msg)
+
+        if self.pbar_stream:
+            self.Pbar_Set_Status(
+                self.pbar_stream,
+                100
+            )
 def main():    
     import keyboard
+    import time
+    from datetime import datetime
     kill_ev = threading.Event()
     kill_ev.clear()
         

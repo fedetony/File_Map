@@ -543,6 +543,7 @@ class FileMapper:
                             was_user_exit = True
                             kill_ev.set()
                     time.sleep(0.5)
+                qstream.join()
             except KeyboardInterrupt:
                 was_user_exit = True
                 kill_ev.set()
@@ -551,6 +552,7 @@ class FileMapper:
                 log_callback(f"Thread exit from user after {self.time_seconds_to_hhmmss(took)}")
             else:
                 log_callback(f"Thread Mapping finished after {self.time_seconds_to_hhmmss(took)}")
+                kill_ev.clear() #clear flag on finished
             if wait_for_key_press:
                 log_callback("+" * 33)
                 log_callback("Press any key to continue")

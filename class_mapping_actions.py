@@ -513,41 +513,94 @@ class MappingActions():
             return fm.map_to_file_structure(a_map,where,fields_to_tab,sort_by,ascending)
         return {}
 
-    def shallow_to_deep(self,db_map_pair,id_list:list=None):
-        """Convert Shallow map into a calculation Map can be done for specific ids
+    # def shallow_to_deep(self,db_map_pair,id_list:list=None):
+    #     """Convert Shallow map into a calculation Map can be done for specific ids
 
-        Args:
-            db_map_pair (tuple): database map pair
-            id_list (list): list of ids to select. Defaults to None 
-        """
+    #     Args:
+    #         db_map_pair (tuple): database map pair
+    #         id_list (list): list of ids to select. Defaults to None 
+    #     """
         
-        fm=self.get_file_map(db_map_pair[0])
-        if id_list:
-            # Edit one by one
-            id_query="id IN {"+', '.join(id_list)+"}"
-            data_np=fm.db.get_data_from_table(db_map_pair[1],"*",f"md5={fm.db.quotes(MD5_SHALLOW)} AND {id_query}")
-            # data=[]
-            # for a_row in data_np:
-            #     if a_row[0] in id_list:
-            #         data.append(a_row)
-            # else:
-            data=data_np
-            for iii,a_row in enumerate(data):
-                A_C.print_cycle(iii,len(data))
-                fm.db.edit_value_in_table(db_map_pair[1],a_row[0],'md5',MD5_CALC)
-            return
-        def change_shallow_to_calc(md5:str):
-            """Sets calc where there is shallow"""
-            if md5==MD5_SHALLOW:
-                return MD5_CALC
-            return md5
-        field_list=fm.db.get_column_list_of_table(db_map_pair[1])
-        data_np=fm.db.get_data_from_table(db_map_pair[1])
-        data_manage=DataManage(data_np,field_list)
-        data_manage.df['md5'] = data_manage.df['md5'].apply(change_shallow_to_calc)
-        new_values = data_manage.df['md5'].tolist()
-        fm.db.edit_column_in_table(db_map_pair[1], 'md5', new_values)
+    #     fm=self.get_file_map(db_map_pair[0])
+    #     if id_list:
+    #         # Edit one by one
+    #         id_query="id IN {"+', '.join(id_list)+"}"
+    #         data_np=fm.db.get_data_from_table(db_map_pair[1],"*",f"md5={fm.db.quotes(MD5_SHALLOW)} AND {id_query}")
+    #         # data=[]
+    #         # for a_row in data_np:
+    #         #     if a_row[0] in id_list:
+    #         #         data.append(a_row)
+    #         # else:
+    #         data=data_np
+    #         for iii,a_row in enumerate(data):
+    #             A_C.print_cycle(iii,len(data))
+    #             fm.db.edit_value_in_table(db_map_pair[1],a_row[0],'md5',MD5_CALC)
+    #         return
+    #     def change_shallow_to_calc(md5:str):
+    #         """Sets calc where there is shallow"""
+    #         if md5==MD5_SHALLOW:
+    #             return MD5_CALC
+    #         return md5
+    #     field_list=fm.db.get_column_list_of_table(db_map_pair[1])
+    #     data_np=fm.db.get_data_from_table(db_map_pair[1])
+    #     data_manage=DataManage(data_np,field_list)
+    #     data_manage.df['md5'] = data_manage.df['md5'].apply(change_shallow_to_calc)
+    #     new_values = data_manage.df['md5'].tolist()
+    #     fm.db.edit_column_in_table(db_map_pair[1], 'md5', new_values)
 
+    def shallow_to_deep(self, db_map_pair, id_list=None, progress=None, 
+                        kill_ev: threading.Event = None):
+        """Convert shallow entries to calculation entries in batches.
+
+        Supports optional ID filtering, progress reporting, and cancellation
+        via a threading.Event.
+        """
+        fm = self.get_file_map(db_map_pair[0])
+        table = db_map_pair[1]
+
+        shallow = fm.db.quotes(MD5_SHALLOW)
+        calc = fm.db.quotes(MD5_CALC)
+
+        batch_size = 1000
+
+        # No specific IDs: first get the IDs that need changing.
+        if id_list is None:
+            id_list = fm.db.get_data_from_table(table,"id",f"md5={shallow}")
+            # Convert [(id1,), (id2,), ...] -> [id1, id2, ...]
+            id_list = [row[0] for row in id_list]
+
+        len_id_list = len(id_list)
+
+        if len_id_list == 0:
+            return
+
+        for i in range(0, len_id_list, batch_size):
+
+            # Check before starting another DB operation
+            if kill_ev is not None and kill_ev.is_set():
+                return
+
+            batch = id_list[i:i + batch_size]
+
+            id_query = "id IN (" + ", ".join(map(str, batch)) + ")"
+
+            fm.db.send_sql_command(
+                f"""
+                UPDATE {table}
+                SET md5 = {calc}
+                WHERE md5 = {shallow}
+                AND {id_query}
+                """
+            )
+
+            current = min(i + batch_size, len_id_list)
+
+            if progress is None:
+                A_C.print_cycle(current, len_id_list)
+
+            elif hasattr(progress, "SetStatus"):
+                val = int(current / len_id_list * 100)
+                progress.SetStatus(val)
 
     def shallow_compare_maps(self,db_map_pair_1:tuple,db_map_pair_2:tuple):
         """Compare two maps using tabulated data. Compares: 

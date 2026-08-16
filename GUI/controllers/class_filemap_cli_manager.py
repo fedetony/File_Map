@@ -60,6 +60,48 @@ class FileMapCliManager:
     # Databases Actions
     # -------------------------------------------------------
 
+    def Create_new_filemap_database(self,database_filepath, 
+                    ask_for_pwd=False, log_callback=None)->str:
+        """Creates a valid database with referencemap based on the selected_db and table_name. 
+            Both used to have a temporary folder with prefix="__filemap__",suffix=table_name
+            and database_name: selected_db +"_temp.db"
+
+        Args:
+            
+            log_callback (_type_, optional): logging callback to log print. Defaults to None.
+
+        Returns:
+            str: database filepath
+        """
+        # if you wanted encrypted call
+        if ask_for_pwd:
+            self.cma.create_filemap_database(database_filepath) #this asks for pwd
+            fm = self.cma.get_file_map(database_filepath)
+        else:
+            fm=FileMapper(database_filepath,None,None,False) 
+            if not isinstance(fm,FileMapper):
+                if log_callback:
+                    log_callback(f"[red]Error creating database @ {database_filepath}")
+                return None
+            self.cma.file_list.append(database_filepath)
+            self.cma.password_list.append(None)
+            self.cma.key_list.append(None)
+        self.cma.activate_databases(database_filepath)
+        if log_callback:
+            log_callback(f"[yellow]Created database @ {database_filepath}")
+        # Add dummy table to generate a reference index map
+        table_name="dummy"
+        temp_folder=FM.extract_path(database_filepath)
+        temp_table_name=self.cma.format_new_table_name("___%__"+table_name,temp_folder)
+        was_indexed=fm.add_table_to_mapper_index(temp_table_name,temp_folder,None)
+        if was_indexed:
+            if log_callback:
+                log_callback(f"[green]Valid index {fm.db.table_exists(fm.mapper_reference_table)}")
+            fm.delete_map(temp_table_name)
+            self.cma.deactivate_databases(database_filepath)
+            return database_filepath
+        return None
+
     def save_db_in_config(self, db_id_list, user=True):
         """
         Save the selected databases to the configuration.
@@ -393,14 +435,14 @@ class FileMapCliManager:
             temp_db_filepath=os.path.join(temp_folder,temp_db)
             # self.cma.create_filemap_database(temp_db_filepath) this asks for pwd
             fm=FileMapper(temp_db_filepath,None,None,False) #->creates new database and assigns mapper
-            self.cma.file_list.append(temp_db_filepath)
-            self.cma.password_list.append(None)
-            self.cma.key_list.append(None)
-            self.cma.activate_databases(temp_db_filepath)
             if not isinstance(fm,FileMapper):
                 if log_callback:
                     log_callback(f"[red]Error creating database @ {temp_db_filepath}")
                 return False
+            self.cma.file_list.append(temp_db_filepath)
+            self.cma.password_list.append(None)
+            self.cma.key_list.append(None)
+            self.cma.activate_databases(temp_db_filepath)
             if log_callback:
                 log_callback(f"[yellow]Created temporary database @ {temp_db_filepath}")
 
@@ -422,6 +464,239 @@ class FileMapCliManager:
                 return True
         return False
     
+    def _create_temporal_database(self,selected_db,table_name,log_callback=None)->str:
+        """Creates a temporal database based on the selected_db and table_name. 
+            Both used to have a temporary folder with prefix="__filemap__",suffix=table_name
+            and database_name: selected_db +"_temp.db"
+
+        Args:
+            selected_db (str): reference db_name
+            table_name (str): reference table_name
+            log_callback (_type_, optional): logging callback to log print. Defaults to None.
+
+        Returns:
+            str: temporary database filepath
+        """
+        temp_folder=FM.get_temp_directory_path(prefix="__filemap__",suffix=table_name)
+        temp_db=FM.extract_filename(selected_db,False)+"_temp.db"
+        
+        temp_db_filepath=os.path.join(temp_folder,temp_db)
+        # if you wanted encrypted call
+        # self.cma.create_filemap_database(temp_db_filepath) #this asks for pwd
+
+        # creates new database and assigns mapper
+        fm=FileMapper(temp_db_filepath,None,None,False) 
+        if not isinstance(fm,FileMapper):
+            if log_callback:
+                log_callback(f"[red]Error creating database @ {temp_db_filepath}")
+            return None
+        self.cma.file_list.append(temp_db_filepath)
+        self.cma.password_list.append(None)
+        self.cma.key_list.append(None)
+        self.cma.activate_databases(temp_db_filepath)
+        if log_callback:
+            log_callback(f"[yellow]Created temporary database @ {temp_db_filepath}")
+        temp_table_name=self.cma.format_new_table_name("___%__"+table_name,temp_folder)
+        was_indexed=fm.add_table_to_mapper_index(temp_table_name,temp_folder,None)
+        if was_indexed:
+            if log_callback:
+                log_callback("[green]Valid index")
+        else: 
+            return None
+        if log_callback:
+            log_callback(f"[yellow]Has reference table: {fm.db.table_exists(fm.mapper_reference_table)}")
+        return temp_db_filepath
+            
+    def deepen_shallow_map(self,database,
+                        table_name: str,
+                        path_to_map: str,
+                        progress_bar: Callable | None = None,
+                        press_to_continue: bool = False,
+                        log_callback: Callable | None = None,
+                        kill_ev: threading.Event | None = None
+                        ):
+        """Menu for Shallow Compare two maps 
+
+        Returns: 
+            (is_ok, is_finished, can_replace)"""
+        is_ok = False
+        is_finished = False
+        can_replace = False
+        if not database or not table_name:
+            return is_ok, is_finished, can_replace
+        db_map_pair=(database,table_name)
+        if log_callback:
+            log_callback(f'Converting {db_map_pair[1]} for calculation...')
+        self.cma.shallow_to_deep(db_map_pair,None,progress_bar,kill_ev=kill_ev)
+        if kill_ev.is_set():
+            log_callback('[yellow]Conversion Cancelled...')
+            return is_ok, is_finished, can_replace
+        if log_callback:
+            log_callback(f'Conversion Finished for {db_map_pair[1]}')
+        fm=self.cma.get_file_map(db_map_pair[0])
+        if not fm:
+            return is_ok, is_finished, can_replace
+        data=fm.db.get_data_from_table(db_map_pair[1],'COUNT(*)',f'md5="{MD5_CALC}"')
+        if len(data)==0 or data[0][0]==0:
+            is_ok=True 
+            is_finished=True
+            if log_callback:
+                log_callback("[green]"+"*"*15+" NOTHING TO DO "+"*"*15)
+                log_callback(f"[green]All files in {db_map_pair[1]} are already Mapped")
+                log_callback("[green]"+"*"*45)
+                return is_ok, is_finished, can_replace
+        if log_callback:
+            log_callback(f"[magenta]Deepening {data[0][0]} shallow files in {db_map_pair[1]}!")
+        # Create temporal database
+        temp_db_filepath=self._create_temporal_database(db_map_pair[0],db_map_pair[1],log_callback=log_callback)
+        temp_table_name=self.cma.format_new_table_name(table_name,path_to_map)
+        is_ok,msg=self.map_validation(temp_db_filepath,temp_table_name)
+        if  is_ok:  
+            self.mapping_to_pair=(temp_db_filepath, temp_table_name)
+            temp_map_pair = self.mapping_to_pair
+            fm_temp = self.cma.get_file_map(temp_map_pair[0])
+            # fm_temp.add_table_to_mapper_index(temp_map_pair,)
+
+            if log_callback:
+                log_callback(f"[yellow]Created temporary Map {temp_table_name}")
+            
+            if log_callback:
+                log_callback(f"[yellow]Copying map to temporary database: {db_map_pair[1]} -> {temp_map_pair[1]}")
+            was_copied=self.copy_table_from_to_database(db_map_pair[0],db_map_pair[1],
+                                             temp_map_pair[0],temp_map_pair[1],log_callback)
+            if not was_copied:
+                if log_callback:
+                    log_callback(f"[red]Error copying table {db_map_pair[1]} to {temp_map_pair[1]}")
+                return False, False, False
+            
+            if log_callback:
+                log_callback(f"[cyan]Starting Deep calculation @ {temp_map_pair[1]}")
+
+                log_callback(f"Debug -> Ref table of {fm_temp.db_path_file}:")
+                log_callback(f"{fm_temp.db.get_data_from_table(fm_temp.mapper_reference_table)}")
+                
+                log_callback(f"[cyan]Debug -> Table Exists {fm_temp.db.table_exists(temp_map_pair[1])}")
+                log_callback(f"[cyan]Debug -> {fm_temp.check_if_map_device_active(fm_temp.db,temp_map_pair[1],False)}")
+            msg = fm_temp.remap_map_in_thread_to_db(table_name = temp_map_pair[1],
+                                            progress_bar = progress_bar,
+                                            wait_for_key_press = press_to_continue,
+                                            log_callback = log_callback,
+                                            kill_ev = kill_ev)
+            is_ok=True 
+            if msg: 
+                if log_callback:
+                    log_callback(f"[magenta]{msg}")
+                is_finished = False
+            else:
+                if log_callback:
+                    log_callback("[green]Successfuly Finished deepening!")
+                is_finished = not kill_ev.is_set()
+
+            can_replace = True
+            return is_ok, is_finished, can_replace
+            # # copy back to db in worker
+            
+        return False, False, False
+    
+    def replace_map_from_temporal_db(self, to_db_map_pair, log_callback=None):
+        """Replace a map in the target database with a temporary map."""
+
+        target_db, target_map = to_db_map_pair
+        source_db, source_map = self.mapping_to_pair
+
+        fm = self.cma.get_file_map(target_db)
+        if not fm:
+            if log_callback:
+                log_callback(f"[red]Inactive Database {target_db}[/red]")
+            return False
+
+        map_list = self.cma.get_maps_in_db(target_db)
+        if target_map not in map_list:
+            if log_callback:
+                log_callback(
+                    f"[red]Map {target_map} is not in "
+                    f"database {target_db}[/red]"
+                )
+            return False
+
+        # Copy source map into target DB under a temporary name        
+        temp_name = self.cma.format_new_table_name("%_" + source_map,"")
+
+        can_replace = self.copy_table_from_to_database(
+            source_db, source_map,
+            target_db, temp_name, log_callback )
+
+        if not can_replace:
+            if log_callback:
+                log_callback(
+                    f"[red]Error copying temporary table "
+                    f"{source_map} to {target_db}[/red]"
+                )
+            return False
+        
+        # Rename existing target map out of the way
+        temp_original_name = self.cma.format_new_table_name("%_" + target_map,"")
+        was_original_renamed = self.rename_map(
+            target_db, target_map, temp_original_name)
+
+        if not was_original_renamed:
+            # The new temporary table exists but the original
+            # table was not renamed. Clean up the temporary table.
+            self.delete_map_from_db(target_db, temp_name)
+
+            if log_callback:
+                log_callback(
+                    f"[red]Could not rename original map {target_map}[/red]")
+            return False
+        # Rename new temporary map to the real map name
+        was_temp_renamed = self.rename_map(target_db, temp_name, target_map)
+
+        if not was_temp_renamed:
+            # Try to restore the original map.
+            restored = self.rename_map(target_db, temp_original_name, target_map)
+
+            if log_callback:
+                if restored:
+                    log_callback(
+                        f"[yellow]Could not install new map. "
+                        f"Original map {target_map} was restored.[/yellow]"
+                    )
+                else:
+                    log_callback(
+                        f"[red]CRITICAL: Could not install new map "
+                        f"or restore original map {target_map}.[/red]"
+                    )
+            return False
+        # New map is now active. Remove old map.
+        deleted = self.delete_map_from_db(target_db, temp_original_name)
+        if not deleted:
+            if log_callback:
+                log_callback(
+                    f"[yellow]Map {target_map} was replaced, "
+                    f"but the old map could not be deleted: "
+                    f"{temp_original_name}[/yellow]"
+                )
+
+            # Replacement itself succeeded.
+            self._clear_map_size(target_db, target_map)
+            return True
+        
+        # Success
+        self._clear_map_size(target_db, target_map)
+
+        return True
+    
+    def get_full_mount_path_of_map(self,database,a_map):
+        try:
+            map_info=self.cma.get_map_info(database,a_map)
+            # mount= 5 mappath = 3
+            mount_path_of_map=os.path.join(map_info[0][5],map_info[0][3])
+            return mount_path_of_map
+        except:
+            pass
+        return ""
+        
+    
     def delete_map_from_db(self,selected_db,tablename,log_print=True):
         """Deletes the map from the database"""
         fm=self.cma.get_file_map(selected_db) 
@@ -429,19 +704,35 @@ class FileMapCliManager:
             fm.db.create_connection()
             fm.delete_map(tablename,log_print)
     
-    def copy_table_from_to_database(self,dbfrom,table_name_from,db_to,table_name_to):
-        log.debug("Entered copy_table_from_to_database ")
+    def copy_table_from_to_database(self,db_from, table_name_from, db_to, table_name_to,log_callback=None):
+        if log_callback:
+            log_callback("Entered copy_table_from_to_database ")
+            log_callback(f"    From {self.fm.extract_filename(db_from)}, {table_name_from}")
+            log_callback(f"    To   {self.fm.extract_filename(db_to)}, {table_name_to}")
         try:
             is_ok, _ =self.map_validation(db_to,table_name_to)
             if not is_ok:
                 # ensure the name is unique
                 table_name_to=self.cma.format_new_table_name("%_"+table_name_to,"")
-            (cloned_db,cloned_map)=self.cma.clone_map((dbfrom,table_name_from),db_to,return_pair=True)
+            if log_callback:
+                log_callback("Cloning...")
+            self.cma.activate_databases(db_to)
+            self.cma.activate_databases(db_from)
+            (cloned_db,cloned_map)=self.cma.clone_map((db_from,table_name_from),db_to,return_pair=True)
+            if cloned_db is None or cloned_map is None:
+                msg=self.cma.clone_map((db_from,table_name_from),db_to,return_pair=False)
+                if log_callback:
+                    log_callback("[red]Error Cloning ..")    
+                    log_callback(f"[red]{msg}")    
+                return False
             fm=self.cma.get_file_map(cloned_db)
+            if log_callback:
+                log_callback("Cloned Finished..")
             if isinstance(fm,FileMapper):
                 fm.rename_map(cloned_map,table_name_to)
         except Exception as eee:
-            # log.debug(f"copy_table_from_to_database ->{eee}")
+            if log_callback:
+                log_callback(f"[red]Error copy_table_from_to_database -> {eee}")
             return False
         self.refresh_map_size_cache()
         return True
@@ -560,6 +851,14 @@ class FileMapCliManager:
         if isinstance(db_cache,dict):
             size_tup=db_cache.get(a_map)
         return size_tup
+    
+    def _clear_map_size(self,database:str,a_map:str):
+        """Searches in cache for a size tuple 
+            sets it to None if found
+        """
+        database=str(database)
+        db_cache=self.gui_db_map_size_cache.get(database)
+        db_cache[a_map] = None
             
 
 
