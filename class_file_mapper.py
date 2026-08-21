@@ -674,6 +674,7 @@ class FileMapper:
             shallow_map (bool, optional): Make shallow map (Does not calculate md5,does not run thread).
             Defaults to False.
         """
+        msg = ''
         db = self.db
         progress = None
         line_data_tup=tuple()
@@ -765,24 +766,24 @@ class FileMapper:
                 if press_to_continue:
                     log_callback("+" * 33, "\nPress any Key to continue\n", "+" * 33)
                     getch()
-                return f'[green]Successfully Mapped {n_r} files in {str(delta).split(".", maxsplit=1)[0]}'
+                msg = f'[green]Successfully Mapped {n_r} files in {str(delta).split(".", maxsplit=1)[0]}'
         except KeyboardInterrupt:
             log_callback("[magenta]User cancel")
             log_callback("@" * 100, "\nPress any Key to continue\n", "@" * 100)
-            return "[red] User Interrupt"
+            msg = "[red] User Interrupt"
         except Exception as eee:  # pylint: disable=broad-exception-caught
             log_callback(f"[red]Error Mapping: {eee}")
             log_callback(type(eee), line_data_tup)
             if press_to_continue:
                 log_callback("@" * 100, "\nPress any Key to continue\n", "@" * 100)
                 getch()
-            return f"[red]Error Mapping: {eee}"
+            msg = f"[red]Error Mapping: {eee}"
         finally:
             if not finished_shallow:
                 self.set_maptype_to_map(table_name,MAP_TYPES_LIST[6]) # "Incomplete"
             if progress:
                 progress.stop()
-        return ''
+        return msg
 
     def map_a_list_of_paths_to_db(
         self,
@@ -792,6 +793,8 @@ class FileMapper:
         progress_bar=None,
         shallow_map=False,
         press_to_continue=True,
+        log_callback=None,
+        kill_ev:threading.Event=None
     ):
         """Maps a path in a device into a table in the database.
 
@@ -804,9 +807,12 @@ class FileMapper:
             Defaults to False.
         """
         db = self.db
+        msg = ''
         if not isinstance(path_list_to_map,list):
             return None
         f_m=FileManipulate()
+        if not log_callback:
+            log_callback=print
         try:
             data = []
             iii = 0
@@ -814,7 +820,18 @@ class FileMapper:
             start_datetime = datetime.now()
             fp_list=[]
             n_total=0
+            if progress_bar is None:
+                progress_bar = RichMapProgress()
+            if isinstance(progress_bar, MapProgress):
+                progress = progress_bar
+            if progress:
+                progress.start(
+                    num_files,
+                    f"[blue]Initial Mapping [red]({exit_key} to Exit)",
+                )
             for filepath in path_list_to_map:
+                if kill_ev and kill_ev.is_set():
+                    raise KeyboardInterrupt("User Cancel")
                 file_exist, is_file= f_m.validate_path_file(filepath)
                 if not file_exist:
                     iii = iii + 1 # keeps index with lists
@@ -830,62 +847,91 @@ class FileMapper:
                 self._create_map_in_db(table_name+"_FP_"+str(iii))
                 fp_list.append(table_name+"_FP_"+str(iii))
                 num_files, num_folders = self.count_files_in_path(path_to_map)
-                with Progress() as progress:
-                    exit_key = "ctrl+c"
-                    if os.name == "nt":
-                        exit_key = "F12"
-                    task1 = progress.add_task(f"[blue]Initial Mapping [red]({exit_key} to Exit)", total=num_files)
-                    delta = datetime.now() - start_datetime
-                    print(f"Counted: {num_files} files and {num_folders} folders in {delta.total_seconds()} sec")
-                    if not file_to_map:
-                        for dirpath, _, filenames in os.walk(path_to_map):
-                            # Get the data for each file
-                            for file in filenames:
-                                line_data_tup = self.get_mapping_info_data_from_file(
-                                    mount, dirpath, file, log_print, f"{files_processed}. ", shallow_map
+                
+                #with Progress() as progress:
+                exit_key = "ctrl+c"
+                if os.name == "nt":
+                    exit_key = "F12"
+                #task1 = progress.add_task(f"[blue]Initial Mapping [red]({exit_key} to Exit)", total=num_files)
+                if progress:
+                    progress.update(
+                        current=files_processed,
+                        description=f"[blue]Mapping: [/blue][red]({exit_key} to Exit)",
+                    )
+                delta = datetime.now() - start_datetime
+
+                log_callback(f"Counted: {num_files} files and {num_folders} folders in {delta.total_seconds()} sec")
+                if not file_to_map:
+                    for dirpath, _, filenames in os.walk(path_to_map):
+                        # Get the data for each file
+                        for file in filenames:
+                            if kill_ev and kill_ev.is_set():
+                                raise KeyboardInterrupt("User Cancel")
+                            line_data_tup = self.get_mapping_info_data_from_file(
+                                mount, dirpath, file, log_print, f"{files_processed}. ", shallow_map, log_callback
+                            )
+                            data.append(line_data_tup)
+                            
+                            files_processed = files_processed + 1
+                            # progress.update(task1, advance=DATA_ADVANCE)
+                            if progress:
+                                progress.update(
+                                    advance=DATA_ADVANCE,
+                                    description=f"[blue]Mapping: [/blue][red]({exit_key} to Exit)",
                                 )
-                                data.append(line_data_tup)
-                                
-                                files_processed = files_processed + 1
-                                progress.update(task1, advance=DATA_ADVANCE)
-                    else:
-                        line_data_tup = self.get_mapping_info_data_from_file(
-                                    mount, path_to_map, file_to_map, log_print, f"{files_processed}. ", shallow_map
-                                )
-                        data.append(line_data_tup)
-                        progress.update(task1, advance=DATA_ADVANCE)
-                        files_processed = files_processed + 1
-                    db.insert_data_to_table(table_name+"_FP_"+str(iii), data)
-                    iii = iii + 1
-                progress.update(task1, completed=num_files)
+                else:
+                    line_data_tup = self.get_mapping_info_data_from_file(
+                                mount, path_to_map, file_to_map, log_print, f"{files_processed}. ", shallow_map
+                            )
+                    data.append(line_data_tup)
+                    #progress.update(task1, advance=DATA_ADVANCE)
+                    if progress:
+                        progress.update(
+                            advance=DATA_ADVANCE,
+                            description=f"[blue]Mapping: [/blue][red]({exit_key} to Exit)",
+                        )
+                    files_processed = files_processed + 1
+                db.insert_data_to_table(table_name+"_FP_"+str(iii), data)
+                iii = iii + 1
+                
+                #progress.update(task1, completed=num_files)
+                if progress:
+                    progress.update(
+                        current=num_files,
+                        description="[green]Shallow Mapping complete")
                 time.sleep(0.333)
                 # db.print_all_rows(table_name)
                 if not shallow_map:
                     for t_n in fp_list:
-                        self.remap_map_in_thread_to_db(t_n, progress_bar, False)
+                        self.remap_map_in_thread_to_db(t_n, progress_bar, False,log_callback,kill_ev)
                 if log_print:
                     # time_elapsed = (datetime.now() - start_datetime).total_seconds()
                     delta = datetime.now() - start_datetime
-                    print("+" * 33)
+                    log_callback("+" * 33)
                     n_r=0
                     for t_n in fp_list:
                         n_r += db.get_number_or_rows_in_table(t_n)
-                    print(f'[green]Successfully Mapped {n_r} files in {str(delta).split(".", maxsplit=1)[0]}')
+                    log_callback(f'[green]Successfully Mapped {n_r} files in {str(delta).split(".", maxsplit=1)[0]}')
                     n_total=n_total+n_r
             delta = datetime.now() - start_datetime        
-            return f'[green]Successfully Mapped {n_total} files in {str(delta).split(".", maxsplit=1)[0]}'
+            msg = f'[green]Successfully Mapped {n_total} files in {str(delta).split(".", maxsplit=1)[0]}'
         except KeyboardInterrupt:
-            print("[magenta]User cancel")
-            print("@" * 100, "\nPress any Key to continue\n", "@" * 100)
-            return "[red] User Interrupt"
+            log_callback("[magenta]User cancel")
+            log_callback("@" * 100, "\nPress any Key to continue\n", "@" * 100)
+            
+            msg = "[red] User Interrupt"
         except Exception as eee:  # pylint: disable=broad-exception-caught
-            print(f"[red]Error Mapping: {eee}")
-            print(type(eee), line_data_tup)
+            log_callback(f"[red]Error Mapping: {eee}")
+            log_callback(type(eee), line_data_tup)
             if press_to_continue:
-                print("@" * 100, "\nPress any Key to continue\n", "@" * 100)
+                log_callback("@" * 100, "\nPress any Key to continue\n", "@" * 100)
                 getch()
-            return f"[red]Error Mapping: {eee}"
-        return ''
+            
+            msg = f"[red]Error Mapping: {eee}"
+        finally:
+            if progress:
+                progress.stop()
+        return msg
     
     def _progress_update(self, progress_bar, task_id, current=None, description=None, advance=None):
         if progress_bar is None:
@@ -1524,7 +1570,10 @@ class FileMapper:
         # return self.find_matching_data(repeated_dict,tablename,item_list,match_list)
         return self.find_matching_dbresult(repeated_dict, tablename, item_list, match_list)
 
-    def find_matching_dbresult(self, repeated_dict: dict, table_name: str, item_list: list, match_list: list):
+    def find_matching_dbresult(self, repeated_dict: dict, table_name: str, item_list: list, match_list: list,
+                                progress_bar=None,
+                                log_callback=None,
+                                kill_ev:threading.Event=None):
         """Finds matching item and match items in a database
 
         Args:
@@ -1541,58 +1590,85 @@ class FileMapper:
         db_result = DBResult(self.db.describe_table_in_db(table_name))
         repeat_list = []
         try:
-            with Progress() as progress:
-                exit_key = "ctrl+c"
-                if os.name == "nt":
-                    exit_key = "F12"
-                total_count = len(repeated_dict)
-                task1 = progress.add_task(f"[blue]Calculating Match [red]({exit_key} to Exit)", total=total_count)
-                for count_processed, (a_key, db_id_tup_list) in enumerate(repeated_dict.items()):
-                    msg1 = f"{count_processed+1}/{total_count} found {len(repeat_list)}"
-                    msg2 = f" looking at {a_key}={repeated_dict[a_key]}"
-                    print(f"{msg1}{msg2}")
-                    data_same_md5 = []
-                    if len(db_id_tup_list) <= SINGLE_MULTIPLE_SEARCH:
-                        for db_id_tup in db_id_tup_list:
-                            data_same_md5 = data_same_md5 + self.db.get_data_from_table(
-                                table_name, "*", f"id={db_id_tup[1]}"
-                            )
-                    else:
-                        data_same_md5 = self.db.get_data_from_table(
-                            table_name, "*", f"md5={self.db.quotes(a_key)}"
-                        )  # makes a search in all db -> slow if few, fast if many
-                    db_result.clear_values()
-                    if raw_key_pressed("\xe0\x86"):  # F12
-                        raise KeyboardInterrupt("User Cancel")
-                    if len(data_same_md5) > 0:
-                        db_result.set_values(data_same_md5)
-                        for iii, _ in enumerate(data_same_md5):
-                            comp_dict = {}
-                            if iii == 0:
-                                node_1 = db_result.dbr[iii]  # Node object
-                                repeat_node = None
-                            else:
-                                node_2 = db_result.dbr[iii]  # Node object
-                                comp_dict = db_result.compare_nodes(node_1, node_2, "==")
+            if progress_bar is None:
+                progress_bar = RichMapProgress()
+            if isinstance(progress_bar, MapProgress):
+                progress = progress_bar
+            if not log_callback:
+                log_callback = print
+            #with Progress() as progress:
+            exit_key = "ctrl+c"
+            if os.name == "nt":
+                exit_key = "F12"
+            total_count = len(repeated_dict)
+            #task1 = progress.add_task(f"[blue]Calculating Match [red]({exit_key} to Exit)", total=total_count)
+            if progress:
+                progress.start(
+                    total_count,
+                    f"[blue]Calculating Match [red]({exit_key} to Exit)",
+                )
+            for count_processed, (a_key, db_id_tup_list) in enumerate(repeated_dict.items()):
+                msg1 = f"{count_processed+1}/{total_count} found {len(repeat_list)}"
+                msg2 = f" looking at {a_key}={repeated_dict[a_key]}"
+                log_callback(f"{msg1}{msg2}")
+                data_same_md5 = []
+                if len(db_id_tup_list) <= SINGLE_MULTIPLE_SEARCH:
+                    for db_id_tup in db_id_tup_list:
+                        data_same_md5 = data_same_md5 + self.db.get_data_from_table(
+                            table_name, "*", f"id={db_id_tup[1]}"
+                        )
+                else:
+                    data_same_md5 = self.db.get_data_from_table(
+                        table_name, "*", f"md5={self.db.quotes(a_key)}"
+                    )  # makes a search in all db -> slow if few, fast if many
+                db_result.clear_values()
+                if raw_key_pressed("\xe0\x86"):  # F12
+                    raise KeyboardInterrupt("User Cancel")
+                if kill_ev and kill_ev.is_set(): 
+                    raise KeyboardInterrupt("User Cancel")
+                if len(data_same_md5) > 0:
+                    db_result.set_values(data_same_md5)
+                    for iii, _ in enumerate(data_same_md5):
+                        comp_dict = {}
+                        if iii == 0:
+                            node_1 = db_result.dbr[iii]  # Node object
+                            repeat_node = None
+                        else:
+                            node_2 = db_result.dbr[iii]  # Node object
+                            comp_dict = db_result.compare_nodes(node_1, node_2, "==")
 
-                                repeat_file = True
-                                for aaa, bbb in zip(item_list, match_list):
-                                    if bbb != comp_dict[aaa]:
-                                        repeat_file = False
-                                        break
-                                if repeat_file:
-                                    if not repeat_node:
-                                        repeat_node = (node_1.to_dict(), node_2.to_dict())
-                                    else:
-                                        repeat_node = repeat_node + (node_2.to_dict(),)
-                            if repeat_node:
-                                repeat_list.append(repeat_node)
-                    progress.update(task1, completed=count_processed + 1)
-                progress.update(task1, completed=total_count)
+                            repeat_file = True
+                            for aaa, bbb in zip(item_list, match_list):
+                                if bbb != comp_dict[aaa]:
+                                    repeat_file = False
+                                    break
+                            if repeat_file:
+                                if not repeat_node:
+                                    repeat_node = (node_1.to_dict(), node_2.to_dict())
+                                else:
+                                    repeat_node = repeat_node + (node_2.to_dict(),)
+                        if repeat_node:
+                            repeat_list.append(repeat_node)
+                #progress.update(task1, completed=count_processed + 1)
+                if progress:
+                    progress.update(
+                        current=count_processed + 1,
+                        description=f"[blue]Calculating Match [red]({exit_key} to Exit)",
+                    )
+                
+            #progress.update(task1, completed=total_count)
+            if progress:
+                progress.update(
+                    current=total_count,
+                    description="[green]Match calculation complete")
         except KeyboardInterrupt:
-            print("[magenta]User cancel")
-            print("@" * 100, "\nPress any Key to continue\n", "@" * 100)
-            getch()
+            log_callback("[magenta]User cancel")
+            log_callback("@" * 100, "\nPress any Key to continue\n", "@" * 100)
+            if not kill_ev:
+                getch()
+        finally:
+            if progress:
+                progress.stop()
         return repeat_list
 
     @staticmethod
@@ -1603,7 +1679,10 @@ class FileMapper:
                 return False
         return True
 
-    def find_matching_data(self, repeated_dict: dict, table_name: str, item_list: list, match_list: list):
+    def find_matching_data(self, repeated_dict: dict, table_name: str, item_list: list, match_list: list,
+                           progress_bar=None,
+                        log_callback=None,
+                        kill_ev:threading.Event=None):
         """Finds matching item and match items in a database
 
         Args:
@@ -1625,34 +1704,58 @@ class FileMapper:
                     comp_dict.update({iii: match})
 
         repeat_list = []
-        with Progress() as progress:
+        if progress_bar is None:
+            progress_bar = RichMapProgress()
+        if isinstance(progress_bar, MapProgress):
+            progress = progress_bar
+        if not log_callback:
+            log_callback = print
+        
+        #with Progress() as progress:
+        exit_key = "F12"
+        if os.name == "nt":
             exit_key = "F12"
-            if os.name == "nt":
-                exit_key = "F12"
-            total_count = len(repeated_dict)
-            task1 = progress.add_task(f"[blue]Calculating Match [red]({exit_key} to Exit)", total=total_count)
-            for count_processed, (a_key, db_id_tup_list) in enumerate(repeated_dict.items()):
-                msg1 = f"{count_processed+1}/{total_count} found "
-                msg2 = f"{len(repeat_list)} looking at {a_key}={repeated_dict[a_key]}"
-                print(f"{msg1}{msg2}")
-                data_same_md5 = []
-                if len(db_id_tup_list) < 10:
-                    for db_id_tup in db_id_tup_list:
-                        data_same_md5 = data_same_md5 + self.db.get_data_from_table(
-                            table_name, "*", f"id={db_id_tup[1]}"
-                        )
-                else:
-                    data_same_md5 = self.db.get_data_from_table(
-                        table_name, "*", f"md5={self.db.quotes(a_key)}"
-                    )  # makes a search in all db -> slow if few, fast if many
-                if raw_key_pressed("\xe0\x86"):  # F12
-                    return repeat_list
-                if len(data_same_md5) > 0:
-                    repeat_node = self.combinatorial_compare(field_list, comp_dict, data_same_md5)
-                    if repeat_node:
-                        repeat_list.append(repeat_node)
-                progress.update(task1, completed=count_processed + 1)
-            progress.update(task1, completed=total_count)
+        total_count = len(repeated_dict)
+        #task1 = progress.add_task(f"[blue]Calculating Match [red]({exit_key} to Exit)", total=total_count)
+        if progress:
+            progress.start(
+                total_count,
+                f"[blue]Calculating Match [red]({exit_key} to Exit)",
+            )
+        for count_processed, (a_key, db_id_tup_list) in enumerate(repeated_dict.items()):
+            msg1 = f"{count_processed+1}/{total_count} found "
+            msg2 = f"{len(repeat_list)} looking at {a_key}={repeated_dict[a_key]}"
+            log_callback(f"{msg1}{msg2}")
+            data_same_md5 = []
+            if len(db_id_tup_list) < 10:
+                for db_id_tup in db_id_tup_list:
+                    data_same_md5 = data_same_md5 + self.db.get_data_from_table(
+                        table_name, "*", f"id={db_id_tup[1]}"
+                    )
+            else:
+                data_same_md5 = self.db.get_data_from_table(
+                    table_name, "*", f"md5={self.db.quotes(a_key)}"
+                )  # makes a search in all db -> slow if few, fast if many
+            if kill_ev and kill_ev.is_set() or raw_key_pressed("\xe0\x86"):  # F12
+                if progress:
+                    progress.stop()
+                return repeat_list
+            if len(data_same_md5) > 0:
+                repeat_node = self.combinatorial_compare(field_list, comp_dict, data_same_md5)
+                if repeat_node:
+                    repeat_list.append(repeat_node)
+            # progress.update(task1, completed=count_processed + 1)
+            if progress:
+                progress.update(
+                    current=count_processed + 1,
+                    description=f"[blue]Calculating Match [red]({exit_key} to Exit)",
+                )
+        #progress.update(task1, completed=total_count)
+        if progress:
+            progress.update(
+                current=total_count,
+                description="[green]Match calculation complete")
+            progress.stop()
         return repeat_list
 
     def combinatorial_compare(self, field_list: list, comp_dict: dict, d_list: list[tuple], progress_callback=None) -> tuple[dict]:
