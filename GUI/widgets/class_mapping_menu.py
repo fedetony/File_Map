@@ -11,6 +11,10 @@ from widgets.class_delegates import DateDelegate, ColoredTextDelegate
 from controllers.mapping_worker_thread import *
 from widgets.class_qt_map_progress import QtMapProgress
 from widgets.mapping_dialog import MappingDialog
+from widgets.selection_dialog import SelectionDialog,SelectionDialogSetter
+from widgets.repeated_duplicate_dialog import RepeatedDuplicateResultDialog
+from widgets.search_dialog import SearchDialog
+from widgets.compare_dialog import CompareResultDialog
 from widgets.class_file_dialogs import DeleteConfirmDialog
 from widgets.map_cloneing_dialog import CloneMapDialog
 
@@ -116,7 +120,8 @@ class MappingMenu(QtCore.QObject):
             
             "Delete Selected Maps": self.icons.icon("delete map"),
             "Update Selected Maps": self.icons.icon("update map"),
-            "Do a Selection": self.icons.icon("selection map"),
+            "Do a Map Selection": self.icons.icon("selection map"),
+            "Do a File Selection": self.icons.icon("db activate"),
         }
     
     def _set_icons_dict(self):
@@ -585,7 +590,8 @@ class MappingMenu(QtCore.QObject):
             self._add_action_to_menu(export, name, callback, context)
 
         menu.addSeparator()
-        self._add_action_to_menu(menu, "Do a Selection", self._menu_do_selection, context)
+        self._add_action_to_menu(menu, "Do a File Selection", self._menu_do_file_selection, context)
+        self._add_action_to_menu(menu, "Do a Map Selection", self._menu_do_map_selection, context)
 
         menu.addSeparator()
         self._add_action_to_menu(menu, "Deepen Shallow Map", self._menu_deepen_shallow_map, context)
@@ -759,8 +765,60 @@ class MappingMenu(QtCore.QObject):
     def _menu_export_data_list(self, context):
         pass
 
-    def _menu_do_selection(self, context):
-        pass
+    def _menu_do_a_selection(self, context, mode):
+        database = self._get_db_from_context(context)
+        reg_db = self.dialog_register.get(database)
+        if reg_db:
+            dialog = reg_db["dialog"]
+            if dialog.isVisible():
+                dialog.raise_()
+                dialog.activateWindow()
+            else:
+                dialog.show()
+                dialog.raise_()
+                dialog.activateWindow()
+            return
+        modding_info={"mode": mode,
+                      "database":database,
+                      "path_to_map":"",
+                      "map_name":"",
+                     }
+        
+        dialog_gs = SelectionDialogSetter(
+            fmap = self.fmap,
+            worker_manager = self.worker_manager,
+            modding_info = modding_info,
+            lazy_defaults = {},
+            styles_dict = {},
+            parent=self.parent_widget,
+        )
+        dialog=dialog_gs.get_dialog()
+        if not isinstance(dialog,SelectionDialog):
+            return
+        db = self._get_databaseinfo_from_context(context)
+        dialog.refresh_mapping_tree.connect(lambda: self.generate_mapping_struct)
+        self.dialog_register[database] = {
+            "dbinfo": db,
+            "dialog": dialog,
+            "mapping": False,
+        }
+        # update tree after register to block renaming
+        self._update_regenerate()
+        # Mapping State
+        dialog.mapping_is_running_signal.connect(
+            lambda: self._set_mapping_state(database, True))
+        dialog.mapping_is_not_running_signal.connect(
+            lambda: self._set_mapping_state(database, False))
+
+        dialog.dialog_exit.connect(self._mapping_dialog_closed)
+        # dialog.exec() # blocks user until closing window
+        dialog.show() # allows user to change windows
+
+    def _menu_do_file_selection(self, context):
+        self._menu_do_a_selection(context,"FESelection")
+
+    def _menu_do_map_selection(self, context):
+        self._menu_do_a_selection(context,"DBSelection")
 
     def _menu_deepen_shallow_map(self, context):
         database = self._get_db_from_context(context)

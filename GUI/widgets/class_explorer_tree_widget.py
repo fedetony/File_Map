@@ -44,6 +44,8 @@ class ExplorerTreeWidget(QWidget):
         self._build_ui()
         self._connect()
         self._setup_shortcuts()
+        # Expand / Collapse nodes
+        self._walk_tree_expansion(self.t_m.root)
     
     def _build_manager(self):
         if self.config.root_node is None:
@@ -171,6 +173,8 @@ class ExplorerTreeWidget(QWidget):
         if not node:
             return
         node.expand = True
+        for child in node.children:
+            self._walk_tree_expansion(child)
         self.nodeExpanded.emit(node)
         self._fetch(index)
     
@@ -180,6 +184,22 @@ class ExplorerTreeWidget(QWidget):
             return
         node.expand = False
         self.nodeCollapsed.emit(node)
+    
+    def _walk_tree_expansion(self, node: TreeNode):
+        index = self.model.get_index_from_node(node)
+        if not index.isValid():
+            return
+        # Collapse or expand if explicitly stated
+        is_expanded=self.tree.isExpanded(index)
+        if node.expand == True and not is_expanded:
+            self.tree.expand(index)
+        elif node.expand == False and is_expanded:
+            self.tree.collapse(index)
+
+        for child in node.children:
+            self._walk_tree_expansion(child)
+
+
     
     # --------------------------------------------------
     # Current nodes

@@ -699,7 +699,15 @@ class FileMapCliManager:
         except:
             pass
         return ""
-        
+    
+    def get_mount_of_map(self,database,a_map)->str:
+        try:
+            map_info=self.cma.get_map_info(database,a_map)
+            # mount= 5 mappath = 3
+            return map_info[0][5]
+        except:
+            pass
+        return ""
     
     def delete_map_from_db(self,selected_db,tablename,log_print=True):
         """Deletes the map from the database"""

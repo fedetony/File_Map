@@ -14,7 +14,7 @@ from widgets.class_explorer_tree_widget import *
 from models.class_provider_engine import DefaultProviderEngine, FM
 from models.class_action_provider import DefaultFileActionProvider
 from models.class_style_provider import *
-from models.class_lazy_loader import ActiveFELazyLoader
+from models.class_lazy_loader import *
 
 class SelectionDialogSetter:
     """Sets the configuration for the selection dialog
@@ -25,81 +25,185 @@ class SelectionDialogSetter:
                  modding_info:dict,
                  lazy_defaults:dict = None,
                  styles_dict:dict = None, # To include other styles later
+                 parent =None
                  ):
         # modding_info={"database": "Test DB",
         #             "mode":"FESelection",
         #             "path_to_map":"",
         #             "map_name":"",
         #             }
+        self.fmap = fmap
+        self.worker_manager = worker_manager
+        self.modding_info = modding_info
+        self.lazy_defaults = lazy_defaults
+        self.styles_dict = styles_dict
+        self.parent = parent
+        self.config = None
+        self.dlg = None
+
         mode=modding_info.get("mode")
         if mode == "FESelection":
-            virtual_root = TreeNode("File Explorer")
-            virtual_root.loaded = True
-            virtual_root.i_am = "root"
-            mounted_list = fmap.device_monitor.devices
-            
-            #mounted_list=FM.get_mounted_disks()
-            for mountpoint, serial in mounted_list:
-                nmount=os.path.normpath(mountpoint)
-                drive = TreeNode(nmount)
-                drive.i_am = "dir"
-                drive.path = nmount
-                drive.loaded = False
-                virtual_root.add_child(drive)
-
-            config = ExplorerConfig()
-            # Basic
-            config.root_node = virtual_root
-            # 
-            config.show_path_edit = True
-            config.show_context_menu = True
-            # Mode selection
-            config.selection_by_type_mode = SelectionByTypeMode.FILES_DIRS_ONLY
-            config.checkbox_mode = CheckBoxMode.CHECKBOX
-            config.selection_mode = SelectionMode.MULTI
-            # You must pass lazy_loader, providers and styles in agreement to Mode selection
-            lazy_class = ActiveFELazyLoader()
-            # initial settings 
-            if not isinstance(lazy_defaults,dict):
-                lazy_defaults = {}
-
-            lazy_class.set_defaults(lazy_defaults.get("defaults",[]))
-            lazy_class.set_hidden(lazy_defaults.get("hidden",[]))
-            lazy_class.set_blank(lazy_defaults.get("blank",[]))
-            lazy_class.set_locked(lazy_defaults.get("locked",[]))
-
-            config.lazy_loader = lazy_class
-            config.provider = DefaultProviderEngine() # functions for behavior
-            config.action_provider = DefaultFileActionProvider() # menu, shortcuts, global shortcuts
-            if not isinstance(styles_dict,dict):
-                styles_dict={}
-            config.explorer_style = styles_dict.get("explorer_style",DefaultExplorerStyle()) # text, tooltips, icons
-            config.tree_style = styles_dict.get("tree_style",DefaultTreeStyle()) # role formatting by node, treemanager
-
+            self._set_fe_mode_config()
         elif  mode == "DBSelection":   
-            virtual_root = TreeNode("Database Explorer")
-            virtual_root.loaded = True
-            virtual_root.i_am = "root"
-            mounted_list = []
-            for db in fmap.get_active_databases_in_dbm(): 
-                mounted_list.append(db.name)
-            # Add database -> Maps as Mapping -> (db,map) pairs
-            # for mountpoint, serial in mounted_list:
-            #     nmount=os.path.normpath(mountpoint)
-            #     drive = TreeNode(nmount)
-            #     drive.i_am = "dir"
-            #     drive.path = nmount
-            #     drive.loaded = False
-            #     virtual_root.add_child(drive)
-        else:
-            raise AttributeError("Mode not supported!")
-        
-        if not isinstance(config.explorer_style,TreeStyle):
-                config.explorer_style = DefaultExplorerStyle() # text, tooltips, icons
-        if not isinstance(config.tree_style,TreeStyleProvider):
-            config.tree_style = DefaultTreeStyle() # role formatting by node, treemanager
+            self._set_db_mode_config()
 
-        self.dlg = SelectionDialog(fmap,worker_manager,modding_info,config)
+            
+            
+            # raise AttributeError("Mode not supported!")
+        if not isinstance(self.config,ExplorerConfig):
+            return
+        
+        if not isinstance(self.config.explorer_style,TreeStyle):
+                self.config.explorer_style = DefaultExplorerStyle() # text, tooltips, icons
+        if not isinstance(self.config.tree_style,TreeStyleProvider):
+            self.config.tree_style = DefaultTreeStyle() # role formatting by node, treemanager
+
+        self.dlg = SelectionDialog(fmap=self.fmap,
+                                   worker_manager=self.worker_manager,
+                                   modding_info=self.modding_info,
+                                   explorer_config=self.config,
+                                   parent=self.parent
+                                   )
+        
+    def _set_db_mode_config(self):
+        virtual_root = TreeNode("Database Explorer")
+        virtual_root.loaded = True
+        virtual_root.i_am = "root"
+        db_list = self.fmap.get_active_databases_in_dbm()
+
+        for idx, db in enumerate(db_list):
+            if not db.active:
+                continue
+            # Load databases
+            db_node = TreeNode(f"{idx} {db.name}")
+            db_node.i_am = "database"
+            db_filepath=str(db.database_filepath)
+            db_node.path = "" # do not add to path
+            db_node.db = db_filepath
+            db_node.i_exist=True
+            db_node.map = None
+            db_node.info = db_filepath
+            db_node.loaded = True
+            virtual_root.add_child(db_node)
+            maps_in_db=self.fmap.get_maps_in_db(db_filepath)
+            # Load maps
+            for a_map in maps_in_db:
+                map_node = TreeNode(a_map)
+                map_node.i_am = "map"
+                map_full_path = self.fmap.get_full_mount_path_of_map(db_filepath,a_map) 
+                map_node.path = self.fmap.get_mount_of_map(db_filepath,a_map) 
+                map_node.info = (db_filepath,a_map)
+                map_node.loaded = False
+                map_node.db = db_filepath
+                map_node.i_exist=True
+                db_node.map = a_map
+                db_node.add_child(map_node)
+                self._add_db_map_children(map_node,map_node.path,map_full_path)
+                
+
+        config = ExplorerConfig()
+        # Basic
+        config.root_node = virtual_root
+        # 
+        config.show_path_edit = True
+        config.show_context_menu = True
+        # Mode selection
+        config.selection_by_type_mode = SelectionByTypeMode.FILES_DIRS_ONLY
+        config.checkbox_mode = CheckBoxMode.CHECKBOX
+        config.selection_mode = SelectionMode.MULTI
+        # You must pass lazy_loader, providers and styles in agreement to Mode selection
+        lazy_class = DatabaseLazyLoader()
+        lazy_class.set_filemap(self.fmap)
+        # initial settings
+        lazy_defaults=self.lazy_defaults 
+        if not isinstance(lazy_defaults,dict):
+            lazy_defaults = {}
+        lazy_class.set_defaults(lazy_defaults.get("defaults",[]))
+        lazy_class.set_hidden(lazy_defaults.get("hidden",[]))
+        lazy_class.set_blank(lazy_defaults.get("blank",[]))
+        lazy_class.set_locked(lazy_defaults.get("locked",[]))
+
+        config.lazy_loader = lazy_class
+        config.provider = DefaultProviderEngine() # functions for behavior
+        config.action_provider = DefaultFileActionProvider() # menu, shortcuts, global shortcuts
+        styles_dict=self.styles_dict
+        if not isinstance(styles_dict,dict):
+            styles_dict={}
+        config.explorer_style = styles_dict.get("explorer_style",DefaultExplorerStyle()) # text, tooltips, icons
+        config.tree_style = styles_dict.get("tree_style",DefaultTreeStyle()) # role formatting by node, treemanager
+        self.config = config
+
+    def _add_db_map_children(self,map_node:TreeNode,mount,full_path):    
+        path_list=self.fmap.fm.path_to_list(full_path)
+        if mount not in ["/","\\",os.sep]:
+            # Remove the mount is included on map_node.path
+            path_list=path_list[1:]
+        p_node=map_node
+        for iii,a_dir in enumerate(path_list):
+            p_node.loaded=True
+            ch_node=TreeNode(a_dir)
+            ch_node.i_am ="dir"
+            ch_node.db = p_node.db
+            ch_node.path = os.path.join(p_node.path,a_dir)
+            ch_node.i_exist = os.path.exists(ch_node.path)
+            ch_node.map = p_node.map
+            ch_node.loaded=False
+            ch_node.locked=True
+            # Dont expand the last path else it loads the first files and folders for all maps
+            if iii<len(path_list)-1:
+                ch_node.expand=True
+            p_node.add_child(ch_node)
+            # Next iteration
+            p_node = ch_node
+
+            
+
+
+    def _set_fe_mode_config(self):
+
+        virtual_root = TreeNode("File Explorer")
+        virtual_root.loaded = True
+        virtual_root.i_am = "root"
+        mounted_list = self.fmap.device_monitor.devices
+        
+        for mountpoint, serial in mounted_list:
+            nmount=os.path.normpath(mountpoint)
+            drive = TreeNode(nmount)
+            drive.i_am = "dir"
+            drive.path = nmount
+            drive.loaded = False
+            virtual_root.add_child(drive)
+
+        config = ExplorerConfig()
+        # Basic
+        config.root_node = virtual_root
+        # 
+        config.show_path_edit = True
+        config.show_context_menu = True
+        # Mode selection
+        config.selection_by_type_mode = SelectionByTypeMode.FILES_DIRS_ONLY
+        config.checkbox_mode = CheckBoxMode.CHECKBOX
+        config.selection_mode = SelectionMode.MULTI
+        # You must pass lazy_loader, providers and styles in agreement to Mode selection
+        lazy_class = ActiveFELazyLoader()
+        # initial settings
+        lazy_defaults=self.lazy_defaults 
+        if not isinstance(lazy_defaults,dict):
+            lazy_defaults = {}
+        lazy_class.set_defaults(lazy_defaults.get("defaults",[]))
+        lazy_class.set_hidden(lazy_defaults.get("hidden",[]))
+        lazy_class.set_blank(lazy_defaults.get("blank",[]))
+        lazy_class.set_locked(lazy_defaults.get("locked",[]))
+
+        config.lazy_loader = lazy_class
+        config.provider = DefaultProviderEngine() # functions for behavior
+        config.action_provider = DefaultFileActionProvider() # menu, shortcuts, global shortcuts
+        styles_dict=self.styles_dict
+        if not isinstance(styles_dict,dict):
+            styles_dict={}
+        config.explorer_style = styles_dict.get("explorer_style",DefaultExplorerStyle()) # text, tooltips, icons
+        config.tree_style = styles_dict.get("tree_style",DefaultTreeStyle()) # role formatting by node, treemanager
+        self.config = config
 
     
     def get_dialog(self):

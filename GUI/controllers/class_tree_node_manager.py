@@ -34,11 +34,16 @@ class TreeNode:
         # lazy loading
         self.loaded = False
         # visual state
-        self.expand = False
+        self.expand = None
         # depth in tree
         self.level = 0
         # optional full path cache
         self.path = None
+        # database mapping
+        self.db = None
+        self.map = None
+        self.db_id = None
+        self.i_exist = None
 
     # ---------------------------------------------------
     # hierarchy helpers
