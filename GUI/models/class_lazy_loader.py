@@ -151,7 +151,7 @@ class DatabaseLazyLoader(LazyLoaderProvider):
         # Direct files
         # ---------------------------
         
-        data = fm.db.get_data_from_table(a_map, "*")
+        # data = fm.db.get_data_from_table(a_map, "*")
 
         where = ("(replace(filepath, '\\', '/') = " + fm.db.quotes(ext_path)+")")
         data_files = fm.db.get_data_from_table(a_map, "*", where)
@@ -229,7 +229,7 @@ class DatabaseLazyLoader(LazyLoaderProvider):
         )
 
 
-        data = fm.db.get_data_from_table(a_map, "*")
+        # data = fm.db.get_data_from_table(a_map, "*")
 
         data_dirs = fm.db.get_data_from_table(a_map,f"DISTINCT {dirname_expr}", where_dirs)
         if not data_dirs:
