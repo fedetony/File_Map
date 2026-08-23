@@ -10,6 +10,7 @@ from controllers.mapping_worker_thread import WorkerManager
 from functional.class_icons import Icons
 from functional.class_text_renderer import TextRenderer
 from widgets.class_explorer_tree_widget import *
+from widgets.class_selection_menu import SelectionMenu
 
 from models.class_provider_engine import DefaultProviderEngine, FM
 from models.class_action_provider import DefaultFileActionProvider
@@ -88,10 +89,11 @@ class SelectionDialogSetter:
             maps_in_db=self.fmap.get_maps_in_db(db_filepath)
             # Load maps
             for a_map in maps_in_db:
-                map_node = TreeNode(a_map)
+                mount = self.fmap.get_mount_of_map(db_filepath,a_map) 
+                map_node = TreeNode(f"{a_map} @ ({mount})")
                 map_node.i_am = "map"
                 map_full_path = self.fmap.get_full_mount_path_of_map(db_filepath,a_map) 
-                map_node.path = self.fmap.get_mount_of_map(db_filepath,a_map) 
+                map_node.path = mount
                 map_node.info = (db_filepath,a_map)
                 map_node.loaded = False
                 map_node.db = db_filepath
@@ -105,7 +107,7 @@ class SelectionDialogSetter:
         # Basic
         config.root_node = virtual_root
         # 
-        config.show_path_edit = True
+        config.show_path_edit = False
         config.show_context_menu = True
         # Mode selection
         config.selection_by_type_mode = SelectionByTypeMode.FILES_DIRS_ONLY
@@ -134,11 +136,28 @@ class SelectionDialogSetter:
         self.config = config
 
     def _add_db_map_children(self,map_node:TreeNode,mount,full_path):    
+        multiple_folders=self.modding_info.get("multiple_folders")
+        # Single folder level
+        p_node=map_node
+        if not multiple_folders:
+            ch_path=self.fmap.fm.remove_mount_from_path(mount,full_path)
+            p_node.loaded=True
+            ch_node=TreeNode(ch_path)
+            ch_node.i_am ="dir"
+            ch_node.db = p_node.db
+            ch_node.path = full_path
+            ch_node.i_exist = os.path.exists(full_path)
+            ch_node.map = p_node.map
+            ch_node.loaded=False
+            ch_node.locked=True
+            p_node.add_child(ch_node)
+            return
+        
+        # Multiple folder levels loading
         path_list=self.fmap.fm.path_to_list(full_path)
         if mount not in ["/","\\",os.sep]:
             # Remove the mount is included on map_node.path
             path_list=path_list[1:]
-        p_node=map_node
         for iii,a_dir in enumerate(path_list):
             p_node.loaded=True
             ch_node=TreeNode(a_dir)
@@ -325,12 +344,15 @@ class SelectionDialog(QtWidgets.QDialog):
         # Explorer widget
         ##################################
         self.fexp_widget = ExplorerTreeWidget(self.explorer_config)
+        self.fexp_widget.userSelectionChanged.connect(self.on_selection_changed)
+        self.fexp_widget.actionEvaluated.connect(self.on_action_evaluated)
 
         ##################################
         # Selected Treeview widget
         ##################################
         self.s_m_tv =QTreeView()
-
+        self.sel_menu=SelectionMenu(self.fmap,self.s_m_tv,self)
+        self.sel_menu.set_end_database(self.database)
         ##################################
         # Processing widget
         ##################################
@@ -574,6 +596,25 @@ class SelectionDialog(QtWidgets.QDialog):
 
         if worker_action:
             worker_action(table_name, path_to_map)
+    
+    def on_action_evaluated(self,action,result):
+        """Action from action provider and result of the evaluation"""
+        if action:
+            # print("Got action evaluated ->",action)
+            selected_nodes_list=self.fexp_widget.selected_nodes()
+            self.generate_node_structure(selected_nodes_list)
+
+
+    def on_selection_changed(self,changed_nodes_list:list):
+        selected_nodes_list=self.fexp_widget.selected_nodes()
+        self.generate_node_structure(selected_nodes_list)
+    
+    def generate_node_structure(self,nodes_list):
+        self.sel_menu.generate_selection_struct(nodes_list)
+        # for node in nodes_list:
+        #     if isinstance(node,TreeNode):
+        #         self._append_status(f"{node.name}->{node.path}")
+        
 
     def start_fe_selection_worker(self, table_name, path_to_map):
         pass

@@ -6,12 +6,19 @@ from controllers.class_tree_node_manager import TreeNode
 from class_file_manipulate import FileManipulate
 FM=FileManipulate()
 
+TEXT_ICONS = {
+    "database": "🗄️",
+    "map":      "🗺️",
+    "dir":      "📁",
+    "file":     "📄",
+}
 class NodeVisualState(Enum):
     NORMAL = auto()
     SELECTED = auto()
     BLOODLINE = auto()
     LOCKED = auto()
     HIDDEN = auto()
+    EXIST = auto()
 
 class TreeStyle:
     # Base to be overwritten
@@ -48,6 +55,9 @@ class TreeStyleProvider:
 
         if node.selected_children:
             return NodeVisualState.BLOODLINE
+        
+        if node.i_exist:
+            return NodeVisualState.EXIST
 
         return NodeVisualState.NORMAL
 #####################################
@@ -178,3 +188,108 @@ class OrangeTheme(TreeStyleProvider):
                 font.setBold(True)
 
             return font
+
+class DBSelectionTreeStyle(TreeStyleProvider):
+    """
+    Selection tree style
+    """
+    def get_style(self, node:TreeNode, role:Qt.ItemDataRole):
+        state= self.get_node_state(node)
+
+        if role == Qt.ItemDataRole.ForegroundRole:
+            # -------------------------------------------------
+            # Structural nodes
+            # -------------------------------------------------
+            if node.i_am == "root":
+                return QColor("#7A8F82")       # muted sage
+
+            if node.i_am == "database":
+                return QColor("#D6A84F")       # warm amber/gold
+
+            if node.i_am == "map":
+                if node.i_exist:
+                    return QColor("#27ae60")   # existing map - green
+                else:
+                    return QColor("#B07A5A")   # missing map - muted orange/brown
+            
+            # LOCKED always wins
+            if state == NodeVisualState.LOCKED:
+                if node.i_exist:
+                    return QColor("#6F8F7A")   # muted green-gray
+                else:
+                    return QColor("#8A8F98")   # neutral gray
+
+            # Selected
+            if state == NodeVisualState.SELECTED:
+                if node.i_exist:
+                    return QColor("#14B163")   # strong green
+                else:
+                    return QColor("#3B82F6")   # blue
+
+            # Bloodline
+            if state == NodeVisualState.BLOODLINE:
+                if node.i_exist:
+                    return QColor("#32B4DB")   # cyan
+                else:
+                    return QColor("#60A5FA")   # light blue
+
+
+        if role == Qt.ItemDataRole.FontRole: 
+            font = QFont()
+
+            if state in (
+                NodeVisualState.SELECTED,
+                NodeVisualState.BLOODLINE
+            ):
+                font.setBold(True)
+
+            if state == NodeVisualState.LOCKED:
+                font.setItalic(True)
+
+            return font
+        
+        if role == Qt.ItemDataRole.UserRole:
+            return node.id
+        if role == Qt.ItemDataRole.UserRole + 1:
+            return node.path
+
+        return None
+
+class DBSelectionExplorerStyle(TreeStyle):
+
+    def text(self, node:TreeNode):
+
+        prefix = ""
+        if node.i_exist:
+            prefix += "✓"
+
+        if node.locked:
+            prefix += "🔒"
+
+        if node.i_am == "dir":
+            return f"{prefix}📁 {node.name}"
+
+        return f"{prefix} {node.name}"
+
+    def tooltip(self, node:TreeNode)->str:
+        txt = [
+            f"Name : {'🔒' if node.locked else ''} {node.name}",
+            f"ID   : {node.id}",
+            f"Type : {node.i_am}"
+        ]
+
+        if node.path:
+            if node.i_exist:
+                txt.append(f"Path : ✓ {node.path}")
+            else:
+                txt.append(f"Path : ✗ {node.path}")
+
+        if node.i_am == "file" and isinstance(node.size,(int | float)):
+            node_size_txt=FM.get_size_str_formatted(node.size,33,True)
+            node_size_txt=node_size_txt.replace(".00 By"," By").strip()
+            txt.append(f"Size : {node_size_txt}")
+
+        return "\n".join(txt)
+
+    def icon(self, node)-> QIcon | None:
+        return None    

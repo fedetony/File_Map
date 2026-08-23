@@ -692,9 +692,8 @@ class FileMapCliManager:
     
     def get_full_mount_path_of_map(self,database,a_map):
         try:
-            map_info=self.cma.get_map_info(database,a_map)
-            # mount= 5 mappath = 3
-            mount_path_of_map=os.path.join(map_info[0][5],map_info[0][3])
+            map_info=self.cma.get_map_info_as_dict(database,a_map)
+            mount_path_of_map=os.path.join(map_info["mount"],map_info["mappath"])
             return mount_path_of_map
         except:
             pass
@@ -702,12 +701,20 @@ class FileMapCliManager:
     
     def get_mount_of_map(self,database,a_map)->str:
         try:
-            map_info=self.cma.get_map_info(database,a_map)
-            # mount= 5 mappath = 3
-            return map_info[0][5]
+            map_info=self.cma.get_map_info_as_dict(database,a_map)
+            return map_info["mount"]
         except:
             pass
         return ""
+    
+    def get_mount_serial_of_map(self,database,a_map)->tuple[str]:
+        try:
+            map_info=self.cma.get_map_info_as_dict(database,a_map)
+            # mount= 5 serial = 3
+            return (map_info['mount'],map_info['serial'])
+        except:
+            pass
+        return None
     
     def delete_map_from_db(self,selected_db,tablename,log_print=True):
         """Deletes the map from the database"""
@@ -784,6 +791,78 @@ class FileMapCliManager:
                 data_manage=DataManage(table_list_size,field_list)
                 return data_manage
         return None
+    
+    def find_repeated_duplicates_in_map(self,
+                        db_map_pair_list: list[tuple],
+                        mode: str = None,
+                        progress_bar: Callable | None = None,
+                        log_callback: Callable | None = None,
+                        kill_ev: threading.Event | None = None
+                        ):
+        #self.cma.find_duplicates_in_database(database,a_map)
+        if isinstance(db_map_pair_list,list) and len(db_map_pair_list)>0:
+            (database,a_map) = db_map_pair_list[0]
+        else:
+            raise TypeError("db_map_pair_list must be a list of db_map_pair tuples!")
+        db_list=[]
+        map_list=[]
+        if isinstance(db_map_pair_list,list):
+            has_shallow=False
+            for a_db,a_m in db_map_pair_list:
+                (size, shallow_count, calc_count)=self.get_map_size(a_db,a_m)
+                if not shallow_count and not calc_count:
+                    db_list.append(a_db)
+                    map_list.append(a_m)
+                else:
+                    dbname=self.fm.extract_filename(a_db)
+                    if log_callback:
+                        log_callback(f"[Yellow]Database {dbname} Map {a_m} is a Shallow map.")
+                        has_shallow=True
+            if log_callback and has_shallow:
+                log_callback(f"[Yellow]Finding Repeated/Duplicate items requires md5 calculation.")
+                log_callback(f"[Yellow]Please Deepen the maps first.")
+        
+        if len(db_list)==0:
+            if log_callback:
+                log_callback(f"[Red]No valid database map combinations!")
+            return None
+        
+        fm=self.cma.get_file_map(database)
+        if not fm:
+            return None
+        if log_callback:
+            log_callback(f"[cyan]Indexing repeated for {len(db_list)} database map pairs!")
+        repeated_dict = fm.get_repeated_file_multiple_db_tables(db_list, map_list, ["id", "md5"], 1)
+        if log_callback:
+            log_callback(f"[cyan]Indexing completed .... starting {mode} matching!")
+        if mode == "duplicates":
+            #repeated_dict = fm.get_repeated_files(database, a_map)
+            
+            item_list = ["filepath", "filename"]  # ,'id', 'md5', 'size' ]
+            match_list = [True, False]  # , False, True, True] 
+            # same md5 implicit in repeated : if same md5-> same size, id is always different
+            return fm.find_matching_dbresult(repeated_dict, 
+                                             a_map, 
+                                             item_list, 
+                                             match_list,
+                                             progress_bar=progress_bar,
+                                             log_callback=log_callback,
+                                             kill_ev=kill_ev)
+        elif mode == "repeated":
+            # repeated_dict = fm.get_repeated_files(database, a_map)
+
+            item_list = ["filename", "filepath"]  # ,'id', 'md5', 'size']
+            match_list = [False, False]  # , False, True, True]
+            return fm.find_matching_dbresult(repeated_dict, 
+                                             a_map, 
+                                             item_list, 
+                                             match_list,
+                                             progress_bar=progress_bar,
+                                             log_callback=log_callback,
+                                             kill_ev=kill_ev)
+        
+        return None
+            
         
     # -------------------------------------------------------
     # DB Map Size Cache
@@ -876,7 +955,10 @@ class FileMapCliManager:
     @staticmethod
     def _get_timestamp():
         return datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-            
+    
+    @property
+    def timestamp(self):
+        return self._get_timestamp()
 
 
 class LoggerWriter(io.TextIOBase):

@@ -21,6 +21,62 @@ class FileManipulate:
         self.file = None
 
     @staticmethod
+    def remove_mount_from_path(
+        mount: str,
+        path: str,
+        remove_start_separator: bool = False
+    ) -> str:
+        """Removes a mount point from the beginning of a path.
+
+        Args:
+            mount: Mount point.
+            path: Path containing the mount point.
+            remove_start_separator: Remove the separator immediately
+                following the mount point.
+
+        Returns:
+            The path with the mount point removed.
+        """
+        if not path:
+            return path
+
+        if not mount:
+            relative = path
+        elif path == mount:
+            relative = ""
+        elif path.startswith(mount + "/"):
+            relative = path[len(mount):]
+        elif path.startswith(mount + "\\"):
+            relative = path[len(mount):]
+        elif path.startswith(mount + os.sep):
+            relative = path[len(mount):]
+        else:
+            relative = path
+
+        if remove_start_separator and relative:
+            if relative[0] in ("\\", "/", os.sep):
+                relative = relative[1:]
+
+        return relative
+    
+    @staticmethod
+    def get_common_path(path_list: list[str]) -> str:
+        """Returns the deepest common path shared by all paths."""
+        paths = []
+        for path in path_list:
+            if not path:
+                continue
+            path = os.path.normpath(path)
+            if path:
+                paths.append(path)
+        if not paths:
+            return ""
+        try:
+            return os.path.commonpath(paths)
+        except (ValueError, TypeError):
+            return ""
+
+    @staticmethod
     def get_temp_directory_path(suffix: str | None = None,
                             prefix: str | None = None,
                             dir: tempfile.TemporaryDirectory | None = None) -> str:

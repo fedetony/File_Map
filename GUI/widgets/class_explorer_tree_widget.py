@@ -27,7 +27,9 @@ class ExplorerTreeWidget(QWidget):
     nodeClicked = pyqtSignal(TreeNode)
     nodeDoubleClicked = pyqtSignal(TreeNode)
     nodeRightClicked = pyqtSignal(TreeNode)
-    selectionChanged = pyqtSignal(list)
+    userSelectionChanged = pyqtSignal(list)
+    currentSelectionChanged = pyqtSignal(list)
+    actionEvaluated = pyqtSignal(object,object)
     nodeExpanded = pyqtSignal(TreeNode)
     nodeCollapsed = pyqtSignal(TreeNode)
 
@@ -57,6 +59,7 @@ class ExplorerTreeWidget(QWidget):
         self.model.t_m = self.t_m
         self.model.set_new_explorer_style(self.config.explorer_style)
         self.model.set_new_tree_style(self.config.tree_style)
+        self.model.userSelectionChanged.connect(self.userSelectionChanged.emit)
         if self.config.lazy_loading:
             lazy = self.config.lazy_loader
             if isinstance(self.config.lazy_loader,LazyLoaderProvider):
@@ -231,7 +234,7 @@ class ExplorerTreeWidget(QWidget):
             node = self.model.get_node_from_index(idx)
             if node:
                 self._current_nodes.append(node)
-        self.selectionChanged.emit(self._current_nodes)
+        self.currentSelectionChanged.emit(self._current_nodes)
         if not self.user_typing or self.tree.hasFocus():
             self._update_text_edit_from_tv()
         #print("New selection ->",self._current_nodes)
@@ -244,6 +247,7 @@ class ExplorerTreeWidget(QWidget):
             for node in self._current_nodes:
                 # print(node.name)
                 self.t_m.toggle_selection(node)
+            self.userSelectionChanged.emit([self._current_nodes])
         self.refresh()
     
     def toggle_current_item(self):
@@ -260,6 +264,7 @@ class ExplorerTreeWidget(QWidget):
             state = Qt.CheckState.Unchecked
         else:
             state = Qt.CheckState.Checked
+        self.userSelectionChanged.emit([node])
         self.model.setData(idx, state, Qt.ItemDataRole.CheckStateRole)
     
     def _update_text_edit_from_tv(self):
@@ -345,12 +350,20 @@ class ExplorerTreeWidget(QWidget):
             
 
             qt_action.triggered.connect(
-                        lambda checked=False, a=a:
-                        self.action_provider.execute_action(self.current_node(), a))
+                lambda checked=False, a=a: self._execute_action(a))
+
 
         menu.exec(self.tree.viewport().mapToGlobal(pos))
         self.refresh()
     
+    def _execute_action(self, action):
+        result = self.action_provider.execute_action(
+            self.current_node(),
+            action
+        )
+        self.actionEvaluated.emit(action,result)
+        return result
+
     # --------------------------------------------------
     # Generic shortcuts
     # --------------------------------------------------

@@ -94,4 +94,66 @@ class ColoredTextDelegate(QtWidgets.QStyledItemDelegate):
         )
 
         painter.restore()
-    
+
+class ItemTypeDelegate(QStyledItemDelegate):
+
+    def __init__(
+        self,
+        icons: dict,
+        itemtype_column: int,
+        parent=None
+    ):
+        super().__init__(parent)
+        self.item_icons = icons
+        self.itemtype_column = itemtype_column
+
+    def paint(self, painter, option, index):
+        item_type = index.data(QtCore.Qt.ItemDataRole.DisplayRole)
+        icon = self.item_icons.get(str(item_type).lower())
+        if icon is not None and not icon.isNull():
+            option = QStyleOptionViewItem(option)
+            option.icon = icon
+
+        super().paint(painter, option, index)
+
+
+
+class ActiveMapDelegate(QStyledItemDelegate):
+
+    ACTIVE_COLOR = QtGui.QColor("#27AE60")
+    ACTIVE_FONT = QtGui.QFont("", -1, QtGui.QFont.Weight.Bold)
+
+    def __init__(self, fmap, mount_column, serial_column, parent=None):
+        super().__init__(parent)
+        self.fmap = fmap
+        self.mount_column = mount_column
+        self.serial_column = serial_column
+
+    def paint(self, painter, option, index):
+        mount_index = index.siblingAtColumn(self.mount_column)
+        serial_index = index.siblingAtColumn(self.serial_column)
+
+        mount = str(
+            mount_index.data(QtCore.Qt.ItemDataRole.DisplayRole) or ""
+        )
+        serial = str(
+            serial_index.data(QtCore.Qt.ItemDataRole.DisplayRole) or ""
+        )
+
+        if self.is_active(mount, serial):
+            option = QStyleOptionViewItem(option)
+            option.palette.setColor(
+                QtGui.QPalette.ColorRole.Text,
+                self.ACTIVE_COLOR
+            )
+            option.font = QtGui.QFont(option.font)
+            option.font.setBold(True)
+
+        super().paint(painter, option, index)
+
+    def is_active(self, mount, serial):
+        for device_mount, device_serial in self.fmap.device_monitor.devices:
+            if mount == str(device_mount) and serial == str(device_serial):
+                return True
+
+        return False

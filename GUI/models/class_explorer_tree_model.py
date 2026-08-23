@@ -1,7 +1,8 @@
 from PyQt6.QtCore import (
     Qt,
     QModelIndex,
-    QAbstractItemModel
+    QAbstractItemModel,
+    pyqtSignal
 )
 
 from PyQt6.QtGui import QColor
@@ -14,7 +15,8 @@ import os
 
 
 class ExplorerTreeModel(QAbstractItemModel):
-
+    userSelectionChanged = pyqtSignal(list)
+    
     def __init__(self, config:ExplorerConfig, parent=None):
         super().__init__(parent)
         self.config = config
@@ -220,7 +222,7 @@ class ExplorerTreeModel(QAbstractItemModel):
                     self.t_m.set_selected(node,is_selected)
             else:    
                 self.t_m.set_selected(node,is_selected)
-        
+            self.userSelectionChanged.emit([node])
             # update bloodline
             self._rebuild_selection_state()
             self.layoutChanged.emit()

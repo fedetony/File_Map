@@ -52,7 +52,9 @@ class MappingDialog(QtWidgets.QDialog):
 
         titles = {
             "create": "New Mapping",
-            "deepening": "Shallow to deep",
+            "deepening": "Shallow to Deep",
+            "repeated": "Find Repeated Files",
+            "duplicates": "Find Duplicate Files",
             "update": "Update",
             "continue": "Continue Mapping",
         }
@@ -74,6 +76,12 @@ class MappingDialog(QtWidgets.QDialog):
         messages = {
             "create": "Ready to start Mapping...",
             "deepening": "Ready for converting shallow to deep...",
+            "repeated": ("Ready to find Repeated Files:\n "
+                            "Repeated are the files in different folders, "
+                            "with the same md5 sum."),
+            "duplicates": ("Ready to find Duplicate Files:\n "
+                            "Duplicates are the files in the same folder, "
+                            "with different file names but with the same md5 sum."),
             "update": "Ready for updating map...",
             "continue": "Ready to continue incomplete mapping...",
         }
@@ -99,6 +107,8 @@ class MappingDialog(QtWidgets.QDialog):
         mode_ui = {
             "create": ("mapping",f"New Mapping for Database: {the_db}"),
             "deepening": ("shallow", f"Deepening @ Database: {the_db}"),
+            "repeated": ("find repeated", f"Repeated @ Database: {the_db}"),
+            "duplicates": ("find duplicates", f"Duplicates @ Database: {the_db}"),
             "update": ("update map", f"Updating @ Database: {the_db}"),
             "continue": ("continue mapping", f"Continue Mapping @ Database: {the_db}"),
         }
@@ -192,6 +202,8 @@ class MappingDialog(QtWidgets.QDialog):
         what = {
             "create": "Mapping",
             "deepening": "Deepening",
+            "repeated": "Finding Reps",
+            "duplicates": "Finding Dups",
             "update": "Updating",
             "continue": "Re-Mapping",
         }.get(self.mode, "")
@@ -212,6 +224,8 @@ class MappingDialog(QtWidgets.QDialog):
         mode_actions = {
             "create": (self.start_mapping, self.stop_mapping),
             "deepening": (self.start_deepening, self.stop_deepening),
+            "repeated": (self.start_repeated, self.stop_repeated),
+            "duplicates": (self.start_duplicates, self.stop_duplicates),
             "update": (self.start_updating, self.stop_updating),
             "continue": (self.start_continueing, self.stop_continueing),
         }
@@ -320,6 +334,8 @@ class MappingDialog(QtWidgets.QDialog):
         worker_actions = {
             "create": self.start_create_worker,
             "deepening": self.start_deepening_worker,
+            "repeated": self.start_repeated_worker,
+            "duplicates": self.start_duplicates_worker,
             # "update": self.start_update_worker,
             # "continue": self.start_continue_worker,
         }
@@ -358,6 +374,60 @@ class MappingDialog(QtWidgets.QDialog):
         self.worker.stopped.connect(self.on_mapping_stopped)
         self.worker.error.connect(self.on_mapping_error)
 
+    # -----------------------------------------------------
+    # Repeated and Duplicates
+    # -----------------------------------------------------
+    def start_repeated(self):
+        self._start_mapping(self.mode)
+    
+    def start_duplicates(self):
+        self._start_mapping(self.mode)
+    
+    def start_repeated_worker(self, table_name, path_to_map):
+        return
+        self.mapping_is_running_signal.emit()
+
+        self.progress = QtMapProgress()
+        self.progress_layout.addWidget(self.progress)
+
+        self.mapping_running = True
+
+        self.worker = self.worker_manager.start(
+            self.fmap.deepen_shallow_map,
+            self.database,
+            table_name,
+            path_to_map,
+            progress_bar=self.progress,
+            press_to_continue=False,
+            log_callback=self.log_buffer.write
+        ) # kill_ev added by worker_manager
+
+        self.worker.finished.connect(self.on_deepening_finished)
+        self.worker.stopped.connect(self.on_deepening_stopped)
+        self.worker.error.connect(self.on_deepening_error)
+    
+    def start_duplicates_worker(self, table_name, path_to_map):
+        return
+        self.mapping_is_running_signal.emit()
+
+        self.progress = QtMapProgress()
+        self.progress_layout.addWidget(self.progress)
+
+        self.mapping_running = True
+
+        self.worker = self.worker_manager.start(
+            self.fmap.deepen_shallow_map,
+            self.database,
+            table_name,
+            path_to_map,
+            progress_bar=self.progress,
+            press_to_continue=False,
+            log_callback=self.log_buffer.write
+        ) # kill_ev added by worker_manager
+
+        self.worker.finished.connect(self.on_deepening_finished)
+        self.worker.stopped.connect(self.on_deepening_stopped)
+        self.worker.error.connect(self.on_deepening_error)
     # -----------------------------------------------------
     # Deepening
     # -----------------------------------------------------
@@ -474,6 +544,11 @@ class MappingDialog(QtWidgets.QDialog):
     def stop_continueing(self):
         self.stop_mapping()
 
+    def stop_repeated(self):
+        self.stop_mapping()
+    
+    def stop_duplicates(self):
+        self.stop_mapping()
 
     # -----------------------------------------------------
     # Worker callbacks

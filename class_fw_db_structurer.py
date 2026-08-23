@@ -49,7 +49,7 @@ class ForwardDBStructurer:
         ba (BackupActions):
             BackupActions instance used to access the common map manager.
 
-        cma:
+        cma (MappingActions):
             Reference to the common map manager obtained from ``ba.cma``.
     """
 

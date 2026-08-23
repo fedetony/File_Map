@@ -407,6 +407,34 @@ class MappingActions():
         """
         fm=self.get_file_map(database)
         return fm.db.get_data_from_table(fm.mapper_reference_table,'*',f"tablename='{a_map}'")
+    
+    def get_map_info_as_dict(self,database,a_map):
+        """returns the map table information in a dictionary with {field:value}
+
+        Args:
+            database (str): database
+            a_map (str): Table name
+
+        Returns:
+            list(tuple): information on reference table
+        """
+        fm=self.get_file_map(database)
+        if not fm:
+            return {}
+        fields = fm.db.get_column_list_of_table(fm.mapper_reference_table)
+        # gives a list[tuple]
+        info_data=fm.db.get_data_from_table(fm.mapper_reference_table,'*',f"tablename='{a_map}'")
+        if not info_data:
+            return {}
+        info_dict=fm.data_to_field_dict(fields,info_data[0]) #enforces lenghts to be the same
+        if not info_dict:
+            try:
+                info_dict = {}
+                for field, ddd in zip(fields, info_data[0]):
+                    info_dict.update({field: ddd})
+            except:
+               pass
+        return info_dict
 
     def get_maps_by_type(self,type_list=None,in_list=True):
         """Finds all maps of specific types (or not of specific types) in all loaded databases
@@ -919,7 +947,7 @@ class MappingActions():
         return rem_keep_dict    
     
     def find_duplicates_in_database(self,database,a_map):
-        """Returs a list of tuple with the dictionaries of file information of each repeated file.
+        """Returns a list of tuple with the dictionaries of file information of each repeated file.
             Duplicates are the files in the same folder,with different file names but with the same md5 sum.
 
             Args:

@@ -13,11 +13,10 @@ from widgets.class_explorer_tree_widget import *
 
 class SearchDialog(QtWidgets.QDialog):
 
-    def __init__(self, db_name="", maps=None, parent=None):
+    def __init__(self, db_map_pairs=None, parent=None):
         super().__init__(parent)
 
-        self.db_name = db_name
-        self.maps = maps or []
+        self.db_map_pairs = db_map_pairs
 
         self.setWindowTitle("Search")
         self.resize(1600, 950)
@@ -85,13 +84,9 @@ class SearchDialog(QtWidgets.QDialog):
             ["Property", "Value"]
         )
 
-        results_splitter.addWidget(
-            self.results_tree
-        )
+        results_splitter.addWidget(self.results_tree)
 
-        results_splitter.addWidget(
-            self.properties_tree
-        )
+        results_splitter.addWidget(self.properties_tree)
 
         results_splitter.setSizes([1200, 400])
 
@@ -110,25 +105,11 @@ class SearchDialog(QtWidgets.QDialog):
         # action buttons
         button_layout = QtWidgets.QHBoxLayout()
 
-        self.selection_map_button = QtWidgets.QPushButton(
-            "Create Selection Map"
-        )
-
-        self.export_button = QtWidgets.QPushButton(
-            "Export Tree"
-        )
-
-        self.delete_button = QtWidgets.QPushButton(
-            "Delete"
-        )
-
-        self.copy_button = QtWidgets.QPushButton(
-            "Copy Results"
-        )
-
-        self.close_button = QtWidgets.QPushButton(
-            "Close"
-        )
+        self.selection_map_button = QtWidgets.QPushButton("Create Selection Map")
+        self.export_button = QtWidgets.QPushButton("Export Tree")
+        self.delete_button = QtWidgets.QPushButton("Delete")
+        self.copy_button = QtWidgets.QPushButton("Copy Results")
+        self.close_button = QtWidgets.QPushButton("Close")
 
         # Main structure
         main_layout = QtWidgets.QVBoxLayout(self)

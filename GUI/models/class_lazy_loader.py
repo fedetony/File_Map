@@ -72,6 +72,11 @@ class DatabaseLazyLoader(LazyLoaderProvider):
                 self._dir_selection(child)
             elif child.i_am == "file":
                 self._file_selection(child)
+            # Persist info of database and map    
+            if node.db:
+                child.db=node.db
+            if node.map:
+                child.map=node.map
             
             if child.expand is None: 
                 child.expand = False
@@ -123,12 +128,18 @@ class DatabaseLazyLoader(LazyLoaderProvider):
             return db_map_pair
         elif node.i_am == "database":
             database = node.info
+            node.db=database
             db_map_pair = None
         elif node.i_am == "map":
+            node.db=node.info[0]
+            node.map=node.info[1]
             return node.info
         else:
+            # db_map_pair=(node.parent.db,node.parent.map)
             bl=node.get_bloodline()
             if bl and len(bl)>2: #root->db->map
+                node.db=bl[2].info[0]
+                node.map=bl[2].info[1]
                 return bl[2].info
         return db_map_pair
 
