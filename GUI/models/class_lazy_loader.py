@@ -149,14 +149,19 @@ class DatabaseLazyLoader(LazyLoaderProvider):
         if path[-1] in ["/", "\\", os.sep]:
             ext_path = path[:-1]
 
-        mount = self.fmap.get_mount_of_map(db_map_pair[0], db_map_pair[1])
+        mount, serial = self.fmap.get_mount_serial_of_map(db_map_pair[0], db_map_pair[1])
+        node.mount=mount
+        node.serial=serial
         if not mount:
-            return []
+            return 0
         # Remove mount to find path in filepath
         if mount in ["/", "\\", os.sep]:
             ext_path = ext_path[1:]
         else:
-            ext_path = ext_path.replace(mount, "")
+            ext_path=self.fmap.fm.remove_mount_from_path(mount,ext_path,remove_start_separator=True)
+        # node.itempath = ext_path # path without / in the end
+        node.itempath=self._normalize_itempath(ext_path)
+        # print(f"File Set {node.name} -> {node.itempath}")
         a_map = db_map_pair[1]
         # ---------------------------
         # Direct files
@@ -168,7 +173,7 @@ class DatabaseLazyLoader(LazyLoaderProvider):
         data_files = fm.db.get_data_from_table(a_map, "*", where)
         
         if not data_files:
-            return
+            return 0
         # field_list=fm.db.get_column_list_of_table(db_map_pair[1])
         # dm=DataManage(data_files,field_list)
         # df=dm.get_selected_df(fields_to_tab=None,sort_by=None,ascending=True)
@@ -179,7 +184,7 @@ class DatabaseLazyLoader(LazyLoaderProvider):
         # # 'dt_file_created'=7	'dt_file_accessed'=8	'dt_file_modified'=9
         
         fields = fm.db.get_column_list_of_table(a_map)
-        
+        count = 0
         for info in data_files:
             info_dict=fm.data_to_field_dict(fields,info)
             if not info_dict:
@@ -196,25 +201,59 @@ class DatabaseLazyLoader(LazyLoaderProvider):
             ch_node.i_am ="file"
             ch_node.size = size
             ch_node.path=ch_full_path
-            ch_node.i_exist=os.path.exists(ch_filepath)
+            i_exist=(os.path.exists(ch_filepath) and 
+                     self.fmap.is_mount_serial_active(mount,serial))
+            ch_node.i_exist=i_exist
             ch_node.db_id=db_id
             ch_node.db=node.db
             ch_node.map=node.map
             ch_node.info=info
             ch_node.loaded=True
+            ch_node.mount=mount
+            ch_node.serial=serial
+            ch_node.quantity=1
+            ch_node.num_files=1
+            ch_node.num_dirs=0
+            ch_node.itempath=self._normalize_itempath(filepath)
+            # print(f"ch_node File Set {ch_node.name} -> {ch_node.itempath}")
             #----------------
             node.add_child(ch_node)
+            count += 1
+        return count
+    
+    def _normalize_itempath(self,path):
+        if not path:
+            return path
+        if len(path)==1 and path in ["/", "\\", os.sep]:
+            return path
+        if path[0] in ["/", "\\", os.sep]:
+            #remove / in beguining
+            path=path[1:]
+        if path[-1] not in ["/", "\\", os.sep]:
+            return path + os.sep #add / in the end
+        else:
+            return path
+        # if path[-1] in ["/", "\\", os.sep]:
+        #     return path[:-1] #remove / in the end
+        # else:
+        #     return path
+        
 
     def _set_dir_children_in_path(self, path, db_map_pair, fm: FileMapper,node: TreeNode):
         ext_path = self.fmap.fm.fix_separator_in_path(path,add_sep_start=True) 
-        mount = self.fmap.get_mount_of_map(db_map_pair[0], db_map_pair[1])
+        mount, serial = self.fmap.get_mount_serial_of_map(db_map_pair[0], db_map_pair[1])
         if not mount:
-            return []
+            return 0
+        node.mount=mount
+        node.serial=serial
         # Remove mount to find path in filepath
         if mount in ["/", "\\", os.sep]:
             ext_path = ext_path[1:]
         else:
-            ext_path = ext_path.replace(mount, "")
+            ext_path=self.fmap.fm.remove_mount_from_path(mount,ext_path,remove_start_separator=True)
+
+        node.itempath=self._normalize_itempath(ext_path)
+        # print(f"Dir Set {node.name} -> {node.itempath}")
         a_map = db_map_pair[1]
         # ---------------------------
         # Direct directories
@@ -239,20 +278,20 @@ class DatabaseLazyLoader(LazyLoaderProvider):
             "END"
         )
 
-
         # data = fm.db.get_data_from_table(a_map, "*")
-
         data_dirs = fm.db.get_data_from_table(a_map,f"DISTINCT {dirname_expr}", where_dirs)
         if not data_dirs:
-            return
+            return 0
+        count=0
         for path_part_tup in data_dirs:
             dirname=path_part_tup[0]
             if not dirname:
                 continue
             db_id = None
             filepath = os.path.join(ext_path,dirname)
-            size = 0
-
+            size = self._get_dir_size_sql(a_map,fm,filepath)
+            num_files = self._get_dir_quantity_sql(a_map,fm,filepath)
+    
             ch_full_path=os.path.join(mount,filepath)
             
             # set child
@@ -260,15 +299,54 @@ class DatabaseLazyLoader(LazyLoaderProvider):
             ch_node.i_am ="dir"
             ch_node.size = size
             ch_node.path=ch_full_path
-            ch_node.i_exist=os.path.exists(ch_full_path)
+            i_exist=(os.path.exists(ch_full_path) and 
+                     self.fmap.is_mount_serial_active(mount,serial))
+            ch_node.i_exist=i_exist
             ch_node.db_id=db_id
             ch_node.db=node.db
             ch_node.map=node.map
             ch_node.info=None
             ch_node.loaded=False
+            ch_node.mount=mount
+            ch_node.serial=serial
+            ch_node.quantity=num_files
+            ch_node.num_files=num_files
+            ch_node.num_dirs=0
+            ch_node.itempath=self._normalize_itempath(filepath)
+            # print(f"ch_node Dir Set {ch_node.name} -> {ch_node.itempath}")
             #-------------------------
+            count+=1
             node.add_child(ch_node)
+        return count
+    
+    def _get_dir_size_sql(self, a_map, fm:FileMapper,ext_path):
+        
+        where_dirs = (
+            "replace(filepath, '\\', '/') LIKE "
+            + fm.db.quotes(ext_path + "%")
+        )
+        data_size = fm.db.get_data_from_table(
+            a_map,
+            "SUM(size)",
+            where_dirs
+        )
 
+        size = data_size[0][0] if data_size and data_size[0][0] is not None else 0
+        return size
+    
+    def _get_dir_quantity_sql(self, a_map, fm:FileMapper,ext_path):
+        
+        where_dirs = (
+            "replace(filepath, '\\', '/') LIKE "
+            + fm.db.quotes(ext_path + "%")
+        )
+        data_quant = fm.db.get_data_from_table(
+            a_map,
+            "COUNT(*)",
+            where_dirs
+        )
+        quant = data_quant[0][0] if data_quant and data_quant[0][0] is not None else 0
+        return quant
 
     def _load_children(self, node: TreeNode):
         try:
@@ -281,7 +359,8 @@ class DatabaseLazyLoader(LazyLoaderProvider):
                 return None, None
             # Already loaded
             if node.loaded:
-                return True, bl
+                # If returning True -> makes all validation again
+                return False, bl
 
             if not node.path and node.i_am not in ("database", "root"):
                 # set a path if lacking one
@@ -291,11 +370,15 @@ class DatabaseLazyLoader(LazyLoaderProvider):
                 node.path = path
 
             # Directories first, then files ;)
-            self._set_dir_children_in_path(
+            count_dirs=self._set_dir_children_in_path(
                 node.path, db_map_pair, fm, node)
 
-            self._set_files_children_in_path(
+            count_files=self._set_files_children_in_path(
                 node.path, db_map_pair, fm, node)
+            
+            node.num_files=count_files
+            node.num_dirs=count_dirs
+            node.quantity=count_files+count_dirs
 
             return True, bl
         except Exception:
@@ -417,6 +500,11 @@ class ActiveFELazyLoader(LazyLoaderProvider):
     File explorer 
     Default 
     """
+    def set_filemap(self,fmap):        
+        if isinstance(fmap,FileMapCliManager):
+            self.fmap = fmap
+        else:
+            self.fmap = None
 
     def lazy_loader(self,node:TreeNode):
         entries, bl =self._load_entries(node)
@@ -424,14 +512,38 @@ class ActiveFELazyLoader(LazyLoaderProvider):
             return
         
         #Add children
+        count_files=0
+        count_dirs=0
         for entry in entries:
             full = os.path.join(node.path, entry)
             child = TreeNode(entry)
             child.path = full
+            child.mount = node.mount
+            child.serial = node.serial
             if os.path.isdir(full):
                 self._dir_selection(child)
+                count_dirs += 1
             else:
                 self._file_selection(child)
+                count_files += 1
+                if self.fmap:
+                    child.num_files=1
+                    child.num_dirs=0
+                    child.quantity=1
+            
+            if self.fmap:
+                if child.i_am == "dir":
+                    ext_path=child.path
+                else:
+                    ext_path=node.path
+                # Remove mount to find path in filepath
+                if node.mount in ["/", "\\", os.sep]:
+                    ext_path = ext_path[1:]
+                else:
+                    ext_path=self.fmap.fm.remove_mount_from_path(node.mount,ext_path,remove_start_separator=True)
+                
+                child.itempath=self._normalize_itempath(ext_path)
+                # print(f"Child {child.i_am} Set {node.name} -> {node.itempath}")
             
             #child.expand = False
 
@@ -471,7 +583,28 @@ class ActiveFELazyLoader(LazyLoaderProvider):
         node.selectable = self._node_selectable(node)
         # mark loaded
         node.loaded = True
+        
+        node.num_files=count_files
+        node.num_dirs=count_dirs
+        node.quantity=count_files+count_dirs
     
+    def _normalize_itempath(self,path):
+        if not path:
+            return path
+        if len(path)==1 and path in ["/", "\\", os.sep]:
+            return path
+        if path[0] in ["/", "\\", os.sep]:
+            #remove / in beguining
+            path=path[1:]
+        if path[-1] not in ["/", "\\", os.sep]:
+            return path + os.sep #add / in the end
+        else:
+            return path
+        # if path[-1] in ["/", "\\", os.sep]:
+        #     return path[:-1] #remove / in the end
+        # else:
+        #     return path
+
     def _load_entries(self,node:TreeNode):
         try:
             bl=node.get_bloodline()
@@ -481,7 +614,18 @@ class ActiveFELazyLoader(LazyLoaderProvider):
                     node.path=path
                 else:
                     return None, None
+            
             entries = os.listdir(node.path)
+            if not node.mount and len(bl)>1:
+                node.mount = bl[1].name    
+            if not node.serial and self.fmap:
+                devices=self.fmap.device_monitor.devices
+                serial = ""
+                for device in devices:
+                    if device[0] == node.mount:
+                        serial = device[1]
+                        break 
+                node.serial = serial
             return entries, bl
         except Exception:
             pass

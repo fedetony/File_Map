@@ -208,7 +208,7 @@ class DBSelectionTreeStyle(TreeStyleProvider):
 
             if node.i_am == "map":
                 if node.i_exist:
-                    return QColor("#27ae60")   # existing map - green
+                    return QColor("#d1ce22")   # existing map - green
                 else:
                     return QColor("#B07A5A")   # missing map - muted orange/brown
             
@@ -235,7 +235,8 @@ class DBSelectionTreeStyle(TreeStyleProvider):
 
 
         if role == Qt.ItemDataRole.FontRole: 
-            font = QFont()
+            font = QFont("Consolas")
+            #font.setPointSize(10)
 
             if state in (
                 NodeVisualState.SELECTED,
@@ -258,18 +259,24 @@ class DBSelectionTreeStyle(TreeStyleProvider):
 class DBSelectionExplorerStyle(TreeStyle):
 
     def text(self, node:TreeNode):
+        node_size_txt=""
+        if node.i_am in ["file","dir"] and isinstance(node.size,(int | float)):
+            node_size_txt=FM.get_size_str_formatted(node.size,10,True)
+            node_size_txt=node_size_txt.replace(".00 By"," Bytes")
 
         prefix = ""
         if node.i_exist:
             prefix += "✓"
+        else:
+            prefix += "-"
 
         if node.locked:
             prefix += "🔒"
 
         if node.i_am == "dir":
-            return f"{prefix}📁 {node.name}"
+            return f"{prefix}{node_size_txt}📁 {node.name}"
 
-        return f"{prefix} {node.name}"
+        return f"{prefix}{node_size_txt}📄 {node.name}"
 
     def tooltip(self, node:TreeNode)->str:
         txt = [
@@ -284,9 +291,9 @@ class DBSelectionExplorerStyle(TreeStyle):
             else:
                 txt.append(f"Path : ✗ {node.path}")
 
-        if node.i_am == "file" and isinstance(node.size,(int | float)):
-            node_size_txt=FM.get_size_str_formatted(node.size,33,True)
-            node_size_txt=node_size_txt.replace(".00 By"," By").strip()
+        if node.i_am in ["file","dir"] and isinstance(node.size,(int | float)):
+            node_size_txt=FM.get_size_str_formatted(node.size,10,True)
+            node_size_txt=node_size_txt.replace(".00 By"," Bytes").strip()
             txt.append(f"Size : {node_size_txt}")
 
         return "\n".join(txt)

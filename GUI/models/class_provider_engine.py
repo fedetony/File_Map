@@ -145,6 +145,8 @@ class DefaultProviderEngine(ProviderEngine):
         Returns:
             str: last valid path within string
         """
+        mount=""
+        path_nm=""
         try:
             txt=os.path.normpath(txt)
             [mount,path_nm]=FM.split_filepath_and_mountpoint(txt)

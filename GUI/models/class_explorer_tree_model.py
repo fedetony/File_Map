@@ -16,6 +16,7 @@ import os
 
 class ExplorerTreeModel(QAbstractItemModel):
     userSelectionChanged = pyqtSignal(list)
+    lazyLoading = pyqtSignal(bool)
     
     def __init__(self, config:ExplorerConfig, parent=None):
         super().__init__(parent)
@@ -261,12 +262,16 @@ class ExplorerTreeModel(QAbstractItemModel):
         if not parent.isValid():
             return
         node = self.get_node_from_index(parent)
-        if isinstance(node,TreeNode):
-            pass
-        # actual lazy load callback
+        if not isinstance(node, TreeNode):
+            return
         if hasattr(self, "lazy_loader"):
-            self.lazy_loader(node)
-        node.loaded = True
+            self.lazyLoading.emit(True)
+            try:
+                self.lazy_loader(node)
+            finally:
+                self.lazyLoading.emit(False)
+        else:
+            node.loaded = True
         self.t_m.register_subtree(node)
         self.layoutChanged.emit()
 

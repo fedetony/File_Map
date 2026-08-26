@@ -716,6 +716,13 @@ class FileMapCliManager:
             pass
         return None
     
+    def is_mount_serial_active(self,mount:str,serial:str)->bool:
+        """Returns whether the mount,serial combination is active or not."""
+        for device_mount, device_serial in self.device_monitor.devices:
+            if mount == str(device_mount) and serial == str(device_serial):
+                return True
+        return False
+    
     def delete_map_from_db(self,selected_db,tablename,log_print=True):
         """Deletes the map from the database"""
         fm=self.cma.get_file_map(selected_db) 

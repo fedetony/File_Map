@@ -44,6 +44,13 @@ class TreeNode:
         self.map = None
         self.db_id = None
         self.i_exist = None
+        # file mapping
+        self.mount = None
+        self.serial = None
+        self.itempath = None
+        self.quantity = 0
+        self.num_files = None
+        self.num_dirs = None
 
     # ---------------------------------------------------
     # hierarchy helpers

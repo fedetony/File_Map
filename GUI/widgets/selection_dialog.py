@@ -81,7 +81,7 @@ class SelectionDialogSetter:
             db_filepath=str(db.database_filepath)
             db_node.path = "" # do not add to path
             db_node.db = db_filepath
-            db_node.i_exist=True
+            db_node.i_exist = db.active
             db_node.map = None
             db_node.info = db_filepath
             db_node.loaded = True
@@ -89,7 +89,7 @@ class SelectionDialogSetter:
             maps_in_db=self.fmap.get_maps_in_db(db_filepath)
             # Load maps
             for a_map in maps_in_db:
-                mount = self.fmap.get_mount_of_map(db_filepath,a_map) 
+                mount,serial = self.fmap.get_mount_serial_of_map(db_filepath,a_map) 
                 map_node = TreeNode(f"{a_map} @ ({mount})")
                 map_node.i_am = "map"
                 map_full_path = self.fmap.get_full_mount_path_of_map(db_filepath,a_map) 
@@ -97,7 +97,7 @@ class SelectionDialogSetter:
                 map_node.info = (db_filepath,a_map)
                 map_node.loaded = False
                 map_node.db = db_filepath
-                map_node.i_exist=True
+                map_node.i_exist=self.fmap.is_mount_serial_active(mount,serial)
                 db_node.map = a_map
                 db_node.add_child(map_node)
                 self._add_db_map_children(map_node,map_node.path,map_full_path)
@@ -205,6 +205,7 @@ class SelectionDialogSetter:
         config.selection_mode = SelectionMode.MULTI
         # You must pass lazy_loader, providers and styles in agreement to Mode selection
         lazy_class = ActiveFELazyLoader()
+        lazy_class.set_filemap(self.fmap)
         # initial settings
         lazy_defaults=self.lazy_defaults 
         if not isinstance(lazy_defaults,dict):
@@ -269,6 +270,7 @@ class SelectionDialog(QtWidgets.QDialog):
         self.progress = None
         self.mapping_running = False
         self.target_dbmap_pair = (None, None)
+        self._lazy_loading = False
 
         titles = {
             "FESelection": "File Explorer Selection Mapping",
@@ -346,6 +348,7 @@ class SelectionDialog(QtWidgets.QDialog):
         self.fexp_widget = ExplorerTreeWidget(self.explorer_config)
         self.fexp_widget.userSelectionChanged.connect(self.on_selection_changed)
         self.fexp_widget.actionEvaluated.connect(self.on_action_evaluated)
+        self.fexp_widget.lazyLoading.connect(self.on_lazy_loading)
 
         ##################################
         # Selected Treeview widget
@@ -597,6 +600,21 @@ class SelectionDialog(QtWidgets.QDialog):
         if worker_action:
             worker_action(table_name, path_to_map)
     
+    def on_lazy_loading(self, is_loading: bool):
+        """Change the mouse cursor while lazy loading is active."""
+        if is_loading:
+            if not self._lazy_loading:
+                self._lazy_loading = True
+                QtWidgets.QApplication.setOverrideCursor(
+                    QtCore.Qt.CursorShape.WaitCursor
+                )
+        else:
+            if self._lazy_loading:
+                self._lazy_loading = False
+                QtWidgets.QApplication.restoreOverrideCursor()
+
+
+
     def on_action_evaluated(self,action,result):
         """Action from action provider and result of the evaluation"""
         if action:
@@ -610,10 +628,11 @@ class SelectionDialog(QtWidgets.QDialog):
         self.generate_node_structure(selected_nodes_list)
     
     def generate_node_structure(self,nodes_list):
-        self.sel_menu.generate_selection_struct(nodes_list)
-        # for node in nodes_list:
-        #     if isinstance(node,TreeNode):
-        #         self._append_status(f"{node.name}->{node.path}")
+        self.fexp_widget.lazyLoading.emit(True)
+        try:
+            self.sel_menu.generate_selection_struct(nodes_list)
+        finally:
+            self.fexp_widget.lazyLoading.emit(False)
         
 
     def start_fe_selection_worker(self, table_name, path_to_map):

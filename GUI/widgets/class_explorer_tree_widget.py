@@ -32,6 +32,7 @@ class ExplorerTreeWidget(QWidget):
     actionEvaluated = pyqtSignal(object,object)
     nodeExpanded = pyqtSignal(TreeNode)
     nodeCollapsed = pyqtSignal(TreeNode)
+    lazyLoading = pyqtSignal(bool)
 
     def __init__(self, config: ExplorerConfig, parent=None):
         super().__init__(parent)
@@ -60,6 +61,7 @@ class ExplorerTreeWidget(QWidget):
         self.model.set_new_explorer_style(self.config.explorer_style)
         self.model.set_new_tree_style(self.config.tree_style)
         self.model.userSelectionChanged.connect(self.userSelectionChanged.emit)
+        self.model.lazyLoading.connect(self.lazyLoading.emit)
         if self.config.lazy_loading:
             lazy = self.config.lazy_loader
             if isinstance(self.config.lazy_loader,LazyLoaderProvider):
@@ -401,42 +403,52 @@ class ExplorerTreeWidget(QWidget):
         txt = self.provider.autocomplete_path(txt)
         self.path_edit.setText(txt)
     
-    def _update_tv_from_path(self,text):
+    def _update_tv_from_path(self, text):
         if not self.provider:
             return
         self.user_typing = True
-        valid_path, mount, path_nm  = self.provider.get_valid_path_from_text(text)
+        valid_path, mount, path_nm = self.provider.get_valid_path_from_text(text)
         if not valid_path:
             return
         parts = self.provider.path_to_list(valid_path)
-        if len(parts)==0:
+        if len(parts) == 0:
             return
-        print("Parts, mount, path nm",parts, mount, path_nm)
-        current=self.t_m.root
-        for child in current.children:
-            nname = self.provider.normalize_path(child.name)
-            if nname == mount or nname.lower() == mount.lower():
-                current=child
-                break
-        for part in parts:
-            # ensure loaded
-            if (not current.loaded and self.model.lazy_loader):
-                self.model.lazy_loader(current)
-            found = self.t_m.find_child_name(current,part)
-            # stop at last valid node
-            if found is None:
-                break
-            # expand tree
-            idx = self.model.get_index_from_node(found)
-            if idx.isValid():
-                self.tree.expand(idx)
-            current = found
-        # highlight current location
-        idx = self.model.get_index_from_node(current)
+        #self.lazyLoading.emit(True)
+        try:
+            print("Parts, mount, path nm", parts, mount, path_nm)
+            current = self.t_m.root
+            for child in current.children:
+                nname = self.provider.normalize_path(child.name)
+                if nname == mount or nname.lower() == mount.lower():
+                    current = child
+                    break
 
-        if idx.isValid():
-            self.tree.setCurrentIndex(idx)
-            self.tree.scrollTo(idx)
+            for part in parts:
+                # Ensure loaded
+                if not current.loaded and self.model.lazy_loader:
+                    self.model.lazy_loader(current)
+                found = self.t_m.find_child_name(current, part)
+
+                # Stop at last valid node
+                if found is None:
+                    break
+
+                # Expand tree
+                idx = self.model.get_index_from_node(found)
+
+                if idx.isValid():
+                    self.tree.expand(idx)
+
+                current = found
+
+            # Highlight current location
+            idx = self.model.get_index_from_node(current)
+            if idx.isValid():
+                self.tree.setCurrentIndex(idx)
+                self.tree.scrollTo(idx)
+        finally:
+            # self.lazyLoading.emit(False)
+            pass
     
     def set_current_node(self, node: TreeNode):
         idx = self.model.get_index_from_node(node)

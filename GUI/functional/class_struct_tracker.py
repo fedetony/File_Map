@@ -7,6 +7,8 @@
 import copy
 from PyQt6 import QtCore
 import deepdiff
+from dataclasses import dataclass, field
+from typing import Any
 
 """
 Canonical Configuration Structure
@@ -262,22 +264,6 @@ Without a property selector, the complete node is returned.
             - a node property
             - a metadata value
 
-    get_node(track)
-        Returns the node dictionary only.
-        Property selectors are ignored.
-
-    node_exists(track)
-        Checks if a node or property exists.
-
-    get_children(track)
-        Returns the children list of a node.
-
-    get_property(track, property_name)
-        Reads a node property explicitly.
-
-    get_meta(track, key)
-        Returns a metadata value from a node.
-
     ----------------------------------------------------------------------
     Writing API
     ----------------------------------------------------------------------
@@ -285,15 +271,6 @@ Without a property selector, the complete node is returned.
     set_value(track, value, subtype='')
         Updates an existing value or property.
         Does not create missing nodes.
-
-    set_property(track, property_name, value)
-        Updates a node property.
-
-    set_meta(track, key, value)
-        Updates metadata without affecting node values.
-
-    remove_property(track, property_name)
-        Removes a property from a node.
 
     ----------------------------------------------------------------------
     Structure Management
@@ -320,15 +297,6 @@ Without a property selector, the complete node is returned.
     ----------------------------------------------------------------------
     Traversal API
     ----------------------------------------------------------------------
-
-    walk(node=None)
-        Recursively iterates through nodes.
-
-    get_all_tracks()
-        Returns all available node paths.
-
-    find_nodes(condition)
-        Searches nodes matching a user supplied condition.
 
     remove_property_from_all_nodes(node, property_name)
         Removes a property recursively from the structure.
@@ -382,6 +350,29 @@ Without a property selector, the complete node is returned.
         - command line tools
 
 """
+
+
+@dataclass
+class ValidationResult:
+    found: bool = False
+
+    track: list = field(default_factory=list)
+
+    node: Any = None
+    parent_node: Any = None
+    parent_key: Any = None
+
+    is_node: bool = False
+    is_branch: bool = False
+    is_root: bool = False
+
+    has_children: bool = False
+    children_count: int = 0
+    children_keys: list = field(default_factory=list)
+
+    has_type: bool = False
+    has_subtype: bool = False
+    has_meta: bool = False
 
 class TreeStructTracker(QtCore.QObject):
     """
@@ -576,6 +567,11 @@ class TreeStructTracker(QtCore.QObject):
         resolve invalid or incomplete structures without raising exceptions.
         Validation provides enough information for higher-level systems
         (ConditionEngine, editors, serializers) to make decisions safely.
+    
+    get_validate_node_as_obj() -> ValidationResult:
+        This is an object-oriented wrapper around validate_node(). The underlying
+        validation is performed by validate_node(), which returns a dictionary;
+        this method converts that result into a ValidationResult dataclass.
 
     ----------------------------------------------------------------------
     Signals
@@ -1026,6 +1022,90 @@ class TreeStructTracker(QtCore.QObject):
         self.add_child(dest_track, key, clone)
         return True
     
+    def get_validate_node_as_obj(self, track: list) -> ValidationResult:
+        """
+        Returns a ValidationResult object describing the node at the given track.
+
+        This is an object-oriented wrapper around validate_node(). The underlying
+        validation is performed by validate_node(), which returns a dictionary;
+        this method converts that result into a ValidationResult dataclass.
+
+        Args:
+            track: List of keys/indices describing the path to the node.
+
+        Returns:
+            ValidationResult containing:
+
+                found: bool
+                    True if the node was found, otherwise False.
+
+                track: list
+                    The resolved track/path used to locate the node.
+
+                node: object or None
+                    The actual node found at the track.
+
+                parent_node: dict, list, or None
+                    The container holding the node.
+
+                parent_key: object or None
+                    The dictionary key or list index used to reach the node.
+
+                is_node: bool
+                    True if the object is a node dictionary containing node fields
+                    such as value/type/etc.
+
+                is_branch: bool
+                    True if the object is a branch containing children, either a
+                    dictionary with children or a list.
+
+                is_root: bool
+                    True if the object is the root dictionary, with no parent
+                    container or parent key.
+
+                has_children: bool
+                    True if the node has one or more children.
+
+                children_count: int
+                    Number of direct children.
+
+                children_keys: list
+                    Keys or indices used to access the direct children.
+
+                has_type: bool
+                    True if the node contains a type field.
+
+                has_subtype: bool
+                    True if the node contains a subtype field.
+
+                has_meta: bool
+                    True if the node contains metadata.
+        """
+
+        val_node = self.validate_node(track) or {}
+
+        return ValidationResult(
+            found=val_node.get("found", False),
+            track=val_node.get("track", track),
+            node=val_node.get("node"),
+            parent_node=val_node.get("parent_node"),
+            parent_key=val_node.get("parent_key"),
+
+            is_node=val_node.get("is_node", False),
+            is_branch=val_node.get("is_branch", False),
+            is_root=val_node.get("is_root", False),
+
+            has_children=val_node.get("has_children", False),
+            children_count=val_node.get("children_count", 0),
+            children_keys=val_node.get("children_keys", []),
+
+            has_type=val_node.get("has_type", False),
+            has_subtype=val_node.get("has_subtype", False),
+            has_meta=val_node.get("has_meta", False),
+        )
+
+
+
     def validate_node(self, track: list) -> dict:
         """
         Returns a structural description of the node at the given track.
