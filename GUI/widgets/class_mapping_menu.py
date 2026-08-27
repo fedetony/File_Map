@@ -782,7 +782,7 @@ class MappingMenu(QtCore.QObject):
 
     def _menu_search_map(self, context):
         db_map_pairs = self._get_dbmap_pairs_from_context(context)
-        dialog=SearchDialog(db_map_pairs,self.parent_widget)        
+        dialog=SearchDialog(self.fmap, db_map_pairs,self.parent_widget)        
         dialog.exec() # blocks user until closing window
         #dialog.show() # allows user to change windows
 

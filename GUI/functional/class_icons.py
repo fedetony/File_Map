@@ -237,7 +237,7 @@ class Icons:
     _paths = {
         "green arrow dn":":/icons/download_selected_icon.png",
         "db key":":/icons/icons8-data-encryption-80.png",
-        "search file":":/icons/icons8-view-94.png",
+        
         "trash":":/icons/icons8-trash-can-96.png",
         "pause":":/icons/button_pause_icon.png",
         "clear":":/icons/clear_icon.png",
@@ -258,7 +258,7 @@ class Icons:
         "play blue":":/icons/button_play_icon.png",
         "white document":":/icons/document_icon.png",
         "document":":/icons/icons8-document-94.png",
-        "search folder":":/icons/explorer_file_icon.png",
+        
         "file versions":":/icons/icons8-versions-96.png",
         "lists pink arrow":":/icons/icons8-open-with-96.png",
         "refresh file":":/icons/icons8-restore-page-96.png",
@@ -310,7 +310,7 @@ class Icons:
         "continue mapping":":/icons/Ahmadhania-Spherical-Blinklist.128.png", 
         "find duplicates":":/icons/Ahmadhania-Spherical-File-copy.128.png", 
         "find repeated":":/icons/icons8-versions-96.png", 
-        "search map":":/icons/icons8-view-94.png",
+        
         "tree" :":/icons/icons8-add-subnode-96.png",
         "dir explore" :":/icons/explorer_file_icon.png",
         "file struct" :":/icons/icons8-open-with-96.png",
@@ -318,6 +318,22 @@ class Icons:
         "shallow compare" :":/icons/Ahmadhania-Spherical-Resize-hor.128.png",
         "deep compare" :":/icons/Ahmadhania-Spherical-Resize-ver.128.png",
         
+        "history" :":/icons/Ahmadhania-Spherical-Down.128.png",
+        "history2" :":/icons/Ahmadhania-Spherical-Scroll-down.128.png",
+        "help":":/icons/Ahmadhania-Spherical-Help.128.png",
+        "help b":":/icons/Icojam-Blue-Bits-Question-faq.256.png",
+        "search":":/icons/Icojam-Blue-Bits-Search.256.png",
+        "search folder":":/icons/explorer_file_icon.png",
+        "search file":":/icons/icons8-view-94.png",
+        "search map":":/icons/icons8-view-94.png",
+        "search db":":/icons/Icojam-Blue-Bits-Database-search.256.png",
+        "search doc":":/icons/Icojam-Blue-Bits-Document-search.256.png",
+        "search dir":":/icons/Icojam-Blue-Bits-Folder-search.256.png",
+        "not valid query":":/icons/Ahmadhania-Spherical-Error.128.png",
+        "valid query":":/icons/Ahmadhania-Spherical-Search.128.png",
+        "gift":":/icons/Ahmadhania-Spherical-Gift.128.png",
+        "copy":":/icons/Ahmadhania-Spherical-File-copy.128.png", 
+
 
         
     }

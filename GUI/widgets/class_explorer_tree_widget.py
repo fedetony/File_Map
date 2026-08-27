@@ -522,27 +522,85 @@ class ExplorerTreeWidget(QWidget):
 
 
         
+# class OptionPopup(QListWidget):
+#     optionSelected = pyqtSignal(str)
+#     def keyPressEvent(self, event):
+
+#         if event.key() in (
+#             Qt.Key.Key_Return,
+#             Qt.Key.Key_Enter
+#         ):
+#             item = self.currentItem()
+#             if item:
+#                 self.optionSelected.emit(
+#                     item.text()
+#                 )
+#             return
+        
+#         if event.key() == Qt.Key.Key_Escape:
+#             self.hide()
+#             if hasattr(self.parent(),"path_edit"):
+#                 self.parent().path_edit.setFocus()
+#             event.accept()
+#             return
+
+#         super().keyPressEvent(event)
+
 class OptionPopup(QListWidget):
+
     optionSelected = pyqtSignal(str)
+
+    def __init__(self, target_edit=None, parent=None):
+        super().__init__(parent)
+
+        self.target_edit = target_edit
+
+        self.setWindowFlags(
+            Qt.WindowType.Popup
+        )
+
+        self.setFocusPolicy(
+            Qt.FocusPolicy.StrongFocus
+        )
+
+    def set_target(self, target_edit):
+        self.target_edit = target_edit
+
     def keyPressEvent(self, event):
 
         if event.key() in (
             Qt.Key.Key_Return,
-            Qt.Key.Key_Enter
-        ):
+            Qt.Key.Key_Enter,
+            Qt.Key.Key_Tab,
+            Qt.Key.Key_Space,
+            ):
             item = self.currentItem()
+
             if item:
-                self.optionSelected.emit(
-                    item.text()
-                )
+                self.optionSelected.emit(item.text())
+
+            event.accept()
             return
-        
-        if event.key() == Qt.Key.Key_Escape:
+
+        if event.key() in (
+            Qt.Key.Key_Escape,
+            Qt.Key.Key_Delete, 
+            ):
             self.hide()
-            if hasattr(self.parent(),"path_edit"):
-                self.parent().path_edit.setFocus()
+
+            if self.target_edit:
+                self.target_edit.setFocus()
+
             event.accept()
             return
 
         super().keyPressEvent(event)
 
+    def mousePressEvent(self, event):
+        item = self.itemAt(event.position().toPoint())
+
+        if item:
+            self.setCurrentItem(item)
+            self.optionSelected.emit(item.text())
+
+        super().mousePressEvent(event)

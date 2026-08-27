@@ -95,6 +95,8 @@ class AutocompletePathFile:
         self.line_user_input = ""
         self.line_autocompleted = ""
         self.autocomplete_options = []
+        self.complement_fill = ""
+        self.complement_options_list = []
         self.base_path = base_path
         self.absolute_path = absolute_path
         self.verbose = verbose
@@ -340,10 +342,14 @@ class AutocompletePathFile:
                 if startw==last_word:
                     list_auto.append(possibletxt)
         self.options = ""
+        self.options_list = []
         if len(list_auto) == 1:
             return str(list_auto[0]).replace(last_word,'')
+        self.autocomplete_options = list_auto.copy()
         if len(list_auto) > 1:
             fill_add, comp_list=self.get_commontxt_optionlist(list_auto)
+            self.complement_fill = fill_add
+            self.complement_options_list = comp_list.copy()
             self.options = f"[{len(list_auto)}] Options for {a_txt}: {comp_list}"
             return fill_add.replace(last_word,'')
         return ""

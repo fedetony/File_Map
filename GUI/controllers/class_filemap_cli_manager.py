@@ -50,6 +50,7 @@ class FileMapCliManager:
                                 )
             self.cma = self.ba.cma
             self.fm=FileManipulate()
+            self.sql_sg = SQL_SG
             for name, activate in zip(self.file_list,activate_list):
                 if activate:
                     self.cma.activate_databases(name)
