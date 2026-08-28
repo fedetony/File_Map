@@ -98,7 +98,7 @@ class SelectionDialogSetter:
                 map_node.loaded = False
                 map_node.db = db_filepath
                 map_node.i_exist=self.fmap.is_mount_serial_active(mount,serial)
-                db_node.map = a_map
+                map_node.map = a_map
                 db_node.add_child(map_node)
                 self._add_db_map_children(map_node,map_node.path,map_full_path)
                 

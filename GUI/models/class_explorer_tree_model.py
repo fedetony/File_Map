@@ -72,8 +72,11 @@ class ExplorerTreeModel(QAbstractItemModel):
         if not index.isValid():
             return QModelIndex()
 
-        node = self.get_node_from_index(index)
-        parent_node = node.parent
+        try:
+            node = self.get_node_from_index(index)
+            parent_node = node.parent
+        except AttributeError:
+            return QModelIndex()
 
         if (parent_node is None or parent_node == self.root_node):
             return QModelIndex()
@@ -151,6 +154,8 @@ class ExplorerTreeModel(QAbstractItemModel):
             return Qt.ItemFlag.NoItemFlags
 
         node = self.get_node_from_index(index)
+        if not isinstance(node,TreeNode):
+            return Qt.ItemFlag.NoItemFlags
         selectable=self.get_node_selectability(node)
         node.selectable= selectable
         if node.hidden:
@@ -177,7 +182,9 @@ class ExplorerTreeModel(QAbstractItemModel):
     # -------------------------------------------------
 
     def get_node_selectability(self, node: TreeNode) -> bool:
-
+        if not node:
+            return False
+        
         if self.checkbox_mode == CheckBoxMode.NO_CHECKBOX:
             return False
 

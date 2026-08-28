@@ -517,7 +517,14 @@ class MappingActions():
                 if an_id == dupli_dict['id']:
                     return dupli_dict
 
-    def map_to_file_structure(self,database,a_map,where=None,fields_to_tab:list[str]=None,sort_by:list=None,ascending:bool=True)->dict:
+    def map_to_file_structure(self,database,a_map,where=None,
+                              fields_to_tab:list[str]=None,
+                              sort_by:list=None,
+                              ascending:bool=True,
+                              confirmation=False,
+                              log_callback=None,
+                              
+                              )->dict:
         """Generates a file structure from map information
 
         Args:
@@ -531,11 +538,13 @@ class MappingActions():
         Returns:
             dict: file structure
         """
+        if not log_callback:
+            log_callback=print
         if a_map in self.get_maps_in_db(database):
             fm=self.get_file_map(database)
             table_size=fm.db.get_number_or_rows_in_table(a_map)
-            if table_size > 33333:
-                print(f'[red]Map {a_map} has {table_size} items, is too big to load into a single file structure!')
+            if confirmation and table_size > 33333:
+                log_callback(f'[red]Map {a_map} has {table_size} items, is too big to load into a single file structure!')
                 if not self.ask_confirmation("This may take a while, You want to continue?",True):
                     return {}
             return fm.map_to_file_structure(a_map,where,fields_to_tab,sort_by,ascending)

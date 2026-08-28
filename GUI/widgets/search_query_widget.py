@@ -102,7 +102,7 @@ class SearchQueryWidget(QtWidgets.QWidget):
 
     def __init__(self, fmap: FileMapCliManager, parent=None):
         super().__init__(parent)
-
+        print("CREATING SearchQueryWidget", id(self))
         self.fmap = fmap
         self.renderer = TextRenderer()
         self.icons = Icons()
@@ -496,15 +496,15 @@ class SearchQueryWidget(QtWidgets.QWidget):
         self.query_edit.installEventFilter(self)
         self.query_edit.textChanged.connect(self._query_text_changed)
 
-        self.search_button.pressed.connect(self._do_search)
-        self.query_edit.returnPressed.connect(self._do_search)
         self.search_button.clicked.connect(self._do_search)
+        # pressed fires when the mouse button goes down; 
+        # clicked fires after the button press/release interaction
 
         self.option_popup.optionSelected.connect(self._option_selected)
         self.sql_where_label.customContextMenuRequested.connect(
-            self._sql_context_menu)
+            self._sql_context_menu_where)
         self.valid_label.customContextMenuRequested.connect(
-            self._sql_context_menu)
+            self._sql_context_menu_valid)
         self.query_edit.textChanged.connect(self.validate_query)
 
         self.help_button.clicked.connect(self._show_help)
@@ -613,7 +613,7 @@ class SearchQueryWidget(QtWidgets.QWidget):
 
         The widget does not execute the search itself.
         """
-
+        print("######## _do_search", id(self))
         sql, msg, is_valid = self.validate_query()
 
         if not is_valid:
@@ -935,7 +935,13 @@ class SearchQueryWidget(QtWidgets.QWidget):
         self.valid_icon.setToolTip(tooltip)
         self.valid_label.setToolTip(tooltip)
 
-    def _sql_context_menu(self, pos):
+    def _sql_context_menu_where(self, pos):
+        self._sql_context_menu(self,self.sql_where_label, pos)
+    
+    def _sql_context_menu_valid(self, pos):
+        self._sql_context_menu(self,self.valid_label, pos)
+
+    def _sql_context_menu(self,obj, pos):
         """Context menu for the SQL/query preview."""
 
         menu = QtWidgets.QMenu(self)
@@ -956,7 +962,7 @@ class SearchQueryWidget(QtWidgets.QWidget):
         # copy_html_action = menu.addAction("Copy Formatted")
         # select_action = menu.addAction("Select All")
         #
-        action = menu.exec(self.sql_where_label.mapToGlobal(pos))
+        action = menu.exec(obj.mapToGlobal(pos))
 
         if action == copy_action:
             self._copy_sql_html()

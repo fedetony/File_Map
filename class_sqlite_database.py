@@ -261,6 +261,30 @@ class SQLiteDatabase:
         if txt.startswith('"') and txt.endswith('"'):
             return txt  # is already "" quoted
         return "'" + txt + "'"
+    
+    @staticmethod
+    def quote_identifier(txt: str) -> str:
+        """Quote a SQLite identifier. 
+        The double quotes are important here, but the deeper reason 
+        is that SQL has a distinction between identifiers and values.
+
+        IDENTIFIER → "double quotes"
+        VALUE      → 'single quotes'
+
+        This: 'filename' means: The literal text filename.
+
+        filename="test.mp3"   -> correct
+        filename='test.mp3'   -> correct 
+        "filename"='test.mp3' -> correct (prefered)
+        
+        'filename'="test.mp3" -> wrong
+
+        """
+        if txt.startswith('"') and txt.endswith('"'):
+            return txt
+
+        return '"' + txt.replace('"', '""') + '"'
+
 
     def rename_column_in_table(self, table_name, column_name, new_column_name):
         """Rename a column in the database"""
@@ -552,53 +576,195 @@ class SQLiteDatabase:
             # Release all resources
             c.close()
 
-    def insert_data_to_table(self, table: str, sample_data: list[tuple]):
-        """Add data to a table
+    def copy_data_from_table_in_another_database(
+        self,
+        db_from: str,
+        table_from: str,
+        table_to: str,
+        fields_from: list[str] | None = None,
+        fields_to: list[str] | None = None,
+        where: str | None = None,
+    ):
+        """Copy rows directly between SQLite databases.
+
+        Rows are transferred using SQLite's ``ATTACH DATABASE`` and
+        ``INSERT ... SELECT`` without materializing the rows in Python.
+
+        If ``fields_from`` and ``fields_to`` are not supplied, all columns
+        are copied in their existing order.
+
+        If both are supplied, each source field is mapped to the
+        corresponding destination field.
+
+        Example::
+
+            fields_from = ["id", "filename", "filepath"]
+            fields_to   = ["id_in_db", "filename", "filepath"]
+
+        This is useful for search/temporary databases where the source
+        ``id`` needs to be preserved in a separate ``id_in_db`` column
+        while the destination table generates its own ``id``.
 
         Args:
+            db_from: Source SQLite database path.
+            table_from: Source table name.
+            table_to: Destination table name.
+            fields_from: Source columns to copy.
+            fields_to: Destination columns receiving the values.
+            where: Optional SQL WHERE expression, without the ``WHERE``
+                keyword.
 
-            table (str): Table name
-            sample_data (list[tuple]): must match with columns name
+        Returns:
+            True if the rows were copied successfully, otherwise False.
+            msg reason for failure
         """
-        description = self.describe_table_in_db(table)
-        if len(description) == 0:
-            print("No data in table")
-            return False
-        column_name_list = []
-        data_type_list = []
-        for desc in description:
-            if desc[1] != "id":
-                column_name_list.append(desc[1])
-                data_type_list.append(desc[2])
+        if not self.table_exists(table_to):
+            return False, f"Do not have Table named {table_to}"
 
-        sqltxt = str(column_name_list)
-        sqltxt = sqltxt.replace("'", "")
-        sqltxt = sqltxt.replace(",", ", ")
-        sqltxt = sqltxt.replace("[", "(")
-        sqltxt = sqltxt.replace("]", ")")
-        val = sqltxt
-        for ccc in column_name_list:
-            val = val.replace(ccc, "?")
-        sqltxt = sqltxt + " VALUES " + val
+        # Either both field lists must be supplied or neither.
+        if (fields_from is None) != (fields_to is None):
+            return False, "Either both field lists must be supplied or neither"
+
+        if fields_from is not None:
+            if not isinstance(fields_from, list):
+                return False, "From field is not a List"
+
+            if not isinstance(fields_to, list):
+                return False, "To field is not a List"
+
+            if len(fields_from) != len(fields_to):
+                return False, "From field length != To field Length"
+
+            if len(fields_from) == 0:
+                return False, "No fields Supplied"
+
+        source_alias = "source_db"
+        c = None
         try:
             c = self.conn.cursor()
-            # Update the specified column with the given value for all rows that match the condition
-            for row in sample_data:
-                if len(row) == len(column_name_list):
-                    c.execute(f"INSERT INTO {self.quotes(table)} {sqltxt}", row)
-                else:
-                    print(f"Data Size is not correct {column_name_list} != {row}")
-                    return False
-            self.commit()
-            time.sleep(WAIT_TIME_WRITING)
-            return True
-            # print("Row updated successfully")
-        except sqlite3.Error as eee:
-            print(eee)
-            return False
+            # Attach source database to the connection containing
+            # the destination database.
+            c.execute(
+                f"ATTACH DATABASE ? AS {source_alias}",
+                (db_from,)
+            )
+            where_sql = f" WHERE {where}" if where else ""
+            # print("WHERE_SQL:      ", where_sql)
+            if fields_from is None:
+                # ------------------------------------------------------
+                # Copy entire table
+                # ------------------------------------------------------
+                sql = f"""
+                    INSERT INTO main.{self.quote_identifier(table_to)}
+                    SELECT *
+                    FROM {source_alias}.{self.quote_identifier(table_from)}
+                    {where_sql}
+                    """
+                # print("SQL:      ", sql)
+            else:
+                # ------------------------------------------------------
+                # Explicit field mapping
+                # ------------------------------------------------------
+                from_sql = ", ".join(
+                    self.quote_identifier(field)
+                    for field in fields_from
+                )
+
+                to_sql = ", ".join(
+                    self.quote_identifier(field)
+                    for field in fields_to
+                )
+
+                sql = f"""
+                    INSERT INTO main.{self.quote_identifier(table_to)}
+                    ({to_sql})
+                    SELECT {from_sql}
+                    FROM {source_alias}.{self.quote_identifier(table_from)}
+                    {where_sql}
+                    """
+            c.execute(sql)
+            self.conn.commit()
+            c.execute(
+                f"DETACH DATABASE {source_alias}"
+            )
+            return True, ""
+
+        except sqlite3.Error as e:
+            print(e)
+
+            try:
+                self.conn.rollback()
+            except sqlite3.Error:
+                pass
+            # Try to detach if the transaction failed.
+            try:
+                c.execute(
+                    f"DETACH DATABASE {source_alias}"
+                )
+            except sqlite3.Error:
+                pass
+            return False, f"{e}"
         finally:
-            # Release all resources
-            c.close()
+            if c is not None:
+                c.close()
+
+
+
+    def insert_data_to_table(self, table: str, sample_data: list[tuple]):
+        """Insert multiple records into a SQLite table.
+
+        Args:
+            table: Table name.
+            sample_data: List of tuples matching the table's non-ID columns.
+
+        Returns:
+            True if the records were inserted successfully, otherwise False.
+        """
+        if not sample_data:
+            return True
+
+        description = self.describe_table_in_db(table)
+        if not description:
+            print("No data in table")
+            return False
+        # Exclude auto-generated ID column
+        column_name_list = [
+            desc[1]
+            for desc in description
+            if desc[1] != "id"
+        ]
+        expected = len(column_name_list)
+        # Validate all rows before touching the database
+        for row in sample_data:
+            if len(row) != expected:
+                print(
+                    f"Data Size is not correct: "
+                    f"expected {column_name_list}, got {row}"
+                )
+                return False
+        columns = ", ".join(
+            self.quotes(column)
+            for column in column_name_list
+        )
+        placeholders = ", ".join("?" for _ in column_name_list)
+        sql = (
+            f"INSERT INTO {self.quotes(table)} "
+            f"({columns}) VALUES ({placeholders})"
+        )
+
+        try:
+            cursor = self.conn.cursor()
+            cursor.executemany(sql, sample_data)
+            self.commit()
+            return True
+
+        except sqlite3.Error as e:
+            print(e)
+            return False
+
+        finally:
+            cursor.close()
+
 
     def get_next_available_id(self, table: str) -> int:
         """Gets the next id that is available in a table

@@ -6,7 +6,6 @@ from contextlib import redirect_stdout
 from datetime import datetime
 
 from controllers.class_configuration_manager import ConfigurationManager
-from controllers.class_database_manager import DatabaseManager
 
 from class_device_monitor import *
 from class_autocomplete_input import *
@@ -558,7 +557,6 @@ class FileMapCliManager:
             self.mapping_to_pair=(temp_db_filepath, temp_table_name)
             temp_map_pair = self.mapping_to_pair
             fm_temp = self.cma.get_file_map(temp_map_pair[0])
-            # fm_temp.add_table_to_mapper_index(temp_map_pair,)
 
             if log_callback:
                 log_callback(f"[yellow]Created temporary Map {temp_table_name}")
@@ -870,8 +868,160 @@ class FileMapCliManager:
                                              kill_ev=kill_ev)
         
         return None
-            
+    
+    def do_a_search(
+        self,
+        selected_db_map_pair_list: list,
+        sql_where: str | None = None,
+        log_callback=None,
+    ):
+        """Search selected maps into an isolated temporary database.
+
+        Matching rows are copied directly from the source databases into
+        temporary tables using SQL, preserving the original record ID as
+        ``id_in_db``. The returned map index identifies each temporary map
+        and its source ``(database, map)`` pair.
+
+        Args:
+            selected_db_map_pair_list: Source ``(database, map)`` pairs.
+            path_to_map: Source common path.
+            sql_where: Optional SQL WHERE expression used to filter records.
+            log_callback: Optional callback for progress/error messages.
+
+        Returns:
+            Tuple ``(temp_db, idx_map)`` containing the temporary database
+            filename and the mapping between temporary maps and their source 
+            maps.
+        """        
+        if not selected_db_map_pair_list:
+            return None, {}
         
+        selected_db, table_name = selected_db_map_pair_list[0]
+        temp_db = self._create_temporal_database(
+            selected_db,
+            table_name,
+            log_callback=log_callback)
+
+        if not temp_db:
+            return None, {}
+
+        temp_fm=self.cma.get_file_map(temp_db)
+        if not temp_fm:
+            return None, {}
+        idx_map={}
+        for idx, db_map_pair in enumerate(selected_db_map_pair_list):
+            # including Id is important
+            fm=self.cma.get_file_map(db_map_pair[0])
+            if not fm:
+                continue
+            dbname=self.fm.extract_filename(db_map_pair[0])
+            temp_map_name=f"{idx}_{dbname}_{db_map_pair[1]}"
+            
+            name_valid,msg=self.map_validation(temp_db,temp_map_name)
+            if not name_valid:
+                temp_map_name = f"{idx}_{self.timestamp}_{db_map_pair[1]}"
+                if log_callback:
+                    log_callback(f"Map Name Invalid: {msg} - renamed to {temp_map_name}")
+                
+            # Create the table preseving type and data
+            description= fm.db.describe_table_in_db(db_map_pair[1])
+            # description: (Index, Column name, Data type, Not null constraint, Default value, Primary key flag)
+            # Field mapping
+            fields_from = []
+            fields_to = []
+            for col in description:
+                column_name = col[1]
+
+                if column_name != "id":
+                    fields_from.append(column_name)
+                    fields_to.append(column_name)
+            # Original ID goes LAST
+            fields_from.append("id")
+            fields_to.append("id_in_db")
+            # set field types for creating new table
+            type_cols = []
+            id_type = "INTEGER"
+            for col in description:
+                column_name = col[1]
+                data_type = col[2]
+                not_null = col[3]
+                is_primary = col[5]
+
+                if is_primary:
+                    id_type = data_type
+                    continue
+
+                type_cols.append(
+                    (column_name, data_type, not_null)
+                )
+            # Always append provenance column last
+            type_cols.append(("id_in_db", id_type, False))
+            # Create table including id_in_db
+            temp_fm.db.create_table(temp_map_name,type_cols,False)
+            original_info=self.cma.get_map_info_as_dict(db_map_pair[0],db_map_pair[1])
+            # Add new table to index
+            path_to_map=os.path.join(original_info['mount'], original_info['mappath'])
+            # Add original data to the temporal reference
+            temp_fm.add_table_to_mapper_index(temp_map_name, 
+                                              path_to_map, 
+                                              MapType.SEARCH.value)
+            temp_fm.set_mount_serial_to_map(temp_map_name, 
+                                            original_info['mount'],
+                                            original_info['serial'])
+            temp_fm.set_mappath_to_map(temp_map_name, original_info['mappath'])
+
+            # Map to table search data including id_in_db
+            was_copied, msg = temp_fm.db.copy_data_from_table_in_another_database(
+                db_from=db_map_pair[0],
+                table_from=db_map_pair[1],
+                table_to=temp_map_name,
+                fields_from=fields_from,
+                fields_to=fields_to,
+                where=sql_where,
+                )
+            if not was_copied:
+                if log_callback:
+                    log_callback(f"Failed to copy {temp_map_name}: {msg}")
+                continue
+
+            len_data=temp_fm.db.get_number_or_rows_in_table(temp_map_name)
+            idx_map[idx] = {
+                "name": temp_map_name,
+                "db_map_pair": db_map_pair,
+                "matches": len_data,
+            }
+        
+        return temp_db, idx_map
+
+    def export_to_filestructure(self,selected_db_map_pair_list:list, 
+                    sql_where: str| None=None,
+                    sort_by=None,
+                    ascending=True, 
+                    log_callback=None):
+        db_map_list=[]    
+        fs_list=[]
+        for db_map_pair in selected_db_map_pair_list:
+            # including Id is important
+            fs=self.cma.map_to_file_structure(database=db_map_pair[0],
+                                              a_map=db_map_pair[1],
+                                              where=sql_where,fields_to_tab=['id'],
+                                              sort_by=sort_by,
+                                              ascending=ascending,
+                                              confirmation=False,
+                                              log_callback=log_callback
+                                              )
+            if log_callback:
+                db_show=self.fm.extract_filename(db_map_pair[0])
+                map_show=db_map_pair[1]
+                if len(fs)==1:
+                    log_callback(f'[green]Found Matches[/] in {db_show}, {map_show}')
+                else:
+                    log_callback(f'[magenta]No Matches Found[/] in {db_show}, {map_show}')
+            if len(fs)>0:
+                fs_list.append(fs.copy())
+                db_map_list.append(db_map_pair)
+                del fs
+        return fs_list, db_map_list      
     # -------------------------------------------------------
     # DB Map Size Cache
     # -------------------------------------------------------    

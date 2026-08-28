@@ -14,7 +14,7 @@ pd.options.mode.copy_on_write = True
 class FileStructurer():
     """Class to form a file structure from a dataframe, must contain "id", "filepath", "filename", "size" in dataframe columns. 
     """
-    def __init__(self,df:pd.DataFrame,additional_columns:list=None):
+    def __init__(self,df:pd.DataFrame,additional_columns:list=None,log_callback=None):
         """Converts df to filestructure
 
         Args:
@@ -26,6 +26,10 @@ class FileStructurer():
         """
         if not self.check_df_cols_is_ok(df):
             raise AssertionError('Missing columns "id", "filepath", "filename", "size" in dataframe')
+        if not log_callback:
+            self.log_callback=print
+        else:
+            self.log_callback=log_callback
         self.df=self._fix_paths_in_df(df)
         self.additional_columns=additional_columns
     
@@ -299,12 +303,12 @@ class FileStructurer():
         # min_depth=1 # self.get_min_depth(df)
         iii=1
         while max_depth > min_depth:
-            print(f'{iii} Compressing {max_depth} to {min_depth}, {df["path_depth"].size} elements left')
+            self.log_callback(f'{iii} Compressing {max_depth} to {min_depth}, {df["path_depth"].size} elements left')
             df = self.compress_nth_file_structure(df)
             max_depth=self.get_max_depth(df)            
             iii+=1
         # Last Compression
-        print(f'{iii} Compressing {max_depth} to {min_depth}, {df["path_depth"].size} elements left')
+        self.log_callback(f'{iii} Compressing {max_depth} to {min_depth}, {df["path_depth"].size} elements left')
         df = self.compress_nth_file_structure(df)
         return df
     

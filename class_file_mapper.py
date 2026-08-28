@@ -35,7 +35,21 @@ MD5_CALC = "***Calculate***"
 MD5_SHALLOW = "***Shallow***"
 DATA_ADVANCE = 50  # gather 50 records before writting to db
 SINGLE_MULTIPLE_SEARCH = 15  # use single search or generalized search limit
-MAP_TYPES_LIST=["Device Map","Selection Map","Backup Map","Remove","Keep","Sorted Map","Incomplete"]
+
+from enum import Enum
+
+class MapType(str, Enum):
+    DEVICE = "Device Map"
+    SELECTION = "Selection Map"
+    BACKUP = "Backup Map"
+    REMOVE = "Remove"
+    KEEP = "Keep"
+    SORTED = "Sorted Map"
+    INCOMPLETE = "Incomplete"
+    SEARCH = "Search"
+
+MAP_TYPES_LIST = [map_type.value for map_type in MapType]
+
 
 class FileMapper:
     """Class for Mapping functions in a specific database"""
@@ -309,7 +323,7 @@ class FileMapper:
             print(f"Table {table_name} is Not in reference indexed")
         mapname = ""
         if not table_type:
-            maptype = MAP_TYPES_LIST[0] #"Device Map"
+            maptype = MapType.DEVICE.value #"Device Map"
         else:
             maptype = table_type
         dt_map_created = datetime.now()
@@ -337,7 +351,9 @@ class FileMapper:
         #     raise ValueError("No data was added to index")
 
     def map_to_file_structure(
-        self, a_map, where=None, fields_to_tab: list[str] = None, sort_by: list = None, ascending: bool = True
+        self, a_map, where=None, fields_to_tab: list[str] = None, sort_by: list = None, 
+        ascending: bool = True,
+        log_callback=None,
     ) -> dict:
         """Generates a file structure from map information
 
@@ -353,6 +369,8 @@ class FileMapper:
         Returns:
             dict: filestruct of map
         """
+        if not log_callback:
+            log_callback=print
         start=datetime.now()
         # field list in map
         # id=0	dt_data_created'=1	'dt_data_modified'=2	'filepath'=3	'filename'=4	'md5'=5	'size'=6
@@ -382,15 +400,15 @@ class FileMapper:
         
         df = d_m1.get_selected_df(fields_to_tab=field_list, sort_by=sort_by, ascending=ascending)
         if len(fields2tab)==0:
-            FS=FileStructurer(df)
+            FS=FileStructurer(df,log_callback=log_callback)
         else:
-            FS=FileStructurer(df,fields2tab)
+            FS=FileStructurer(df,fields2tab,log_callback=log_callback)
         map_list=FS.get_file_structure()
         # print(df)
         # print("-"*33)
         # print(map_list)
         # map_list=self.map_to_file_structure_concurrent(df)
-        print(f'Time elapsed: {self.calculate_time_elapsed(start,datetime.now())} s')
+        log_callback(f'Time elapsed: {self.calculate_time_elapsed(start,datetime.now())} s')
         return {mappath: map_list}
     
     def map_to_file_structure_concurrent(self, df, prograss_callable=None) -> list:
@@ -573,13 +591,13 @@ class FileMapper:
         an_id=self.get_table_id(table_name)
         map_type=self.db.get_data_from_table(self.mapper_reference_table,"maptype",f"id={an_id}")
         if len(map_type)>0:
-            if map_type[0][0] == MAP_TYPES_LIST[0]:
+            if map_type[0][0] == MapType.DEVICE.value: 
                 return True
             return False
         return None
     
     def set_maptype_to_map(self,table_name,new_maptype):
-        """Sets maptype to the new_maptype value:
+        """Sets maptype to the new_maptype value in reference table:
         "Device Map","Selection Map","Backup Map","Remove","Keep","Sorted Map","Incomplete"
 
         Args:
@@ -593,6 +611,35 @@ class FileMapper:
             return False
         an_id=self.get_table_id(table_name)
         return self.db.edit_value_in_table(self.mapper_reference_table, an_id ,'maptype',new_maptype)
+    
+    def set_mount_serial_to_map(self,table_name,new_mount,new_serial):
+        """Sets mount and serial to a map in reference table:
+    
+        Args:
+            table_name(str):  table name
+            new_mount (str): mount
+            new_serial (str): serial
+
+        Returns:
+            bool: True if it was changed.
+        """
+        an_id=self.get_table_id(table_name)
+        is_ok = self.db.edit_value_in_table(self.mapper_reference_table, an_id ,'mount',new_mount)
+        if not is_ok:
+            return False
+        return self.db.edit_value_in_table(self.mapper_reference_table, an_id ,'serial',new_serial)
+    
+    def set_mappath_to_map(self,table_name,new_mappath):
+        """Sets mappath to a map in reference table:
+    
+        Args:
+            table_name(str):  table name
+            new_mappath (str): mappath
+        Returns:
+            bool: True if it was changed.
+        """
+        an_id=self.get_table_id(table_name)
+        return self.db.edit_value_in_table(self.mapper_reference_table, an_id ,'mappath',new_mappath)
 
     def map_an_id_selection(self,selection_name:str, origin_map:str, id_list:list, map_type:str=None):
         """Makes a selection map from id list
@@ -628,7 +675,7 @@ class FileMapper:
             # mount= 5 mappath = 3
             mount_path_to_map=os.path.join(map_info[0][5],map_info[0][3])
             if not map_type:
-                map_type=MAP_TYPES_LIST[1]
+                map_type=MapType.SELECTION.value #MAP_TYPES_LIST[1]
             self.add_table_to_mapper_index(selection_name, mount_path_to_map, map_type)
             self._create_map_in_db(selection_name)
             an_id=self.get_table_id(selection_name)
@@ -780,7 +827,7 @@ class FileMapper:
             msg = f"[red]Error Mapping: {eee}"
         finally:
             if not finished_shallow:
-                self.set_maptype_to_map(table_name,MAP_TYPES_LIST[6]) # "Incomplete"
+                self.set_maptype_to_map(table_name,MapType.INCOMPLETE.value) 
             if progress:
                 progress.stop()
         return msg
