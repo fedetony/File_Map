@@ -1,6 +1,13 @@
 import re
 import logging
 from datetime import datetime
+from class_sql_and_or_parser import (
+    parse_query_expression,
+    QueryNode,
+    AndNode,
+    OrNode,
+)
+
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -688,25 +695,27 @@ class SQLSearchGenerator:
             list(tuple): list with (type of operation, rec_dict dictionary,is valid operation)
                 is_valid is evaluated only on 'op' type. Types ('op','and','or','txt','sub')
         """
-        valid_operations=[]
+        valid_operations = []
         for rec_dict in operations_list:
             if rec_dict['operation']:
-                operation,is_valid=self.check_operation_allowed(rec_dict['operation'],rec_dict['operator'],rec_dict['query_text'])
+                operation, is_valid = self.check_operation_allowed(
+                    rec_dict['operation'], rec_dict['operator'], rec_dict['query_text'])
                 # change datetime to iso format
                 rec_dict['operation']=operation # strips
-                rec_dict,is_valid=self.modify_dict_by_format(rec_dict,is_valid) 
-                valid_operations.append(('op', rec_dict,is_valid))      
+                rec_dict, is_valid = self.modify_dict_by_format(rec_dict, is_valid)
+                valid_operations.append(('op', rec_dict, is_valid))
             else:
-                content=str(rec_dict['query_text']).strip()
-                if content in list(and_dict.keys()):
-                    valid_operations.append(('and', rec_dict,None))
-                elif content in list(or_dict.keys()):
-                    valid_operations.append(('or', rec_dict,None))
-                elif content in list(sub_dict.keys()):
-                    valid_operations.append(('sub', rec_dict,None))
+                content = str(rec_dict['query_text']).strip()
+                # ------------------------------------------
+                # Only subqueries remain special here.
+                # AND / OR are handled by the expression tree.
+                # ------------------------------------------
+                if content in sub_dict:
+                    valid_operations.append(('sub', rec_dict, None))
                 else:
-                    valid_operations.append(('txt', rec_dict,None))    
+                    valid_operations.append(('txt', rec_dict, None))
         return valid_operations
+
 
     def get_the_options_for_sub_or_and(self,op_type:str,rec_dict:dict,and_dict:dict,or_dict:dict,sub_dict:dict):
         """Returns operations in the list finding subqueries for 'and','or' and 'sub' operation types
@@ -873,48 +882,322 @@ class SQLSearchGenerator:
             else:    
                 pass 
         return sql
+
+    def get_sql_from_text_input(self, text_input: str) -> tuple:
+        """Returns the SQL code of a text input."""
+        msg = ''
+        sql = None
+        if not self.chp.check_parenthesees_in_one_format(text_input):
+            return sql, msg, False
+        msg = 'Parenthesys Check ok!'
+        # --------------------------------------------------------
+        # Existing [ ... ] sub-query handling
+        # --------------------------------------------------------
+        main_query_list, _ = self.chp.format_which_inside_parenthesees(text_input, r"\[", r"\]")
+
+        if len(main_query_list) == 0 and text_input.strip() != '':
+            main_query_list = [text_input]
+
+        main_query_list, sub_query_dict = self.get_sub_queries(main_query_list, None)
+
+        # --------------------------------------------------------
+        # Existing comma separation
+        # --------------------------------------------------------
+        all_query_list = self.separate_queries(main_query_list)
+        all_query_list = self.remove_empty_queries(all_query_list)
+
+        # --------------------------------------------------------
+        # NEW: Parse AND / OR
+        # --------------------------------------------------------
+        expression_list = []
+        for query in all_query_list:
+            try:
+                expression = parse_query_expression(query)
+                expression_list.append(expression)
+
+            except ValueError as e:
+                msg = f"Invalid AND/OR expression: {e}"
+                return None, msg, False
+
+        # --------------------------------------------------------
+        # Convert expression trees to validated operation trees
+        # --------------------------------------------------------
+        operation_expressions = []
+        for expression in expression_list:
+            try:
+                operation_expression, is_valid, expression_msg = \
+                    self.check_expression_operations(expression, sub_query_dict)
+                # print("\n========== CONVERTED ==========")
+                # print(operation_expression)
+            except Exception as e:
+                msg = f"Error parsing query: {e}"
+                return None, msg, False
+
+            if not is_valid:
+                if expression_msg:
+                    msg = msg + "\n" + expression_msg
+
+                return None, msg, False
+            operation_expressions.append(operation_expression)
+        # --------------------------------------------------------
+        # Generate SQL
+        # --------------------------------------------------------
+        sql_parts = []
+        for expression in operation_expressions:
+            expression_sql = self.get_sql_for_expression(expression, sub_query_dict)
+            if expression_sql:
+                sql_parts.append(expression_sql)
+        if not sql_parts:
+            return None, msg, False
+        # Comma-separated queries are ANDed together,
+        # matching the old behavior.
+        sql = " AND ".join(sql_parts)
+        return sql, msg, True
     
-    def get_sql_from_text_input(self,text_input:str)->tuple:
-        """Returns the SQL code of a text input
-
-        Args:
-            text_input (str): _description_
-
-        Returns:
-            tuple: _description_
+    def check_expression_operations(self, node, sub_dict):
         """
-        all_query_list=[]
-        msg=''
-        sql=None
-        if self.chp.check_parenthesees_in_one_format(text_input):
-            # Look for keywords
-            msg='Parenthesys Check ok!'
-            main_query_list,_=self.chp.format_which_inside_parenthesees(text_input,r"\[",r"\]")
-            if len(main_query_list)==0 and text_input.strip() != '':
-                main_query_list=[text_input]
-            #Get sub queries
-            main_query_list,sub_query_dict=self.get_sub_queries(main_query_list,None)
-            # Separate main queries            
-            all_query_list=self.separate_queries(main_query_list)
-            #Remove empty
-            all_query_list=self.remove_empty_queries(all_query_list)
-            #Deal with and and or
-            #print(sub_query_dict)
-            all_query_list, and_dict, or_dict=self.get_and_or_dictionaries(all_query_list,None,None)
-            operations_list=self.get_queries_operations_list(all_query_list)
-            the_operations=self.check_operations_list(operations_list,and_dict,or_dict,sub_query_dict)
-            msg,query,is_valid=self.check_all_operations(the_operations,and_dict,or_dict,sub_query_dict)
-            # print(is_valid,msg)
-            if is_valid:
-                sql=self.get_where_sql_of_operations(the_operations,and_dict,or_dict,sub_query_dict,None)
-                return sql,msg,is_valid
-            if query != '':
-                msg=msg+"\n"+query
-            return sql,msg,is_valid
-        return sql,msg,False
-    
-    
+        Recursively converts an AND/OR expression tree into
+        validated operation records.
 
+        Boolean structure is preserved.
+
+        QueryNode:
+            goes through the existing query parser.
+
+        AndNode / OrNode:
+            recursively process their children.
+        """
+        if isinstance(node, QueryNode):
+            query_text = node.text
+            # The Boolean parser has already decided that this is
+            # one literal query. Therefore && / || here are text,
+            # not Boolean operators.
+            operations_list = self.get_queries_operations_list([query_text])
+
+            operations = self.check_operations_list(operations_list, {}, {}, sub_dict)
+            if not operations:
+                return node, False, f"Invalid query: {query_text}"
+            operation = operations[0]
+
+            if operation[0] == 'op':
+                is_valid = operation[2]
+                if not is_valid:
+                    return (operation, False, f"Invalid query: {query_text}")
+
+            return operation, True, ""
+
+
+        if isinstance(node, AndNode):
+            children = []
+            messages = []
+            is_valid = True
+
+            for child in node.children:
+                new_child, child_valid, child_msg = \
+                    self.check_expression_operations(child, sub_dict)
+                children.append(new_child)
+                if not child_valid:
+                    is_valid = False
+                if child_msg:
+                    messages.append(child_msg)
+            return (AndNode(children), is_valid, "\n".join(messages))
+
+        if isinstance(node, OrNode):
+            children = []
+            messages = []
+            is_valid = True
+            for child in node.children:
+                new_child, child_valid, child_msg = \
+                    self.check_expression_operations(child, sub_dict)
+                children.append(new_child)
+                if not child_valid:
+                    is_valid = False
+                if child_msg:
+                    messages.append(child_msg)
+
+            return (OrNode(children), is_valid, "\n".join(messages))
+
+        raise TypeError(f"Unknown expression node: {type(node).__name__}")
+
+    def get_sql_for_expression(self, node, sub_dict):
+        """
+        Recursively converts an AND/OR expression tree into SQL.
+        AndNode / OrNode preserve the boolean structure.
+        Tuple nodes are existing operation records.
+        """
+        if isinstance(node, AndNode):
+            parts = []
+            for child in node.children:
+                child_sql = self.get_sql_for_expression(child, sub_dict)
+                if child_sql:
+                    parts.append(child_sql)
+            if not parts:
+                return ""
+            return "(" + " AND ".join(parts) + ")"
+
+        if isinstance(node, OrNode):
+            parts = []
+            for child in node.children:
+                child_sql = self.get_sql_for_expression(child, sub_dict)
+                if child_sql:
+                    parts.append(child_sql)
+            if not parts:
+                return ""
+            return "(" + " OR ".join(parts) + ")"
+
+        if isinstance(node, tuple):
+            op_type, rec_dict, is_valid = node
+
+            if op_type == 'op':
+                if not is_valid:
+                    return ""
+                operation = str(rec_dict['operation'])
+                operator = str(rec_dict['operator'])
+                q_txt = str(rec_dict['query_text']).strip()
+
+                # Operation whose value is a parenthesized expression.
+                if q_txt in sub_dict:
+                    sub_text = sub_dict.get(q_txt)
+                    if isinstance(sub_text, list):
+                        sub_text = " || ".join(
+                            str(x).strip() for x in sub_text if str(x).strip()
+                        )
+                    sub_text = str(sub_text).strip()
+                    if not sub_text:
+                        return ""
+                    try:
+                        sub_expression = parse_query_expression(sub_text)
+                    except ValueError as eee:
+                        return eee
+                    sub_expression, is_valid, msg = \
+                        self.check_expression_operations(sub_expression, sub_dict)
+                    if not is_valid:
+                        # print("OP SUBQUERY INVALID:", msg)
+                        return msg
+                    return self.get_sql_for_operation_tree(operation, operator, sub_expression)
+                return self.get_sql_for_operation(operation, operator, q_txt, "", 0)
+
+            elif op_type == 'txt':
+                q_txt = str(rec_dict['query_text'])
+                return self.get_sql_for_operation('filename', '~=', q_txt, "", 0)
+
+            elif op_type == 'sub':
+                sub_key = str(rec_dict['query_text']).strip()
+                sub_text = sub_dict.get(sub_key)
+                if sub_text is None:
+                    return ""
+
+                if isinstance(sub_text, list):
+                    sub_text = " || ".join(
+                        str(x).strip() for x in sub_text if str(x).strip()
+                    )
+
+                sub_text = str(sub_text).strip()
+                if not sub_text:
+                    return ""
+
+                sub_expression = parse_query_expression(sub_text)
+                sub_expression, is_valid, msg = \
+                    self.check_expression_operations(sub_expression, sub_dict)
+                if not is_valid:
+                    # print("SUBQUERY INVALID:", msg)
+                    return msg
+
+                return self.get_sql_for_expression(sub_expression, sub_dict)
+
+        raise TypeError(
+            f"Unknown expression node: {type(node).__name__}: {node!r}"
+        )
+
+    
+    def get_sql_for_operation_expression(self, operation, operator, expression_text, sub_dict):
+        """
+        Generate SQL when an operation's value is a
+        parenthesized AND/OR expression.
+
+        Example:
+
+            filename=(%123% && 23 || 12)
+
+        becomes conceptually:
+            filename LIKE '%123%' AND filename LIKE '23' OR filename LIKE '12'
+
+        while preserving the Boolean structure of the
+        expression.
+        """
+
+        expression = parse_query_expression(expression_text)
+        expression, is_valid, msg = \
+            self.check_expression_operations(expression, sub_dict)
+
+        if not is_valid:
+            return ""
+
+        return self.get_sql_for_operation_tree(operation, operator, expression)
+    
+    def get_sql_for_operation_tree(
+        self,
+        operation,
+        operator,
+        node
+    ):
+        """
+        Apply the same operation to every query leaf while
+        preserving the AND/OR structure.
+        """
+        if isinstance(node, AndNode):
+            parts = [
+                self.get_sql_for_operation_tree(operation, operator, child)
+                for child in node.children]
+            parts = [x for x in parts if x]
+            return "(" + " AND ".join(parts) + ")" if parts else ""
+
+        if isinstance(node, OrNode):
+            parts = [
+                self.get_sql_for_operation_tree(operation, operator, child)
+                for child in node.children]
+            parts = [x for x in parts if x]
+            return "(" + " OR ".join(parts) + ")" if parts else ""
+
+        if isinstance(node, tuple):
+            op_type, rec_dict, is_valid = node
+            if op_type not in ('txt', 'op'):
+                return ""
+            q_txt = str(rec_dict['query_text'])
+            return self.get_sql_for_operation(operation, operator, q_txt, "", 0)
+
+        return ""
+
+
+
+    def get_sql_for_operations_list(self, operations, sub_dict):
+        """
+        Generate SQL for a normal list of operations.
+
+        This replaces the old recursive behavior of
+        get_where_sql_of_operations() for operation lists.
+        """
+        parts = []
+        for op_type, rec_dict, is_valid in operations:
+            if op_type == 'op':
+                if not is_valid:
+                    continue
+                operation = str(rec_dict['operation'])
+                operator = str(rec_dict['operator'])
+                q_txt = str(rec_dict['query_text'])
+                part = self.get_sql_for_operation(operation, operator, q_txt, "", 0)
+                if part:
+                    parts.append(part)
+
+            elif op_type == 'txt':
+                q_txt = str(rec_dict['query_text'])
+                part = self.get_sql_for_operation('filename', '~=', q_txt, "", 0)
+                if part:
+                    parts.append(part)
+        if not parts:
+            return ""
+        return "(" + " OR ".join(parts) + ")"
+    
 #  [filename=*.py , filepath=*py*, filename=*.py && filepath=*on* ]
 #  [filename=*.py, filepath=(path1,path2), ...]
 # text_input='[filename=*.py, filepath==*!=py*, filename=*.py && filepath=*on>*, filepath=(path1,path2), filename=*.py || filepath=(path3!+path2), (text,text1), text2 ]'
