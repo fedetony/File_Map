@@ -4,6 +4,7 @@ from widgets.class_qt_map_progress import QtMapProgress
 
 from collections import deque
 import threading
+from datetime import datetime
 
 from controllers.class_filemap_cli_manager import FileMapCliManager
 from controllers.mapping_worker_thread import WorkerManager
@@ -13,7 +14,8 @@ from widgets.class_explorer_tree_widget import *
 from widgets.search_query_widget import *
 
 from models.class_provider_engine import DefaultProviderEngine, FM
-from models.class_action_provider import DefaultFileActionProvider
+from models.class_action_provider import *
+
 from models.class_style_provider import *
 from models.class_lazy_loader import *
 from controllers.class_database_manager import DatabaseInfo
@@ -36,6 +38,10 @@ class SearchResult:
     matches: int = 0
     title: str = ""
 
+NODE_HIDDEN_PROPERTIES = {
+    "parent",
+    "children",
+}
 
 
 class SearchDialogSetter:
@@ -169,7 +175,7 @@ class SearchDialogSetter:
 
         config.lazy_loader = lazy_class
         config.provider = DefaultProviderEngine() # functions for behavior
-        config.action_provider = DefaultFileActionProvider() # menu, shortcuts, global shortcuts
+        config.action_provider = SearchFileActionProvider() # menu, shortcuts, global shortcuts
         styles_dict=self.styles_dict
         if not isinstance(styles_dict,dict):
             styles_dict={}
@@ -204,12 +210,15 @@ class SearchDialog(QtWidgets.QDialog):
         self.worker_manager = worker_manager
         self.explorer_config = explorer_config
         self.icons=Icons()
+        self.text_renderer = TextRenderer()
+
 
         self.s_result = None # list[SearchResult]        
         self._has_been_searched=False
         self._explorer_root_node=None
         self.debug_counter=0
         self._lazy_loading = False
+        self.statistic_dict={}
         
         self.db_idx_map_registry=[]
 
@@ -226,6 +235,7 @@ class SearchDialog(QtWidgets.QDialog):
 
         self.search_widget = SearchQueryWidget(self.fmap,parent=self)
         self.search_widget.searchRequested.connect(self._on_search_requested)
+        self.search_widget.queryCleared.connect(self._clear_search)
 
         # ==============================================================
         # View filters
@@ -273,7 +283,10 @@ class SearchDialog(QtWidgets.QDialog):
         self.results_tree = ExplorerTreeWidget(self.explorer_config)
         # self.results_tree.userSelectionChanged.connect(self.on_selection_changed)
         # self.results_tree.actionEvaluated.connect(self.on_action_evaluated)
+        self.results_tree.exportRequested.connect(self.on_export_requested)
         self.results_tree.lazyLoading.connect(self.on_lazy_loading)
+        #self.results_tree.nodeDoubleClicked.connect(self._show_node_properties)
+        self.results_tree.nodeClicked.connect(self._show_node_properties)
 
         self.properties_tree = QtWidgets.QTreeWidget()
         self.properties_tree.setHeaderLabels(
@@ -318,19 +331,23 @@ class SearchDialog(QtWidgets.QDialog):
         button_layout = QtWidgets.QHBoxLayout()
 
         self.selection_map_button = QtWidgets.QPushButton("Create Selection Map")
+        self.selection_map_button.setIcon(self.icons.icon("selection map"))
 
-        self.export_button = QtWidgets.QPushButton("Export Tree")
+        self.export_button = QtWidgets.QPushButton("Export")
+        self.export_button.setIcon(self.icons.icon("export"))
+        self.is_export_showing = False
+        self.export_button.clicked.connect(self._toggle_export_show)
 
-        self.delete_button = QtWidgets.QPushButton("Delete")
+        # self.delete_button = QtWidgets.QPushButton("Delete")
 
-        self.copy_button = QtWidgets.QPushButton("Copy Results")
+        # self.copy_button = QtWidgets.QPushButton("Copy Results")
 
         self.close_button = QtWidgets.QPushButton("Close")
 
         button_layout.addWidget(self.selection_map_button)
         button_layout.addWidget(self.export_button)
-        button_layout.addWidget(self.delete_button)
-        button_layout.addWidget(self.copy_button)
+        # button_layout.addWidget(self.delete_button)
+        # button_layout.addWidget(self.copy_button)
         button_layout.addStretch(1)
         button_layout.addWidget(self.close_button)
 
@@ -381,7 +398,18 @@ class SearchDialog(QtWidgets.QDialog):
 
         self.db_idx_map_registry.append((temp_db, idx_map , user_query_txt, sql_where))
         # do this with Qtimer oneshot
+        self._do_statistic()
         self._load_search_results_to_tree()
+    
+    def _do_statistic(self):
+        self.statistic_dict={}        
+        for s_r in self.s_result:
+            if isinstance(s_r,SearchResult):
+                total=self.statistic_dict.get(f"Total_{s_r.temp_db}",0)
+                self.statistic_dict.update({s_r.temp_db_map_pair:s_r.matches})
+                total+=s_r.matches
+                self.statistic_dict.update({f"Total_{s_r.temp_db}":total})
+
     
     def _get_search_result_obj(self,idx, temp_db, idx_dict , user_query_txt, sql_where)->SearchResult:
         print(f"{idx} Search '{user_query_txt}' found {idx_dict['matches']} matches!")
@@ -439,10 +467,11 @@ class SearchDialog(QtWidgets.QDialog):
         model=self.results_tree.model
         t_m=self.results_tree.model.t_m
         root_node = t_m.root
-        print("ROOT:", type(root_node), root_node)
+        root_node.expand = True
+        #print("ROOT:", type(root_node), root_node)
         if not self._has_been_searched:
             self._explorer_root_node = deepcopy(root_node)
-            print("ROOT AFTER DEEP:", type(root_node), root_node)
+            #print("ROOT AFTER DEEP:", type(root_node), root_node)
             self._has_been_searched = True
 
         # remove all children
@@ -459,20 +488,21 @@ class SearchDialog(QtWidgets.QDialog):
             model.endResetModel()
 
     def _load_a_search_result_to_tree(self,root_node:TreeNode,s_r:SearchResult):
-        print("1 _load_a_search_result_to_tree entered")
-        a_db=s_r.temp_db
+        #print("1 _load_a_search_result_to_tree entered")
         is_on_db = False
+        total_matches=self.statistic_dict.get(f"Total_{s_r.temp_db}",0)
         if len(root_node.children)>0:
             for chdb_node in root_node.children:
-                if chdb_node.i_am == "database" and chdb_node.db == a_db:
+                if chdb_node.i_am == "database" and chdb_node.db == s_r.temp_db:
                     is_on_db=True
                     db_node=chdb_node
+                    db_node.expand = True
                     break
-        print(f"2 is_on_db={is_on_db}")
+        #print(f"2 is_on_db={is_on_db}")
         if not is_on_db:
             # Load database
             db=self._get_db_info_obj(s_r.origin_db)
-            db_node = TreeNode(f"Search Result {s_r.idx} {db.name}")
+            db_node = TreeNode(f"Search Result {db.name} - {total_matches} matches found!")
             db_node.i_am = "database"
             real_db_filepath=str(db.database_filepath)
             db_node.path = "" # do not add to path
@@ -482,12 +512,12 @@ class SearchDialog(QtWidgets.QDialog):
             db_node.info = s_r.temp_db
             db_node.loaded = True
             db_node.expand = True
-            print(f"3 dbnode formed={db_node}")
+            #print(f"3 dbnode formed={db_node}")
             root_node.add_child(db_node)
-        print(f"4 db_node={db_node}")
+        #print(f"4 db_node={db_node}")
         # Load map                    
         mount,serial = self.fmap.get_mount_serial_of_map(s_r.temp_db,s_r.temp_map) 
-        map_node = TreeNode(f"{s_r.temp_map} @ ({mount})")
+        map_node = TreeNode(f"{s_r.temp_map} @ ({mount}) - found {s_r.matches} matches!")
         map_node.i_am = "map"
         map_node.path = mount
         map_node.info = s_r.temp_db_map_pair
@@ -498,7 +528,7 @@ class SearchDialog(QtWidgets.QDialog):
         map_node.serial = serial
         map_node.map = s_r.temp_map
         map_node.expand = True
-        print(f"5 map_node formed={map_node}")
+        #print(f"5 map_node formed={map_node}")
         db_node.add_child(map_node)
         # Children are added with results
         map_full_path = self.fmap.get_full_mount_path_of_map(s_r.temp_db,s_r.temp_map) 
@@ -516,7 +546,7 @@ class SearchDialog(QtWidgets.QDialog):
         multiple_folders=self.modding_info.get("multiple_folders")
         # Single folder level
         p_node=map_node
-        print(f"6 adding children={map_node}")
+        #print(f"6 adding children={map_node}")
         if not multiple_folders:
             ch_path=self.fmap.fm.remove_mount_from_path(p_node.mount,full_path,remove_start_separator=True)
             p_node.loaded=True
@@ -532,7 +562,7 @@ class SearchDialog(QtWidgets.QDialog):
             ch_node.loaded=False
             ch_node.locked=True
             p_node.add_child(ch_node)
-            print(f"7 child added={ch_node} to {p_node}")
+            #print(f"7 child added={ch_node} to {p_node}")
             return
         
         # Multiple folder levels loading
@@ -587,230 +617,153 @@ class SearchDialog(QtWidgets.QDialog):
             if self._lazy_loading:
                 self._lazy_loading = False
                 QtWidgets.QApplication.restoreOverrideCursor()
+    
+    def on_export_requested(self,export_dict):
+        print("Got export Request ",export_dict)
+    
+    def _toggle_export_show(self):
+        if self.is_export_showing:
+            self.export_button.setIcon(self.icons.icon("export"))
+            self.is_export_showing = False
+        else:
+            self.export_button.setIcon(self.icons.icon("notexport"))
+            self.is_export_showing = True
+        self.results_tree.show_export_widget(self.is_export_showing)
+    
+    
+    def _format_property_value(self, value):
+        if isinstance(value, bool):
+            return "[bold]✓ Yes[/]" if value else "✕ No"
 
-    # # ==============================================================
-    # # UI
-    # # ==============================================================
-    # def build_ui(self):
+        if isinstance(value, (list, tuple, set)):
+            return ", ".join(str(x) for x in value)
 
-    #     # ==============================================================
-    #     # Compact search frame
-    #     # ==============================================================
+        if isinstance(value, dict):
+            return ", ".join(
+                f"{key}: {val}"
+                for key, val in value.items()
+            )
 
-    #     self.search_frame = QtWidgets.QFrame()
-    #     self.search_frame.setObjectName("SearchFrame")
-    #     self.search_frame.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
-    #     self.search_frame.setFrameShadow(QtWidgets.QFrame.Shadow.Plain)
+        return str(value)
+    
+    def _show_node_properties(self, node: TreeNode):
+        self.properties_tree.clear()
+        add_info_at_end=False
+        for name, value in vars(node).items():
+            if name in NODE_HIDDEN_PROPERTIES:
+                continue
+            if value is None:
+                continue
 
-    #     search_layout = QtWidgets.QHBoxLayout(self.search_frame)
+            if name == "size":
+                value = self.fmap.fm.get_size_str_formatted(value)
+            if name == "i_am":
+                value = TEXT_ICONS.get(value, "") + " " + value
 
-    #     search_layout.setContentsMargins(6, 3, 6, 3)
-    #     search_layout.setSpacing(4)
+            # Set to strings
+            value = self._format_property_value(value)
 
-    #     # --------------------------------------------------------------
-    #     # Search icon
-    #     # --------------------------------------------------------------
+            # add colors and formats
+            if name in ("quantity","num_dirs", "num_files","size"):
+                value = "[cyan]" + value +"[/]"
+            if name in ("mount","serial") and node.i_exist:
+                value = "[bright_green]" + value +"[/]"
+            if name in ("map","db") and node.i_exist:
+                value = "[magenta]" + value +"[/]"
+            if name in ("path","name") and node.i_exist:
+                value = "[bright_yellow]" + value +"[/]"
 
-    #     self.search_icon = QtWidgets.QLabel()
+            if name == "info" and node.i_am == "file":
+                add_info_at_end=True        
+            else:
+                self._add_property(name, value)
+                
+        if add_info_at_end:   
+            info_dict=self._parse_node_info(node)
+            self._add_property("Database Properties", "[bright_red]"+"-"*33+"[/]")
+            for prop,val in info_dict.items(): 
+                val = self._format_db_file_property_value(prop,val,node)
+                if prop == "id":
+                    prop = "id_in_db"
+                self._add_property(prop, val)
+        self.properties_tree.resizeColumnToContents(0)
 
-    #     # Replace with your own icon later:
-    #     # self.search_icon.setPixmap(...)
-    #     self.search_icon.setText("🔎")
-    #     self.search_icon.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+    def _add_property(self, name, value):
+        item = QtWidgets.QTreeWidgetItem(self.properties_tree, [name])
+        label = QtWidgets.QLabel()
+        label.setTextFormat(QtCore.Qt.TextFormat.RichText)
+        label.setText(self.text_renderer.to_html(value))
+        label.setTextInteractionFlags(
+            QtCore.Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.properties_tree.setItemWidget(item, 1, label)
 
-    #     self.search_icon.setFixedWidth(22)
-    #     search_layout.addWidget(self.search_icon)
+    def _get_fields_on_db(self, node:TreeNode)->list[str]:
+        if not node:
+            return []
+        if node.db and node.map:
+            fm=self.fmap.cma.get_file_map(node.db)
+            if fm:
+                return fm.db.get_column_list_of_table(node.map)
+        return []
+        
 
-    #     # --------------------------------------------------------------
-    #     # Query edit
-    #     # --------------------------------------------------------------
+    def _parse_node_info(self, node: TreeNode) -> dict:
+        if not node:
+            return {}
 
-    #     self.query_edit = QtWidgets.QLineEdit()
-    #     self.query_edit.setPlaceholderText("Search...")
+        if node.i_am != "file":
+            return {}
 
-    #     self.query_edit.setClearButtonEnabled(True)
-    #     self.query_edit.setMinimumWidth(150)
+        if not node.info:
+            return {}
 
-    #     search_layout.addWidget(self.query_edit,1)
+        fields = self._get_fields_on_db(node)
 
-    #     # --------------------------------------------------------------
-    #     # Validation indicator
-    #     # --------------------------------------------------------------
+        if not fields:
+            return {}
 
-    #     self.valid_icon = QtWidgets.QLabel()
-    #     self.valid_icon.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-    #     self.valid_icon.setFixedWidth(22)
-    #     self.valid_icon.setToolTip("Query validation")
-    #     search_layout.addWidget(self.valid_icon)
+        return dict(zip(fields, node.info))
+    
+    def _format_db_file_property_value(self, name:str, value, node:TreeNode):
+        if value is None:
+            return None
 
-    #     # --------------------------------------------------------------
-    #     # History button
-    #     # --------------------------------------------------------------
+        # ISO datetime fields
+        if name.startswith("dt_"):
+            try:
+                value = datetime.fromisoformat(value).strftime(
+                    "%Y-%m-%d %H:%M:%S.%f"
+                )[:-3]
+            except (TypeError, ValueError):
+                # Keep the original value if it isn't a valid ISO date
+                pass
 
-    #     self.history_button = QtWidgets.QToolButton()
-    #     self.history_button.setText("⌄")
-    #     self.history_button.setToolTip("Search history")
+        elif name == "size":
+            value = self.fmap.fm.get_size_str_formatted(value)
+        else:
+            value = self._format_property_value(value)
 
-    #     self.history_button.setAutoRaise(True)
-    #     self.history_button.setFixedWidth(26)
+        # Styling
+        if name in ("id", "size"):
+            value = f"[cyan]{value}[/]"
 
-    #     search_layout.addWidget(self.history_button)
+        elif name == "md5":
+            value = f"[red]{value}[/]"
 
-    #     # --------------------------------------------------------------
-    #     # Search button
-    #     # --------------------------------------------------------------
+        elif name in ("filepath", "filename") and node.i_exist:
+            value = f"[bright_yellow]{value}[/]"
 
-    #     self.search_button = QtWidgets.QToolButton()
-    #     self.search_button.setText("🔍")
-    #     self.search_button.setToolTip("Search")
-    #     self.search_button.setAutoRaise(True)
-    #     self.search_button.setFixedWidth(30)
+        elif name.startswith("dt_"):
+            value = f"[bright_blue]{value}[/]"
 
-    #     search_layout.addWidget(self.search_button)
+        return value
 
-    #     # --------------------------------------------------------------
-    #     # Options button
-    #     # --------------------------------------------------------------
 
-    #     self.options_button = QtWidgets.QToolButton()
-    #     self.options_button.setText("⋮")
-    #     self.options_button.setToolTip("Search options")
 
-    #     self.options_button.setAutoRaise(True)
-    #     self.options_button.setFixedWidth(26)
 
-    #     search_layout.addWidget(self.options_button)
 
-    #     # ==============================================================
-    #     # Main dialog layout
-    #     # ==============================================================
 
-    #     main_layout = QtWidgets.QVBoxLayout(self)
-    #     main_layout.setContentsMargins(8, 8, 8, 8)
-    #     main_layout.setSpacing(6)
-    #     main_layout.addWidget(self.search_frame)
 
-    #     # ==============================================================
-    #     # View filters
-    #     # ==============================================================
 
-    #     filter_group = QtWidgets.QGroupBox("View Filters")
-    #     filter_layout = QtWidgets.QHBoxLayout(filter_group)
-    #     filter_layout.setContentsMargins(8, 4, 8, 4)
-    #     filter_layout.setSpacing(12)
 
-    #     self.show_files_cb = QtWidgets.QCheckBox("Files")
-    #     self.show_files_cb.setChecked(True)
 
-    #     self.show_folders_cb = QtWidgets.QCheckBox("Folders")
-    #     self.show_folders_cb.setChecked(True)
-
-    #     self.show_size_cb = QtWidgets.QCheckBox("Size")
-    #     self.show_size_cb.setChecked(True)
-
-    #     self.show_dates_cb = QtWidgets.QCheckBox("Dates")
-    #     self.show_md5_cb = QtWidgets.QCheckBox("MD5")
-
-    #     filter_layout.addWidget(self.show_files_cb)
-    #     filter_layout.addWidget(self.show_folders_cb)
-    #     filter_layout.addWidget(self.show_size_cb)
-    #     filter_layout.addWidget(self.show_dates_cb)
-    #     filter_layout.addWidget(self.show_md5_cb)
-    #     filter_layout.addStretch(1)
-    #     main_layout.addWidget(filter_group)
-
-    #     # ==============================================================
-    #     # Results
-    #     # ==============================================================
-
-    #     results_splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
-    #     self.results_tree = QtWidgets.QTreeView()
-
-    #     self.properties_tree = QtWidgets.QTreeWidget()
-    #     self.properties_tree.setHeaderLabels(["Property", "Value"])
-
-    #     results_splitter.addWidget(self.results_tree)
-    #     results_splitter.addWidget(self.properties_tree)
-    #     results_splitter.setSizes([1200, 400])
-
-    #     main_layout.addWidget(results_splitter,1)
-
-    #     # ==============================================================
-    #     # Statistics
-    #     # ==============================================================
-    #     stats_group = QtWidgets.QGroupBox("Statistics")
-    #     stats_layout = QtWidgets.QHBoxLayout(stats_group)
-    #     stats_layout.setContentsMargins(8, 3, 8, 3)
-
-    #     self.files_label = QtWidgets.QLabel("Files: 0")
-    #     self.folders_label = QtWidgets.QLabel("Folders: 0")
-    #     self.size_label = QtWidgets.QLabel("Size: 0 MB")
-
-    #     self.selected_label = QtWidgets.QLabel("Selected: 0")
-
-    #     stats_layout.addWidget(self.files_label)
-
-    #     stats_layout.addSpacing(20)
-    #     stats_layout.addWidget(self.folders_label)
-    #     stats_layout.addSpacing(20)
-    #     stats_layout.addWidget(self.size_label)
-    #     stats_layout.addSpacing(20)
-    #     stats_layout.addWidget(self.selected_label)
-    #     stats_layout.addStretch(1)
-    #     main_layout.addWidget(stats_group)
-
-    #     # ==============================================================
-    #     # Actions
-    #     # ==============================================================
-
-    #     button_layout = QtWidgets.QHBoxLayout()
-
-    #     self.selection_map_button = QtWidgets.QPushButton("Create Selection Map")
-    #     self.export_button = QtWidgets.QPushButton("Export Tree")
-
-    #     self.delete_button = QtWidgets.QPushButton("Delete")
-    #     self.copy_button = QtWidgets.QPushButton("Copy Results")
-    #     self.close_button = QtWidgets.QPushButton("Close")
-
-    #     button_layout.addWidget(self.selection_map_button)
-    #     button_layout.addWidget(self.export_button)
-    #     button_layout.addWidget(self.delete_button)
-    #     button_layout.addWidget(self.copy_button)
-
-    #     button_layout.addStretch(1)
-    #     button_layout.addWidget(self.close_button)
-    #     main_layout.addLayout(button_layout)
-
-    #     # ==============================================================
-    #     # Compact styling
-    #     # ==============================================================
-
-    #     self.search_frame.setStyleSheet("""
-    #         QFrame#SearchFrame {
-    #             border: 1px solid palette(mid);
-    #             border-radius: 4px;
-    #             background: palette(base);
-    #         }
-
-    #         QFrame#SearchFrame QLineEdit {
-    #             border: none;
-    #             background: transparent;
-    #             padding: 3px 2px;
-    #         }
-
-    #         QFrame#SearchFrame QToolButton {
-    #             border: none;
-    #             padding: 2px;
-    #             margin: 0px;
-    #         }
-
-    #         QFrame#SearchFrame QToolButton:hover {
-    #             background: palette(midlight);
-    #             border-radius: 3px;
-    #         }
-    #     """)
-
-    #     # ==============================================================
-    #     # Initial validation state
-    #     # ==============================================================
-    #     self._set_validation_state(None)

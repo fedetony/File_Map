@@ -8,7 +8,31 @@ from PyQt6 import QtWidgets
 from PyQt6.QtCore import QUrl
 from PyQt6.QtWidgets import QWidget, QFileDialog
 from PyQt6.QtWidgets import QMessageBox, QPushButton
-import os
+import os, sys
+import subprocess
+
+def get_file_manager_path():
+    """Get the platform-specific file manager executable.
+
+    Raises:
+        OSError: If the operating system is not supported.
+
+    Returns:
+        str: Path or command name of the file manager.
+    """
+    if os.name == "nt":
+        # Windows
+        return os.path.join(os.getenv("WINDIR"), "explorer.exe")
+
+    if sys.platform.startswith("linux"):
+        return "xdg-open"
+
+    if sys.platform == "darwin":
+        return "open"
+
+    raise OSError(f"Unsupported OS: {os.name}")
+
+FILEBROWSER_PATH = get_file_manager_path()
 
 class Dialogs(QWidget):
     def __init__(self):
@@ -192,6 +216,69 @@ class Dialogs(QWidget):
             "paths": folders,
             "urls": urls
         }
+    # ---------------------------------------------------------
+    # Public API Explorer open
+    # ---------------------------------------------------------
+    
+    def explore(self, path: str, select=False):
+        """Open the file manager at path, optionally selecting the item.
+
+        Args:
+            path (str): File or directory to open.
+            select (bool): Select the item when supported by the platform.
+        """
+        if not os.path.exists(path):
+            return
+
+        path = os.path.normpath(path)
+        
+
+        try:
+            if os.name == "nt":
+                # Windows Explorer
+                if select:
+                    subprocess.run(
+                        [FILEBROWSER_PATH, "/select,", path],
+                        check=True,
+                    )
+                else:
+                    subprocess.run(
+                        [FILEBROWSER_PATH, path],
+                        check=True,
+                    )
+
+            elif sys.platform.startswith("linux"):
+                if select and os.path.isfile(path):
+                    # xdg-open itself has no standard "select" option.
+                    # Open the containing directory instead.
+                    subprocess.run(
+                        [FILEBROWSER_PATH, os.path.dirname(path)],
+                        check=True,
+                    )
+                else:
+                    subprocess.run(
+                        [FILEBROWSER_PATH, path],
+                        check=True,
+                    )
+
+            elif sys.platform == "darwin":
+                if select:
+                    # macOS Finder supports selecting an item.
+                    subprocess.run(
+                        [FILEBROWSER_PATH, "-R", path],
+                        check=True,
+                    )
+                else:
+                    subprocess.run(
+                        [FILEBROWSER_PATH, path],
+                        check=True,
+                    )
+
+            else:
+                raise OSError(f"Unsupported OS: {os.name}")
+
+        except (subprocess.CalledProcessError, subprocess.SubprocessError):
+            pass
 
 
 class MsgBoxHelper(QWidget):

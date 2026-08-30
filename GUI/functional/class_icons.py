@@ -333,8 +333,15 @@ class Icons:
         "valid query":":/icons/Ahmadhania-Spherical-Search.128.png",
         "gift":":/icons/Ahmadhania-Spherical-Gift.128.png",
         "copy":":/icons/Ahmadhania-Spherical-File-copy.128.png", 
-
-
+        "reveal":":/icons/open_file_icon.png",
+        "clipboard":":/icons/Ahmadhania-Spherical-Paper-clip.128.png",
+        "expand":":/icons/Icojam-Blue-Bits-Arrow-right.256.png",
+        "collapse":":/icons/Icojam-Blue-Bits-Arrow-left.256.png",
+        "select":":/icons/Icojam-Blue-Bits-Symbol-check.256.png",
+        "unselect":":/icons/Icojam-Blue-Bits-Symbol-delete.256.png",
+        "export":":/icons/Icojam-Blue-Bits-Arrow-up.256.png",
+        "notexport":":/icons/Icojam-Blue-Bits-Arrow-down.256.png",
+        "save as":":/icons/Ahmadhania-Spherical-Save-as.128.png",
         
     }
 

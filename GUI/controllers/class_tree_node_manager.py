@@ -265,6 +265,26 @@ class TreeManager:
         for child in node.children:
             self.register_subtree(child)
     
+    def expand_subtree(self, node:TreeNode):
+        if not self.check_node(node): return
+        if node.i_am == "dir":
+            node.expand = True
+        for child in node.children:
+            self.expand_subtree(child)
+    
+    def collapse_subtree(self, node:TreeNode):
+        if not self.check_node(node): return
+        if node.i_am == "dir":
+            node.expand = False
+        for child in node.children:
+            self.collapse_subtree(child)
+    
+    def toggle_subtree(self, node:TreeNode):
+        if not self.check_node(node): return
+        self.toggle_selection(node)
+        for child in node.children:
+            self.toggle_subtree(child)
+    
     def remove_node_by_id(self, node_id: int):
         node = self.get_node_by_id(node_id)
         if node is None:

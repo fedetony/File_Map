@@ -102,7 +102,6 @@ class SearchQueryWidget(QtWidgets.QWidget):
 
     def __init__(self, fmap: FileMapCliManager, parent=None):
         super().__init__(parent)
-        print("CREATING SearchQueryWidget", id(self))
         self.fmap = fmap
         self.renderer = TextRenderer()
         self.icons = Icons()
@@ -358,20 +357,20 @@ class SearchQueryWidget(QtWidgets.QWidget):
     def eventFilter(self, obj, event):
         if obj is self.query_edit:
             if event.type() == QtCore.QEvent.Type.KeyPress:
-
-                if event.key() == QtCore.Qt.Key.Key_Tab:
+                key = event.key()
+                if key == QtCore.Qt.Key.Key_Tab:
                     self._autocomplete()
                     return True
 
-                if event.key() == QtCore.Qt.Key.Key_F1:
+                if key == QtCore.Qt.Key.Key_F1:
                     self._show_help()
                     return True
                 
-                if event.key() == QtCore.Qt.Key.Key_Enter:
+                if key in (QtCore.Qt.Key.Key_Return, QtCore.Qt.Key.Key_Enter):
                     self.validate_query()
                     return True
                 
-                if event.key() == QtCore.Qt.Key.Key_Down:
+                if key == QtCore.Qt.Key.Key_Down:
                     self._show_options()
                     return True
 
@@ -636,7 +635,6 @@ class SearchQueryWidget(QtWidgets.QWidget):
 
     def _clear(self):
         self._updating = True
-
         try:
             self.query_edit.clear()
         finally:
@@ -936,10 +934,10 @@ class SearchQueryWidget(QtWidgets.QWidget):
         self.valid_label.setToolTip(tooltip)
 
     def _sql_context_menu_where(self, pos):
-        self._sql_context_menu(self,self.sql_where_label, pos)
+        self._sql_context_menu(self.sql_where_label, pos)
     
     def _sql_context_menu_valid(self, pos):
-        self._sql_context_menu(self,self.valid_label, pos)
+        self._sql_context_menu(self.valid_label, pos)
 
     def _sql_context_menu(self,obj, pos):
         """Context menu for the SQL/query preview."""
@@ -968,7 +966,7 @@ class SearchQueryWidget(QtWidgets.QWidget):
             self._copy_sql_html()
 
         elif action == clear_action:
-            self.query_edit.clear()
+            self._clear()
 
         elif action == clear_history_action:
             self._clear_history()

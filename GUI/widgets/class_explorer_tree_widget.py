@@ -18,7 +18,7 @@ from models.class_explorer_tree_model import ExplorerTreeModel, TreeNode
 from models.class_action_provider import DefaultFileActionProvider
 from models.class_lazy_loader import LazyLoaderProvider
 from PyQt6.QtGui import QShortcut, QKeySequence
-
+from widgets.class_export_widget import ExportWidget
 
 from controllers.class_tree_node_manager import (TreeManager)
 
@@ -33,6 +33,7 @@ class ExplorerTreeWidget(QWidget):
     nodeExpanded = pyqtSignal(TreeNode)
     nodeCollapsed = pyqtSignal(TreeNode)
     lazyLoading = pyqtSignal(bool)
+    exportRequested = pyqtSignal(dict)
 
     def __init__(self, config: ExplorerConfig, parent=None):
         super().__init__(parent)
@@ -117,6 +118,12 @@ class ExplorerTreeWidget(QWidget):
                                         """)
         self.option_popup.hide()
 
+        self.export_widget=ExportWidget()
+        self.export_widget.exportRequested.connect(self.exportRequested.emit)
+        self.export_widget.hide()
+
+        self.layout.addWidget(self.export_widget)
+    
     def _connect(self):
         self.tree.clicked.connect(self._on_tree_clicked)
         self.tree.doubleClicked.connect(self._on_tree_double_clicked)
@@ -131,11 +138,18 @@ class ExplorerTreeWidget(QWidget):
             self.option_popup.optionSelected.connect(self._option_text_selected)
 
         if self.action_provider:
+            self.action_provider.set_parent_widget(self)
             self.tree.customContextMenuRequested.connect(self._show_context_menu)
 
         if self.tree.selectionModel():
             self.tree.selectionModel().selectionChanged.connect(self._selection_changed)
     
+    def show_export_widget(self,show_ew=True):
+        if show_ew:
+            self.export_widget.show()
+        else:
+            self.export_widget.hide()
+
     def _fetch(self, index):
         if self.model.canFetchMore(index):
             self.model.fetchMore(index)
