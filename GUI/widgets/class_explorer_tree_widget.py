@@ -87,7 +87,7 @@ class ExplorerTreeWidget(QWidget):
         if self.config.show_label:
             self.text_label = QLabel()
             self.layout.addWidget(self.text_label)
-            self.text_label.setText(self.config.root_node.name)
+            self.set_title_label_text()
         else:
             self.text_label = None
         # tree
@@ -144,6 +144,14 @@ class ExplorerTreeWidget(QWidget):
         if self.tree.selectionModel():
             self.tree.selectionModel().selectionChanged.connect(self._selection_changed)
     
+    def set_title_label_text(self, new_text:str=None):
+        if not self.text_label:
+            return
+        if not new_text:
+            self.text_label.setText(self.config.root_node.name)
+        else:
+            self.text_label.setText(str(new_text))
+    
     def show_export_widget(self,show_ew=True):
         if show_ew:
             self.export_widget.show()
@@ -179,6 +187,12 @@ class ExplorerTreeWidget(QWidget):
     
     def selected_ids(self):
         return self.t_m.get_selected_ids()
+    
+    def expanded_nodes(self):
+        return self.t_m.get_expanded_nodes()
+    
+    def expanded_ids(self):
+        return self.t_m.get_expanded_ids()
     
     def refresh(self):
         self.model.layoutChanged.emit()

@@ -19,6 +19,7 @@ from models.class_action_provider import *
 from models.class_style_provider import *
 from models.class_lazy_loader import *
 from controllers.class_database_manager import DatabaseInfo
+from widgets.class_file_dialogs import MsgBoxHelper
 
 from copy import deepcopy
 from dataclasses import dataclass
@@ -114,7 +115,7 @@ class SearchDialogSetter:
         return selected_maps
 
     def _set_db_mode_config(self):
-        virtual_root = TreeNode("Search Results")
+        virtual_root = TreeNode("Map Explorer")
         virtual_root.loaded = True
         virtual_root.i_am = "root"
         
@@ -212,7 +213,6 @@ class SearchDialog(QtWidgets.QDialog):
         self.icons=Icons()
         self.text_renderer = TextRenderer()
 
-
         self.s_result = None # list[SearchResult]        
         self._has_been_searched=False
         self._explorer_root_node=None
@@ -241,9 +241,17 @@ class SearchDialog(QtWidgets.QDialog):
         # View filters
         # ==============================================================
 
-        filter_group = QtWidgets.QGroupBox("View Filters")
+        filter_group = QtWidgets.QGroupBox("🛠️ Tools and Filters")
 
         filter_layout = QtWidgets.QHBoxLayout(filter_group)
+
+        self.clear_search_icon = QtWidgets.QToolButton()
+        self.clear_search_icon.setIcon(self.icons.icon("clear"))
+        self.clear_search_icon.setAutoRaise(True)
+        self.clear_search_icon.setEnabled(True)
+        self.clear_search_icon.setFixedWidth(32)
+        self.clear_search_icon.setToolTip("Clear Search")
+        self.clear_search_icon.clicked.connect(self.search_widget.clear_search)
 
         self.show_files_cb = QtWidgets.QCheckBox("Files")
         self.show_files_cb.setChecked(True)
@@ -260,6 +268,7 @@ class SearchDialog(QtWidgets.QDialog):
         self.show_md5_cb = QtWidgets.QCheckBox("Show MD5")
         self.show_md5_cb.setChecked(False)
 
+        filter_layout.addWidget(self.clear_search_icon)
         filter_layout.addWidget(self.show_files_cb)
         filter_layout.addWidget(self.show_folders_cb)
         filter_layout.addWidget(self.show_size_cb)
@@ -281,7 +290,7 @@ class SearchDialog(QtWidgets.QDialog):
         # Explorer widget
         ##################################
         self.results_tree = ExplorerTreeWidget(self.explorer_config)
-        # self.results_tree.userSelectionChanged.connect(self.on_selection_changed)
+        self.results_tree.userSelectionChanged.connect(self.on_selection_changed)
         # self.results_tree.actionEvaluated.connect(self.on_action_evaluated)
         self.results_tree.exportRequested.connect(self.on_export_requested)
         self.results_tree.lazyLoading.connect(self.on_lazy_loading)
@@ -306,19 +315,31 @@ class SearchDialog(QtWidgets.QDialog):
 
         stats_layout = QtWidgets.QHBoxLayout(stats_group)
 
-        self.files_label = QtWidgets.QLabel("Files: 0")
-        self.folders_label = QtWidgets.QLabel("Folders: 0")
+        self.files_label = QtWidgets.QLabel("Node Files: 0")
+        self.folders_label = QtWidgets.QLabel("Node Folders: 0")
+        self.quantity_label = QtWidgets.QLabel("Node Quantity: 0")
         self.size_label = QtWidgets.QLabel("Size: 0 MB")
+        self.db_matches_label = QtWidgets.QLabel("DB Matches: 0")
+        self.map_matches_label = QtWidgets.QLabel("Map Matches: 0")
         self.selected_label = QtWidgets.QLabel("Selected: 0")
 
+        stats_layout.addWidget(self.quantity_label)
+        stats_layout.addSpacing(20)
+
         stats_layout.addWidget(self.files_label)
-        stats_layout.addSpacing(30)
+        stats_layout.addSpacing(20)
 
         stats_layout.addWidget(self.folders_label)
-        stats_layout.addSpacing(30)
+        stats_layout.addSpacing(20)
 
         stats_layout.addWidget(self.size_label)
-        stats_layout.addSpacing(30)
+        stats_layout.addSpacing(33)
+
+        stats_layout.addWidget(self.db_matches_label)
+        stats_layout.addSpacing(20)
+
+        stats_layout.addWidget(self.map_matches_label)
+        stats_layout.addSpacing(20)
 
         stats_layout.addWidget(self.selected_label)
 
@@ -403,12 +424,15 @@ class SearchDialog(QtWidgets.QDialog):
     
     def _do_statistic(self):
         self.statistic_dict={}        
+        tot_total=0
         for s_r in self.s_result:
             if isinstance(s_r,SearchResult):
                 total=self.statistic_dict.get(f"Total_{s_r.temp_db}",0)
                 self.statistic_dict.update({s_r.temp_db_map_pair:s_r.matches})
                 total+=s_r.matches
                 self.statistic_dict.update({f"Total_{s_r.temp_db}":total})
+                tot_total+=s_r.matches
+        self.statistic_dict.update({f"Total":tot_total})
 
     
     def _get_search_result_obj(self,idx, temp_db, idx_dict , user_query_txt, sql_where)->SearchResult:
@@ -444,7 +468,7 @@ class SearchDialog(QtWidgets.QDialog):
         model=self.results_tree.model
         t_m=self.results_tree.model.t_m
         root_node = t_m.root
-        
+        self.results_tree.set_title_label_text("Map Explorer")
         self._has_been_searched = False
         # remove all children
         try:
@@ -473,7 +497,7 @@ class SearchDialog(QtWidgets.QDialog):
             self._explorer_root_node = deepcopy(root_node)
             #print("ROOT AFTER DEEP:", type(root_node), root_node)
             self._has_been_searched = True
-
+        self.results_tree.set_title_label_text(f"Search Results: {self.statistic_dict.get('Total')} matches!")
         # remove all children
         model.beginResetModel()
         try:
@@ -616,11 +640,9 @@ class SearchDialog(QtWidgets.QDialog):
         else:
             if self._lazy_loading:
                 self._lazy_loading = False
-                QtWidgets.QApplication.restoreOverrideCursor()
-    
-    def on_export_requested(self,export_dict):
-        print("Got export Request ",export_dict)
-    
+                QtWidgets.QApplication.restoreOverrideCursor()   
+
+
     def _toggle_export_show(self):
         if self.is_export_showing:
             self.export_button.setIcon(self.icons.icon("export"))
@@ -668,6 +690,8 @@ class SearchDialog(QtWidgets.QDialog):
                 value = "[cyan]" + value +"[/]"
             if name in ("mount","serial") and node.i_exist:
                 value = "[bright_green]" + value +"[/]"
+            if name in ("mount","serial") and not node.i_exist:
+                value = "[red]" + value +"[/]"
             if name in ("map","db") and node.i_exist:
                 value = "[magenta]" + value +"[/]"
             if name in ("path","name") and node.i_exist:
@@ -687,6 +711,8 @@ class SearchDialog(QtWidgets.QDialog):
                     prop = "id_in_db"
                 self._add_property(prop, val)
         self.properties_tree.resizeColumnToContents(0)
+        # set the statistics
+        self._set_statistics_node(node)
 
     def _add_property(self, name, value):
         item = QtWidgets.QTreeWidgetItem(self.properties_tree, [name])
@@ -757,6 +783,38 @@ class SearchDialog(QtWidgets.QDialog):
             value = f"[bright_blue]{value}[/]"
 
         return value
+    
+    def _set_statistics_node(self, node: TreeNode):
+        db_total_matches=self.statistic_dict.get(f"Total_{node.db}",0)
+        map_total_matches=self.statistic_dict.get((node.db,node.map),0)
+        # sel_node_list=self.results_tree.selected_nodes()
+        all_selected=len(self.results_tree.selected_ids())
+
+        self.files_label.setText(f"Node Files: {node.num_files or 0}")
+        self.folders_label.setText(f"Node Folders: {node.num_dirs or 0}")
+        self.quantity_label.setText(f"Node Quantity: {node.quantity or 0}")
+        if node.size:
+            value = self.fmap.fm.get_size_str_formatted(node.size)
+        else:
+            value = 0
+        self.size_label.setText(f"Size: {value}")
+        self.db_matches_label.setText(f"DB Matches: {db_total_matches}")
+        self.map_matches_label.setText(f"Map Matches: {map_total_matches}")
+        self.selected_label.setText(f"Selected: {all_selected}")
+
+    def on_selection_changed(self,nodes_list):
+        if isinstance(nodes_list,list) and len(nodes_list)>0:
+            node=nodes_list[0]
+            if isinstance(node,TreeNode):
+                self._set_statistics_node(node)
+    
+    def on_export_requested(self,export_dict):
+        print("Got export Request ",export_dict)
+        
+            
+
+        
+        
 
 
 

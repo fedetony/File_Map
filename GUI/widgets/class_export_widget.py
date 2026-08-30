@@ -1,8 +1,13 @@
 import os
 
 from PyQt6 import QtCore, QtGui, QtWidgets
-
+from PyQt6.QtWidgets import QMessageBox
+from widgets.ask_confirmation_dialog import ConfirmationDialog
+from widgets.class_file_dialogs import MsgBoxHelper
 from functional.class_icons import Icons
+from class_file_manipulate import FileManipulate
+
+FM=FileManipulate()
 
 from dataclasses import dataclass
 
@@ -60,6 +65,10 @@ class ExportWidget(QtWidgets.QWidget):
 
     exportRequested = QtCore.pyqtSignal(dict)
 
+    DEFAULT_REQUIRED_FIELDS = {
+            3,  # filepath
+            4,  # filename
+        }
     DEFAULT_FIELDS = [
         (0, "id"),
         (1, "dt_data_created"),
@@ -91,24 +100,29 @@ class ExportWidget(QtWidgets.QWidget):
         self,
         parent=None,
         fields=None,
+        required_fields=None,
         selections=None,
         formats=None,
         default_selection="expanded",
         default_format="filestruct_json",
         default_fields=None,
+        
     ):
         super().__init__(parent)
 
         self.icons=Icons()
+        self.msgbox = MsgBoxHelper()
+
         self.fields = list(
-            fields if fields is not None else self.DEFAULT_FIELDS
-        )
+            fields if fields is not None else self.DEFAULT_FIELDS)
         self.selections = list(
-            selections if selections is not None else self.DEFAULT_SELECTIONS
-        )
+            selections if selections is not None else self.DEFAULT_SELECTIONS)
         self.formats = list(
-            formats if formats is not None else self.DEFAULT_FORMATS
-        )
+            formats if formats is not None else self.DEFAULT_FORMATS)
+        self.required_fields = set(
+            required_fields if required_fields is not None 
+            else self.DEFAULT_REQUIRED_FIELDS)
+        
 
         # ------------------------------------------------------------
         # Selection
@@ -308,7 +322,8 @@ class ExportWidget(QtWidgets.QWidget):
     def requestExport(self):
         """Emit the current export configuration."""
         info = self.getConfiguration()
-        self.exportRequested.emit(info)
+        if self._export_validator(info):
+            self.exportRequested.emit(info)
     
     def getConfiguration(self):
         """Return the current widget configuration."""
@@ -466,6 +481,9 @@ class ExportWidget(QtWidgets.QWidget):
 
             checkbox = QtWidgets.QCheckBox(field_name)
             checkbox.setChecked(field_id in selected_fields)
+            if field_id in self.required_fields:
+                checkbox.setChecked(True)
+                checkbox.setEnabled(False)
 
             self.fieldChecks[field_id] = checkbox
 
@@ -481,7 +499,6 @@ class ExportWidget(QtWidgets.QWidget):
 
     def getSelectedFields(self):
         """Return the IDs of the currently selected fields."""
-
         return [
             field_id
             for field_id, checkbox in self.fieldChecks.items()
@@ -491,13 +508,98 @@ class ExportWidget(QtWidgets.QWidget):
 
     def setSelectedFields(self, field_ids):
         """Set the selected fields by field ID."""
-
         field_ids = set(field_ids)
-
         for field_id, checkbox in self.fieldChecks.items():
             checkbox.setChecked(
                 field_id in field_ids
             )
+    
+    def _export_validator(self, export_dict: dict):
+        """
+        Validate export settings before starting an export.
+
+        Requires:
+            - target
+            - filepath field
+            - filename field
+
+        Also adds the correct extension when missing and asks
+        before overwriting an existing file.
+        """
+        target = str(export_dict.get("target", "")).strip()
+        # --------------------------------------------------------
+        # Target
+        # --------------------------------------------------------
+        if not target:
+            self.msgbox.show(
+                "Export",
+                "No Target file found!\n"
+                "Please add a Target File to export!",
+                QMessageBox.Icon.Critical
+            )
+            return False
+        # --------------------------------------------------------
+        # Required fields
+        # --------------------------------------------------------
+        fields = export_dict.get("fields", [])
+        required_fields = self.required_fields
+        missing_fields = required_fields - set(fields)
+        if missing_fields:
+            missing_labels = [
+                field.label
+                for field in DC_DEFAULT_FIELDS
+                if field.id in missing_fields
+            ]
+            self.msgbox.show(
+                "Export",
+                "The following fields are required for export:\n\n"
+                + "\n".join(missing_labels),
+                QMessageBox.Icon.Critical
+            )
+            return False
+
+        # --------------------------------------------------------
+        # Export format
+        # --------------------------------------------------------
+        format_value = str(export_dict.get("format", "")).strip()
+        fmt = next(
+            (f for f in DC_DEFAULT_FORMATS if f.value == format_value),
+            None)
+
+        if fmt is None:
+            self.msgbox.show(
+                "Export",
+                "Invalid export format.",
+                QMessageBox.Icon.Critical
+            )
+            return False
+        # --------------------------------------------------------
+        # Extension
+        # --------------------------------------------------------
+        t_path=FM.extract_path(target)
+        if not os.path.exists(t_path):
+            if not ConfirmationDialog.ask_confirmation(
+                f"The path does not exist:\n\n"
+                f"{t_path}\n\n"
+                "Do you want to create it?"
+                ):
+                return False
+            os.makedirs(t_path)
+        t_file=FM.extract_filename(target,with_extension=False)
+        t_filepath=os.path.join(t_path,t_file+fmt.extension)
+        export_dict["target"] = t_filepath
+        # --------------------------------------------------------
+        # Existing file
+        # --------------------------------------------------------
+        (file_exist, is_file)=FM.validate_path_file(t_filepath)
+        if file_exist:
+            if not ConfirmationDialog.ask_confirmation(
+                f"The file already exists:\n\n"
+                f"{target}\n\n"
+                "Do you want to overwrite it?"
+            ):
+                return False
+        return True
    
 
 # Example — default configuration

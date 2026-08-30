@@ -348,8 +348,20 @@ class TreeManager:
     def get_selected_nodes(self):
         return self.get_nodes_by_attribute("selected",True)
     
+    def get_expanded_nodes(self):
+        return self.get_nodes_by_attribute("expanded",True)
+    
+    def get_locked_nodes(self):
+        return self.get_nodes_by_attribute("locked",True)
+    
     def get_selected_ids(self):
         return [node.id for node in self.get_selected_nodes()]
+    
+    def get_expanded_ids(self):
+        return [node.id for node in self.get_expanded_nodes()]
+    
+    def get_locked_ids(self):
+        return [node.id for node in self.get_locked_nodes()]
     
     def get_node_path_by_id(self, node_id:int,sep: str = "/"):
         node = self.get_node_by_id(node_id)

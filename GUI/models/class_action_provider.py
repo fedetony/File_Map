@@ -178,7 +178,7 @@ class SearchFileActionProvider(TreeActionProvider):
                 callback=self._reveal_in_explorer,
                 args=(node,),
                 icon=self.icons.icon('reveal'),
-                visible=lambda node:(node.i_am in ("file","dir")),
+                visible=lambda node:(node.i_am in ("file","dir") and node.i_exist),
             ),
 
             ExplorerAction(

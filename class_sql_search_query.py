@@ -889,7 +889,7 @@ class SQLSearchGenerator:
         sql = None
         if not self.chp.check_parenthesees_in_one_format(text_input):
             return sql, msg, False
-        msg = 'Parenthesys Check ok!'
+        msg = "" #'Parenthesys Check ok!'
         # --------------------------------------------------------
         # Existing [ ... ] sub-query handling
         # --------------------------------------------------------

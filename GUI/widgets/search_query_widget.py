@@ -368,6 +368,7 @@ class SearchQueryWidget(QtWidgets.QWidget):
                 
                 if key in (QtCore.Qt.Key.Key_Return, QtCore.Qt.Key.Key_Enter):
                     self.validate_query()
+                    self._do_search()
                     return True
                 
                 if key == QtCore.Qt.Key.Key_Down:
@@ -632,6 +633,9 @@ class SearchQueryWidget(QtWidgets.QWidget):
     # ==============================================================
     # Clear
     # ==============================================================
+
+    def clear_search(self):
+        self._clear()
 
     def _clear(self):
         self._updating = True

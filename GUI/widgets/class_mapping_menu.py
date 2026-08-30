@@ -108,6 +108,7 @@ class MappingMenu(QtCore.QObject):
             "Find Duplicates": self.icons.icon("find duplicates"),
             "Find Repeated": self.icons.icon("find repeated"),
             "Search Map": self.icons.icon("search map"),
+            "Search Maps": self.icons.icon("search map"),
 
             "Tree": self.icons.icon("tree"),
             "Directory": self.icons.icon("dir explore"),
@@ -604,12 +605,14 @@ class MappingMenu(QtCore.QObject):
         menu = QtWidgets.QMenu("2 Maps Selected")
         self._update_menu_enabled_states()
         for name, callback in [
+            ("Search Maps", self._menu_search_map),
             ("Shallow Compare", self._menu_compare_shallow),
             ("Deep Compare", self._menu_compare_deep),
         ]:
             self._add_action_to_menu(menu, name, callback, context)
 
         menu.addSeparator()
+        
         self._add_action_to_menu(
             menu, "Deepen Shallow Map",
             self._menu_deepen_shallow_map, context
@@ -621,6 +624,7 @@ class MappingMenu(QtCore.QObject):
         menu = QtWidgets.QMenu(f"{len(selected_maps)} Maps Selected")
         self._update_menu_enabled_states()
         for name, callback in [
+            ("Search Maps", self._menu_search_map),
             ("Delete Selected Maps", self._menu_delete_maps),
             ("Update Selected Maps", self._menu_update_maps),
         ]:
