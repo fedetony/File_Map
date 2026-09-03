@@ -34,6 +34,9 @@ class ExplorerTreeWidget(QWidget):
     nodeCollapsed = pyqtSignal(TreeNode)
     lazyLoading = pyqtSignal(bool)
     exportRequested = pyqtSignal(dict)
+    exportFieldsChanged = pyqtSignal(list)
+    exportSelectionChanged = pyqtSignal(tuple)
+    exportFormatChanged = pyqtSignal(tuple)
 
     def __init__(self, config: ExplorerConfig, parent=None):
         super().__init__(parent)
@@ -120,6 +123,9 @@ class ExplorerTreeWidget(QWidget):
 
         self.export_widget=ExportWidget()
         self.export_widget.exportRequested.connect(self.exportRequested.emit)
+        self.export_widget.exportFieldsChanged.connect(self.exportFieldsChanged.emit)
+        self.export_widget.exportFormatChanged.connect(self.exportFormatChanged.emit)
+        self.export_widget.exportSelectionChanged.connect(self.exportSelectionChanged.emit)
         self.export_widget.hide()
 
         self.layout.addWidget(self.export_widget)

@@ -53,15 +53,11 @@ class ForwardDBStructurer:
             Reference to the common map manager obtained from ``ba.cma``.
     """
 
-    def __init__(self, fm: FileMapper, db_map_pair, ba: BackupActions):
+    def __init__(self, db_map_pair, ba: BackupActions):
         """
         Initialize a database-backed file structure builder.
 
         Args:
-            fm (FileMapper):
-                FileMapper instance used for database access and path
-                manipulation.
-
             db_map_pair (tuple):
                 Database/map pair identifying the map to query.
                 Expected format is ``(database, map)``.
@@ -70,10 +66,12 @@ class ForwardDBStructurer:
                 BackupActions instance providing access to the common map
                 manager.
         """
-        self.fm = fm
+        
         self.db_map_pair = db_map_pair
         self.ba = ba
         self.cma = self.ba.cma
+        fm = self.cma.get_file_map(self.db_map_pair[0])
+        self.fm = fm
 
     def build_struct(
         self,

@@ -102,6 +102,10 @@ class ConfigurationManager:
     @property
     def ui(self):
         return self.general["ui"]
+    
+    @property
+    def export(self):
+        return self.general["export"]
 
     @property
     def behavior(self):

@@ -20,3 +20,18 @@ behavior:
   log_per_session: false
   autosave_interval: 300
   check_updates: false
+export:
+  csv_delimiter: ","
+  batch_size: 100
+  print_database_header: True
+  print_map_header: True
+  default_selection: "file_tree" # options: "expanded", "selected", "file_tree","directory_tree"
+  default_format: "filestruct_json" #options: "filestruct_json", "list_txt", "list_csv", "text_tree"
+  default_selected_fields: null # null -> all selected [] -> none selected
+  # [
+    #"id","dt_data_created", "dt_data_modified", "filepath", "filename", "md5", "size", "dt_file_created", 
+    #"dt_file_accessed" "dt_file_modified", "db", "map", "db_id", "mount", "serial", "level", "path",
+  # ]
+
+
+  

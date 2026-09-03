@@ -60,9 +60,63 @@ class TreeStyleProvider:
             return NodeVisualState.EXIST
 
         return NodeVisualState.NORMAL
+
+class ExportTreeStyle:
+
+    def text(self, node: TreeNode) -> str:
+        return node.name
+
+    def branch(self, node: TreeNode, is_last: bool) -> str:
+        return "└── " if is_last else "├── "
+
+    def indent(self, node: TreeNode, is_last: bool) -> str:
+        return "    " if is_last else "│   "
+    
+    def indent_prefix(self, node: TreeNode, is_last: bool) -> str:
+        return ""
+    
+    def indent_postfix(self, node: TreeNode, is_last: bool) -> str:
+        return ""
+
 #####################################
 # Default Styles
 #####################################
+class DefaultExportStyle(ExportTreeStyle):
+    def text(self, node: TreeNode) -> str:
+        txt=""
+        if node.i_am in ("file","dir") and isinstance(node.size,(int | float)):
+            node_size_txt=FM.get_size_str_formatted(node.size,33,True)
+            node_size_txt=node_size_txt.replace(".00 By"," Bytes").strip()
+            txt += f"{node_size_txt} ─ "
+        txt += node.name
+        if node.i_am == "dir" and len(node.children)==0:
+            txt += '─¤'  # ‡ • † × · ¤ ▶
+        return txt
+
+    def branch(self, node, is_last):
+        if node.i_am == "root":
+            return "• " 
+        if node.i_am == "database":
+            return "‡── " 
+        if node.i_am == "map":
+            return "▶── " 
+        if node.i_am == "dir":
+            return "└── " if is_last else "├── "
+        return "└─ " if is_last else "├─ "
+
+    def indent(self, node: TreeNode, is_last: bool) -> str:
+        if node.i_am == "root":
+            return "  "
+        return "    " if is_last else "│   "
+    
+    def indent_prefix(self, node: TreeNode, is_last: bool) -> str:
+        if node.i_am == "root":
+            return ""
+        return "↓"
+    
+    def indent_postfix(self, node: TreeNode, is_last: bool) -> str:
+        return ""
+
 class DefaultExplorerStyle(TreeStyle):
 
     def text(self, node:TreeNode):
@@ -70,7 +124,7 @@ class DefaultExplorerStyle(TreeStyle):
         prefix = ""
 
         if node.locked:
-            prefix += "🔒▶"
+            prefix += "🔒•"
 
         if node.i_am == "dir":
             return f"{prefix}📁 {node.name}"
@@ -89,7 +143,7 @@ class DefaultExplorerStyle(TreeStyle):
 
         if node.i_am == "file" and isinstance(node.size,(int | float)):
             node_size_txt=FM.get_size_str_formatted(node.size,33,True)
-            node_size_txt=node_size_txt.replace(".00 By"," By").strip()
+            node_size_txt=node_size_txt.replace(".00 By"," Bytes").strip()
             txt.append(f"Size : {node_size_txt}")
 
         return "\n".join(txt)

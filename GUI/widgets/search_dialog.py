@@ -10,6 +10,7 @@ from controllers.class_filemap_cli_manager import FileMapCliManager
 from controllers.mapping_worker_thread import WorkerManager
 from functional.class_icons import Icons
 from functional.class_text_renderer import TextRenderer
+from functional.class_text_exporter import ExporterHandler
 from widgets.class_explorer_tree_widget import *
 from widgets.search_query_widget import *
 
@@ -19,7 +20,6 @@ from models.class_action_provider import *
 from models.class_style_provider import *
 from models.class_lazy_loader import *
 from controllers.class_database_manager import DatabaseInfo
-from widgets.class_file_dialogs import MsgBoxHelper
 
 from copy import deepcopy
 from dataclasses import dataclass
@@ -118,7 +118,7 @@ class SearchDialogSetter:
         virtual_root = TreeNode("Map Explorer")
         virtual_root.loaded = True
         virtual_root.i_am = "root"
-        
+
         db_info_list = self._get_selected_dbs()
 
         for idx, db in enumerate(db_info_list):
@@ -293,9 +293,12 @@ class SearchDialog(QtWidgets.QDialog):
         self.results_tree.userSelectionChanged.connect(self.on_selection_changed)
         # self.results_tree.actionEvaluated.connect(self.on_action_evaluated)
         self.results_tree.exportRequested.connect(self.on_export_requested)
+        self.results_tree.exportFormatChanged.connect(self.on_export_format_changed)
         self.results_tree.lazyLoading.connect(self.on_lazy_loading)
         #self.results_tree.nodeDoubleClicked.connect(self._show_node_properties)
         self.results_tree.nodeClicked.connect(self._show_node_properties)
+        # Exporter widget
+        self._set_export_default_configuration()
 
         self.properties_tree = QtWidgets.QTreeWidget()
         self.properties_tree.setHeaderLabels(
@@ -404,7 +407,22 @@ class SearchDialog(QtWidgets.QDialog):
     def _on_search_requested(self,user_query_txt, sql_where):
         #set this to a worker
         self.search_for_(user_query_txt, sql_where)
-
+    
+    def _set_export_default_configuration(self):
+        ex_cfg=self.fmap.cfg.export
+        selection=ex_cfg.get("default_selection","file_tree") # options: "expanded", "selected", "file_tree","directory_tree"
+        format=ex_cfg.get("default_format", "filestruct_json") #options: "filestruct_json", "list_txt", "list_csv", "text_tree"
+        selected_fields=ex_cfg.get("default_selected_fields") # null -> all selected [] -> none selected
+        ex_wid=self.results_tree.export_widget
+        ex_wid.setSelection(selection)
+        ex_wid.setFormat(format)
+        field_list=ex_wid.getFields()
+        field_id_list=[]
+        if isinstance(selected_fields,list):
+            for an_id,a_field in field_list:
+                if a_field in selected_fields:
+                    field_id_list.append(an_id)
+            ex_wid.setSelectedFields(field_id_list)
     
     def search_for_(self, user_query_txt, sql_where):
 
@@ -810,6 +828,52 @@ class SearchDialog(QtWidgets.QDialog):
     
     def on_export_requested(self,export_dict):
         print("Got export Request ",export_dict)
+        t_m=self.results_tree.model.t_m
+        ex_handler=ExporterHandler(fmap=self.fmap,
+                        export_request_dict=export_dict,
+                        root_node=t_m.root,
+                        style=DefaultExportStyle(), 
+                        available_fields=None,
+                        available_formats=None,
+                        log_callback=print,
+                        )
+        was_exported, msg = ex_handler.do_export()
+        msgbox=MsgBoxHelper()
+        filepath_target=export_dict.get("target")
+        if was_exported:
+            msgbox.show("Export",
+                    f"File {filepath_target} was Successfully Exported!",
+                    icon=QMessageBox.Icon.Information,
+                    buttons=None,
+                    default=None,
+                    detailed_text=msg,
+                    informative_text=None,
+                    )
+        else:
+            msgbox.show("Export",
+                    f"File {filepath_target} was Not Exported!",
+                    icon=QMessageBox.Icon.Critical,
+                    buttons=None,
+                    default=None,
+                    detailed_text=msg,
+                    informative_text=None,
+                    )
+    
+    def on_export_format_changed(self,format_tup):
+        label,format = format_tup
+        ex_wid=self.results_tree.export_widget
+        if format not in ("filestruct_json", "list_txt", "list_csv", "text_tree"):
+            return
+        if format == "filestruct_json":
+            req_fields=['filename','filepath']
+        elif format == "list_txt":
+            req_fields=['id']
+        elif format == "list_csv":
+            req_fields=['id']
+        elif format == "text_tree":
+            req_fields=['filename','filepath']
+        ex_wid.SetRequiredFields(req_fields)
+        
         
             
 

@@ -13,6 +13,7 @@ from class_backup_actions import *
 from class_file_mapper import *
 from widgets.ask_confirmation_dialog import *
 from controllers.class_database_manager import *
+from class_fw_db_structurer import *
 
 from functional.class_LogHandler import LM
 log=LM.get_logger_with_handler("FileMapCli","debug",True,None)
@@ -915,13 +916,14 @@ class FileMapCliManager:
             if not fm:
                 continue
             dbname=self.fm.extract_filename(db_map_pair[0])
-            temp_map_name=f"{idx}_{dbname}_{db_map_pair[1]}"
+            # Naming convention used in normal explorer {dbname}({db_map_pair[1]})
+            temp_map_name=f"{idx} {dbname}({db_map_pair[1]})"
             
             name_valid,msg=self.map_validation(temp_db,temp_map_name)
             if not name_valid:
                 temp_map_name = f"{idx}_{self.timestamp}_{db_map_pair[1]}"
                 if log_callback:
-                    log_callback(f"Map Name Invalid: {msg} - renamed to {temp_map_name}")
+                    log_callback(f"Map Name Invalid: {msg} - '{idx} {dbname}({db_map_pair[1]})' renamed to '{temp_map_name}'")
                 
             # Create the table preseving type and data
             description= fm.db.describe_table_in_db(db_map_pair[1])
@@ -993,7 +995,7 @@ class FileMapCliManager:
         
         return temp_db, idx_map
 
-    def export_to_filestructure(self,selected_db_map_pair_list:list, 
+    def export_to_filestructure_filestructurer(self,selected_db_map_pair_list:list, 
                     sql_where: str| None=None,
                     sort_by=None,
                     ascending=True, 
@@ -1021,7 +1023,80 @@ class FileMapCliManager:
                 fs_list.append(fs.copy())
                 db_map_list.append(db_map_pair)
                 del fs
-        return fs_list, db_map_list      
+        return fs_list, db_map_list
+    
+    def export_to_filestructure_fw_db(self,
+                                    selected_db_map_pair_list:list, 
+                                    selected_path_list:list=None,
+                                    log_callback=None):
+
+        db_map_list=[]    
+        fs_list=[]
+        for  iii,db_map_pair in enumerate(selected_db_map_pair_list):
+            # including Id is important
+
+            if not selected_path_list:
+                map_info=self.cma.get_map_info_as_dict(db_map_pair[0],db_map_pair[1])
+                selected_path=map_info['mappath']
+            else:
+                selected_path=selected_path_list[iii]
+
+            fw_st=ForwardDBStructurer(db_map_pair,self.ba)
+            fs=fw_st.build_struct(path=selected_path,
+                                  in_tup=True,
+                                  selected_fields=['id'])
+            if log_callback:
+                db_show=self.fm.extract_filename(db_map_pair[0])
+                map_show=db_map_pair[1]
+                if len(fs)>=1:
+                    log_callback(f'[green]Found Matches[/] in {db_show}, {map_show}')
+                else:
+                    log_callback(f'[magenta]No Matches Found[/] in {db_show}, {map_show}')
+            if len(fs)>0:
+                fs_list.append(fs.copy())
+                db_map_list.append(db_map_pair)
+                del fs
+        return fs_list, db_map_list
+    
+    def export_to_list(self,selected_db_map_pair_list,
+                       filename,
+                       where=None,
+                       fields_to_tab=None,
+                       sort_by=None,
+                       ascending=True,
+                       to_csv=False
+                       ):
+        
+        
+        for  iii,db_map_pair in enumerate(selected_db_map_pair_list):
+            map_info=self.cma.get_map_info_as_dict(db_map_pair[0],db_map_pair[1])
+            if not map_info:
+                return 'Could not find Map!'
+            fm = self.cma.get_file_map(db_map_pair[0])
+            info_field_list = fm.db.get_column_list_of_table(fm.mapper_reference_table)
+            fields_list = fm.db.get_column_list_of_table(db_map_pair[1])
+            data = fm.db.get_data_from_table(db_map_pair[1], "*", where)
+            try:
+                d_m1 = DataManage(data, fields_list)
+            except ValueError:
+                # No data
+                return 'Map is Empty!'
+            if not fields_to_tab:
+                fields_to_tab=fields_list
+            df = d_m1.get_selected_df(fields_to_tab=fields_to_tab, 
+                                      sort_by=["filepath"] if not sort_by else sort_by,
+                                      ascending=ascending)
+            
+            d_m1.get_tabulated_fields(fields_to_tab=fields_to_tab, 
+                                      sort_by=["filepath"] if not sort_by else sort_by,
+                                      ascending=ascending)
+            
+            # txt_list=['database=',db_map_pair[0]]
+            # txt_list=txt_list+[field+'='+str(txt)+'\n' for txt,field in zip(map_info[0],info_field_list)]
+            # self._save_text_to_file(filename,txt_list)
+            df.to_csv(filename, sep = '|', header = fields_to_tab, mode = 'a',index = False)
+            return f'[green]Successfuly saved File {filename}'
+
     # -------------------------------------------------------
     # DB Map Size Cache
     # -------------------------------------------------------    

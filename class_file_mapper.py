@@ -1087,7 +1087,7 @@ class FileMapper:
                 t_est = self.time_seconds_to_hhmmss(
                     self.estimate_mapping_time_sec(904.29, 16.08, the_size, "MB", "bytes")
                 )
-                log_callback(f"Calculating md5 for {file}...{str_size} Estimating: {t_est}")
+                log_callback(f"[yellow]Calculating md5 for [/]{file}...[cyan]{str_size}[/] Estimating: {t_est}")
             if the_size > 50 * 1024 * 1024:  # leave to calculate with the thread
                 the_md5 = self.calculate_md5(joined_file, True, shallow_map)
             else:
@@ -1100,9 +1100,12 @@ class FileMapper:
             if log_print:
                 str_size = f_m.get_size_str_formatted(the_size, 11)
                 # use () not [] because rich looks for commands inside []
-                str_just = f_m.get_string_justified(f"{count_print}({str_size})", False, 11 + 3 + 4)
+                str_just_count = f_m.get_string_justified(f"{count_print}", True, 10)
+                str_just_size = f_m.get_string_justified(f"{str_size}", False, 10)
+                str_just = f"[green]{str_just_count}[/green][blue] ({str_just_size})[/blue]"
                 time_elapsed = (dt_data_modified - dt_data_created).total_seconds()
-                log_callback(f"{str_just} ({the_md5}) \t{dirpath+os.sep+file} ... ({time_elapsed:.3f}s)")
+                log_callback(f"{str_just} [magenta]({the_md5})[/magenta] \
+                             \t{dirpath+os.sep+file} [yellow]... ({time_elapsed:.3f}s)[/]")
         except (FileExistsError, PermissionError, FileNotFoundError, NotADirectoryError, TypeError, OSError) as eee:
             log_callback(f"{mount}{dirpath}{file} Error: {eee}")
             if not the_md5:

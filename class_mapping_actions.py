@@ -970,7 +970,16 @@ class MappingActions():
         fm=self.get_file_map(database)
         return fm.find_duplicates(a_map)
 
-    def export_map_file_directories(self,db_map_pair,the_file,export_type,where=None,style=None,fields_to_tab=None):
+    def export_map_file_directories(self,
+                                    db_map_pair,
+                                    the_file,
+                                    export_type,
+                                    where=None,
+                                    style=None,
+                                    fields_to_tab=None,
+                                    confirmation: bool = False,
+                                    log_callback = None,
+                                    ):
         """_summary_
 
         Args:
@@ -979,6 +988,8 @@ class MappingActions():
             export_type (str): Type of export 'file','dir','filestructure','list'
             where (str, optional): where sql for filter. Defaults to None.
         """
+        if not log_callback:
+            log_callback=print
         fm=self.get_file_map(db_map_pair[0])
         field_list = fm.db.get_column_list_of_table(db_map_pair[1])
         # Map info
@@ -1004,7 +1015,13 @@ class MappingActions():
             df.to_csv(the_file, sep = '|', header = fields_to_tab, mode = 'a',index = False)
             return f'[green]Successfuly saved File {the_file}'
         fs=None
-        fs=self.map_to_file_structure(db_map_pair[0],db_map_pair[1],where=where,fields_to_tab=['id'],sort_by=["filepath"],ascending=True)
+        fs=self.map_to_file_structure(db_map_pair[0],db_map_pair[1],
+                                      where=where,
+                                      fields_to_tab=['id'],
+                                      sort_by=["filepath"],
+                                      ascending=True,
+                                      confirmation=confirmation,
+                                      log_callback=log_callback)
         if len(fs)>0:
             if export_type=='filestructure':
                 mod_fs={os.path.join(map_info[0][5],map_info[0][3])+'@'+map_info[0][6]:fs}

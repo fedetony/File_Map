@@ -47,6 +47,13 @@ DC_DEFAULT_FIELDS = [
     ExportField(7, "dt_file_created"),
     ExportField(8, "dt_file_accessed"),
     ExportField(9, "dt_file_modified"),
+    ExportField(10, "db"),
+    ExportField(11, "map"),
+    ExportField(12, "db_id"),
+    ExportField(13, "mount"),
+    ExportField(14, "serial"),
+    ExportField(15, "level"),
+    ExportField(16, "path"),
 ]
 
 @dataclass(frozen=True)
@@ -64,37 +71,14 @@ DC_DEFAULT_SELECTIONS = [
 class ExportWidget(QtWidgets.QWidget):
 
     exportRequested = QtCore.pyqtSignal(dict)
+    exportFieldsChanged = QtCore.pyqtSignal(list)
+    exportSelectionChanged = QtCore.pyqtSignal(tuple)
+    exportFormatChanged = QtCore.pyqtSignal(tuple)
 
     DEFAULT_REQUIRED_FIELDS = {
             3,  # filepath
             4,  # filename
         }
-    DEFAULT_FIELDS = [
-        (0, "id"),
-        (1, "dt_data_created"),
-        (2, "dt_data_modified"),
-        (3, "filepath"),
-        (4, "filename"),
-        (5, "md5"),
-        (6, "size"),
-        (7, "dt_file_created"),
-        (8, "dt_file_accessed"),
-        (9, "dt_file_modified"),
-    ]
-
-    DEFAULT_SELECTIONS = [
-        ("Expanded", "expanded"),
-        ("Selected", "selected"),
-        ("File Tree", "file_tree"),
-        ("Directory Tree", "directory_tree"),
-    ]
-
-    DEFAULT_FORMATS = [
-        ("Filestruct → JSON", "filestruct_json"),
-        ("List → TXT", "list_txt"),
-        ("List → CSV", "list_csv"),
-        ("Text Tree", "text_tree"),
-    ]
 
     def __init__(
         self,
@@ -112,9 +96,23 @@ class ExportWidget(QtWidgets.QWidget):
 
         self.icons=Icons()
         self.msgbox = MsgBoxHelper()
-
+        self.DEFAULT_FIELDS=[(field.id,field.label) for field in DC_DEFAULT_FIELDS]
+        self.DEFAULT_SELECTIONS=[(sel.label,sel.value) for sel in DC_DEFAULT_SELECTIONS]
+        self.DEFAULT_FORMATS=[(format.label,format.value) for format in DC_DEFAULT_FORMATS]
+        
         self.fields = list(
             fields if fields is not None else self.DEFAULT_FIELDS)
+        if isinstance(required_fields,list):
+            n_r_f=[]
+            #Set ids only to required fields
+            for req_f in required_fields:
+                for field_id,field_name in self.fields:
+                    if (field_id == req_f or field_name == req_f
+                        and field_id not in n_r_f):
+                        n_r_f.append(field_id)
+            required_fields = n_r_f 
+            
+
         self.selections = list(
             selections if selections is not None else self.DEFAULT_SELECTIONS)
         self.formats = list(
@@ -122,7 +120,6 @@ class ExportWidget(QtWidgets.QWidget):
         self.required_fields = set(
             required_fields if required_fields is not None 
             else self.DEFAULT_REQUIRED_FIELDS)
-        
 
         # ------------------------------------------------------------
         # Selection
@@ -130,17 +127,16 @@ class ExportWidget(QtWidgets.QWidget):
 
         self.selectionCombo = QtWidgets.QComboBox()
         self._populateCombo(self.selectionCombo, self.selections)
-
         self.setSelection(default_selection)
+        self.selectionCombo.currentIndexChanged.connect(self.on_selection_changed)
 
         # ------------------------------------------------------------
         # Format
         # ------------------------------------------------------------
-
         self.formatCombo = QtWidgets.QComboBox()
         self._populateCombo(self.formatCombo, self.formats)
-
         self.setFormat(default_format)
+        self.formatCombo.currentIndexChanged.connect(self.on_format_changed)
 
         # ------------------------------------------------------------
         # Fields
@@ -384,7 +380,6 @@ class ExportWidget(QtWidgets.QWidget):
 
         return False
 
-
     # ------------------------------------------------------------------
     # Format
     # ------------------------------------------------------------------
@@ -440,6 +435,26 @@ class ExportWidget(QtWidgets.QWidget):
     # Fields
     # ------------------------------------------------------------------
 
+    def SetRequiredFields(self,required_fields:list):
+        if not isinstance(required_fields,list):
+            return 
+        n_r_f=[]
+        #Set ids only to required fields
+        for req_f in required_fields:
+            for field_id,field_name in self.fields:
+                if (field_id == req_f or field_name == req_f
+                    and field_id not in n_r_f):
+                    n_r_f.append(field_id)
+        required_fields = n_r_f 
+        
+        self.required_fields = set(
+            required_fields if required_fields  
+            else self.DEFAULT_REQUIRED_FIELDS)
+        selectedfields=self.getSelectedFields()
+        fields=self.getFields()
+        # Refreshes enabled state
+        self.setFields(fields,selectedfields)
+
     def getFields(self):
         """Return the available field definitions."""
         return list(self.fields)
@@ -484,6 +499,7 @@ class ExportWidget(QtWidgets.QWidget):
             if field_id in self.required_fields:
                 checkbox.setChecked(True)
                 checkbox.setEnabled(False)
+                checkbox.checkStateChanged.connect(lambda: self.on_field_selection_changed)
 
             self.fieldChecks[field_id] = checkbox
 
@@ -600,6 +616,24 @@ class ExportWidget(QtWidgets.QWidget):
             ):
                 return False
         return True
+    
+    def on_selection_changed(self,index):
+        sel=self.getSelection()
+        for a_sellabel,value in self.getSelections():
+            if sel == value:
+                self.exportSelectionChanged.emit((a_sellabel, value))
+                break
+    
+    def on_format_changed(self,index):
+        format=self.getFormat()
+        for a_flabel,value in self.getFormats():
+            if format == value:
+                self.exportFormatChanged.emit((a_flabel, value))
+                break
+    
+    def on_field_selection_changed(self,checked):
+        ch_fields=self.getSelectedFields()
+        self.exportFieldsChanged.emit(ch_fields)
    
 
 # Example — default configuration
