@@ -11,7 +11,7 @@ class CloneMapDialog(QtWidgets.QDialog):
 
     def __init__(
         self,
-        fmap: FileMapCliManager, databases, db_from, map_name, parent=None):
+        fmap: FileMapCliManager, db_from, map_name, parent=None):
         super().__init__(parent)
 
         self.fmap = fmap
@@ -28,11 +28,18 @@ class CloneMapDialog(QtWidgets.QDialog):
         # Database
         self.database_combo = QtWidgets.QComboBox()
 
-        for db_full, db_name, db_file in databases:
-            self.database_combo.addItem(
-                f"{db_name} — {db_file}",
-                db_full,
-            )
+        db_list = self.fmap.get_active_databases_in_dbm()
+        databases = [
+            (
+                str(db.database_filepath),
+                str(db.name),
+                str(db.db_file),
+                bool(db.active),
+            ) for db in db_list]
+
+        for db_full, db_name, db_file,is_active in databases:
+            if is_active:
+                self.database_combo.addItem( f"{db_name} — {db_file}", db_full)
 
         # Select source database initially
         index = self.database_combo.findData(db_from)

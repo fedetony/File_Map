@@ -352,13 +352,12 @@ class FileMapCliManager:
         if a_map not in map_list:
             log.warning(f'[yellow]{a_map} is not in database!')
             return False
-        info_txt=self.cma.get_map_info_text(selected_db,a_map)    
+        map_info=self.cma.get_map_info_as_dict(selected_db,a_map)
         fm=self.cma.get_file_map(selected_db)
         if not fm:
             return False
-        data=fm.db.get_data_from_table(fm.mapper_reference_table,'*',f"tablename='{a_map}'")
         #field_list=['id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype']
-        path_to_map=os.path.join(data[0][5],data[0][3])
+        path_to_map=os.path.join(map_info['mount'],map_info['mappath'])
         new_tablename=self.cma.format_new_table_name(new_mapename,path_to_map)
         is_ok,msg=self.map_validation(database,new_tablename)
         if not is_ok:
@@ -916,14 +915,15 @@ class FileMapCliManager:
             if not fm:
                 continue
             dbname=self.fm.extract_filename(db_map_pair[0])
-            # Naming convention used in normal explorer {dbname}({db_map_pair[1]})
-            temp_map_name=f"{idx} {dbname}({db_map_pair[1]})"
+            # Naming convention used in normal explorer {dbname}::{db_map_pair[1]} 
+            # Not accepted "/'|><={}[]() Don't use spaces! Results_not found!
+            temp_map_name=f"{idx}-{dbname}::{db_map_pair[1]}"
             
             name_valid,msg=self.map_validation(temp_db,temp_map_name)
             if not name_valid:
                 temp_map_name = f"{idx}_{self.timestamp}_{db_map_pair[1]}"
                 if log_callback:
-                    log_callback(f"Map Name Invalid: {msg} - '{idx} {dbname}({db_map_pair[1]})' renamed to '{temp_map_name}'")
+                    log_callback(f"Map Name Invalid: {msg} - '{idx} {dbname}::{db_map_pair[1]}' renamed to '{temp_map_name}'")
                 
             # Create the table preseving type and data
             description= fm.db.describe_table_in_db(db_map_pair[1])
@@ -962,6 +962,12 @@ class FileMapCliManager:
             temp_fm.db.create_table(temp_map_name,type_cols,False)
             original_info=self.cma.get_map_info_as_dict(db_map_pair[0],db_map_pair[1])
             # Add new table to index
+            if (not original_info 
+                or 'mount' not in original_info.keys() 
+                or 'mappath' not in original_info.keys()):
+                if log_callback:
+                    log_callback(f"Failed to find Original info: {original_info}")
+                continue
             path_to_map=os.path.join(original_info['mount'], original_info['mappath'])
             # Add original data to the temporal reference
             temp_fm.add_table_to_mapper_index(temp_map_name, 
@@ -986,6 +992,7 @@ class FileMapCliManager:
                     log_callback(f"Failed to copy {temp_map_name}: {msg}")
                 continue
 
+            # data=temp_fm.db.get_data_from_table(temp_map_name,'*')
             len_data=temp_fm.db.get_number_or_rows_in_table(temp_map_name)
             idx_map[idx] = {
                 "name": temp_map_name,

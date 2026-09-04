@@ -23,9 +23,14 @@ class SQLiteDatabase:
         self.key = akey
         self.password = password
         self.db_is_encrypted = False
+        self.log_cb=print
         if encrypt and akey:
             self.db_is_encrypted = True
         self.create_connection()
+    
+    def set_log_callback(self,log_callback):
+        if log_callback:
+            self.log_cb=log_callback
 
     def encrypt_db(self):
         """Encrypt AES-256 the database.
@@ -94,9 +99,9 @@ class SQLiteDatabase:
             self.decrypt_db()
         try:
             self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
-            print(f"Connected to {self.db_path}")
+            self.log_cb(f"Connected to {self.db_path}")
         except sqlite3.Error as eee:
-            print(f"Could not connect to {self.db_path} {eee}")
+            self.log_cb(f"Could not connect to {self.db_path} {eee}")
 
     def create_table(self, table_name: str, columns: list[tuple], temporary: bool = False):
         """Creates table if it does not exist
@@ -107,11 +112,11 @@ class SQLiteDatabase:
             (Column name, Data type, Not null constraint)
         """
         if len(columns) == 0:
-            print("No items to make table")
+            self.log_cb("No items to make table")
             return
 
         if len(columns[0]) != 3:
-            print("Wrong size of tuple: (Column name, Data type, Not null constraint)")
+            self.log_cb("Wrong size of tuple: (Column name, Data type, Not null constraint)")
             return
 
         # Create the table
@@ -121,7 +126,7 @@ class SQLiteDatabase:
             if temporary:
                 temp = "TEMPORARY "
             sql = "CREATE " + temp + "TABLE "
-            sql = sql + self.quotes(table_name) + " (id INTEGER PRIMARY KEY AUTOINCREMENT"
+            sql = sql + self.quote_identifier(table_name) + " (id INTEGER PRIMARY KEY AUTOINCREMENT"
             for a_tup in columns:
                 (column_name, data_type, not_null_constraint) = a_tup
                 if column_name != "id":
@@ -138,7 +143,7 @@ class SQLiteDatabase:
         except sqlite3.OperationalError:
             pass
         except sqlite3.Error as eee:
-            print(f"Error Creating table: {eee}")
+            self.log_cb(f"Error Creating table: {eee}")
 
     def clone_table(self, table_name: str, clone_table_name: str):
         """Creates a clone of the table
@@ -150,15 +155,15 @@ class SQLiteDatabase:
         clone_table_name=clone_table_name.strip()
         table_name=table_name.strip()
         if self.table_exists(clone_table_name):
-            print("Not a valid table name: Table already exists")
+            self.log_cb("Not a valid table name: Table already exists")
             return
         
         if table_name.strip() == clone_table_name.strip():
-            print("Not a valid table name: Same as the original")
+            self.log_cb("Not a valid table name: Same as the original")
             return
 
         if len(clone_table_name.strip()) == 0:
-            print("Empty clone_table_name!")
+            self.log_cb("Empty clone_table_name!")
             return
 
         # Create the table preseving type and data
@@ -188,12 +193,12 @@ class SQLiteDatabase:
             c = self.conn.cursor()
             # Update the specified column with the given value for all rows that match the condition
             for row_data in data:
-                c.execute(f"INSERT INTO {self.quotes(clone_table_name)} {sqltxt}", row_data)
+                c.execute(f"INSERT INTO {self.quote_identifier(clone_table_name)} {sqltxt}", row_data)
             self.commit()
         except sqlite3.OperationalError:
             pass
         except sqlite3.Error as eee:
-            print(f"Error Creating cloned table: {eee}")
+            self.log_cb(f"Error Creating cloned table: {eee}")
 
     def send_sql_command(self, sql, table_to_lock=None):
         """Send any sql command, if a specific table needs to be locked then specify the table_name.
@@ -210,7 +215,7 @@ class SQLiteDatabase:
         except sqlite3.OperationalError:
             pass
         except sqlite3.Error as eee:
-            print(f"Error Executing sql:\n{sql}\nError: {eee}")
+            self.log_cb(f"Error Executing sql:\n{sql}\nError: {eee}")
         finally:
             # Release all resources
             c.close()
@@ -238,16 +243,18 @@ class SQLiteDatabase:
         """Delete a table from the database"""
         try:
             c = self.conn.cursor()
-            c.execute("DROP TABLE IF EXISTS " + self.quotes(table_name))
+            c.execute("DROP TABLE IF EXISTS " + self.quote_identifier(table_name))
             if log_print:
-                print(f"Table {table_name} deleted")
+                self.log_cb(f"Table {table_name} deleted")
             self.commit()
         except sqlite3.Error as eee:
-            print(eee)
+            self.log_cb(eee)
 
     @staticmethod
     def quotes(txt: str) -> str:
         """Adds quotes accordingly to the text"""
+        if not txt:
+            return ""
         if "'" in txt and '"' in txt:
             if txt.startswith("'") and txt.endswith("'") and "'" not in txt[1:-1]:
                 return txt  # is already '' quoted
@@ -292,16 +299,16 @@ class SQLiteDatabase:
             c = self.conn.cursor()
             c.execute(
                 "ALTER TABLE IF EXISTS "
-                + self.quotes(table_name)
+                + self.quote_identifier(table_name)
                 + " RENAME COLUMN "
-                + self.quotes(column_name)
+                + self.quote_identifier(column_name)
                 + " TO "
-                + self.quotes(new_column_name)
+                + self.quote_identifier(new_column_name)
             )
-            print(f"Column {column_name} renamed to {new_column_name}")
+            self.log_cb(f"Column {column_name} renamed to {new_column_name}")
             self.commit()
         except sqlite3.Error as eee:
-            print(eee)
+            self.log_cb(eee)
         finally:
             # Release all resources
             c.close()
@@ -310,11 +317,11 @@ class SQLiteDatabase:
         """Remove a column from the database"""
         try:
             c = self.conn.cursor()
-            c.execute("ALTER TABLE IF EXISTS " + self.quotes(table_name) + " DROP COLUMN " + self.quotes(column_name))
-            print(f"Column {column_name} removed")
+            c.execute("ALTER TABLE IF EXISTS " + self.quote_identifier(table_name) + " DROP COLUMN " + self.quote_identifier(column_name))
+            self.log_cb(f"Column {column_name} removed")
             self.commit()
         except sqlite3.Error as eee:
-            print(eee)
+            self.log_cb(eee)
         finally:
             # Release all resources
             c.close()
@@ -360,7 +367,7 @@ class SQLiteDatabase:
         rows = self.get_data_from_table(table)
         # Print the values of each row
         for row in rows:
-            print(row)
+            self.log_cb(row)
 
     def get_data_from_table(self, table: str, column_filter: str = "*", where: str = None) -> list:
         """returns the data in the rows
@@ -375,7 +382,7 @@ class SQLiteDatabase:
         """
         d_data = []
         sql = "SELECT "
-        sql = sql + column_filter + " FROM " + self.quotes(table)
+        sql = sql + column_filter + " FROM " + self.quote_identifier(table)
         if where:
             sql = sql + " WHERE " + where
         try:
@@ -383,7 +390,7 @@ class SQLiteDatabase:
             c.execute(sql)
             d_data = c.fetchall()
         except sqlite3.Error as eee:
-            print(eee)
+            self.log_cb(f"error get_data_from_table -> {eee}")
             # Release all resources
             # if c:
             #     c.close()
@@ -403,7 +410,7 @@ class SQLiteDatabase:
             c.execute(sql)
             d_data = c.fetchall()
         except sqlite3.Error as eee:
-            print(eee)
+            self.log_cb(eee)
         return d_data
 
     def delete_data_from_table(self, table: str, where: str = None):
@@ -414,7 +421,7 @@ class SQLiteDatabase:
             where (str, optional): add condition statement. Defaults to None.
         """
         sql = "DELETE "
-        sql = sql + " FROM " + self.quotes(table)
+        sql = sql + " FROM " + self.quote_identifier(table)
         if where:
             sql = sql + " WHERE " + where
         try:
@@ -422,7 +429,7 @@ class SQLiteDatabase:
             c.execute(sql)
             self.commit()
         except sqlite3.Error as eee:
-            print(eee)
+            self.log_cb(eee)
         finally:
             # Release all resources
             c.close()
@@ -440,44 +447,63 @@ class SQLiteDatabase:
             c = self.conn.cursor()
             # Update the specified column with the given value for all rows that match the condition
             c.execute(
-                f"UPDATE {self.quotes(table_name)} SET {self.quotes(column_name)} = ? WHERE id = ?", (new_value, an_id)
+                f"UPDATE {self.quote_identifier(table_name)} SET {self.quote_identifier(column_name)} = ? WHERE id = ?", (new_value, an_id)
             )
-            # print("Row updated successfully")
+            # self.log_cb("Row updated successfully")
             self.commit()
             time.sleep(WAIT_TIME_WRITING)
             return True
         except sqlite3.Error as eee:
-            print(eee)
+            self.log_cb(eee)
             return False
         finally:
             # Release all resources
             c.close()
     
-    def edit_column_in_table(self, table_name: str, column_name: str, new_column_values):
-        """Edits a complete column of the table with new values.
-
-        Args:
-            table_name (str): table
-            column_name (str): column item
-            new_column_values (_type_): values of column
-        """
+    def edit_column_in_table( self, table_name: str, column_name: str, new_column_values):
+        """Edit a complete column, assigning one value to each row by row order."""
         try:
-            description=self.describe_table_in_db(table_name)
+            description = self.describe_table_in_db(table_name)
             c = self.conn.cursor()
-            # Create an UPDATE query that updates all rows in the specified table and sets the given column to the provided value.
-            update_query = f"UPDATE {self.quotes(table_name)} SET {column_name} = ?"
-            
-            # Use a tuple of values for updating multiple columns at once
-            c.executemany(update_query, [(new_value,) for new_value in new_column_values])
+            # Get row IDs in a deterministic order.
+            c.execute(
+                f'SELECT "id" FROM {self.quote_identifier(table_name)} '
+                'ORDER BY "id"'
+            )
+            ids = [row[0] for row in c.fetchall()]
+
+            if len(ids) != len(new_column_values):
+                raise ValueError(
+                    f"Number of values ({len(new_column_values)}) does not "
+                    f"match number of rows ({len(ids)})"
+                )
+
+            update_query = (
+                f'UPDATE {self.quote_identifier(table_name)} '
+                f'SET {self.quote_identifier(column_name)} = ? '
+                f'WHERE "id" = ?'
+            )
+
+            c.executemany(
+                update_query,
+                [
+                    (new_value, row_id)
+                    for row_id, new_value in zip(ids, new_column_values)
+                ],
+            )
+
             self.commit()
             time.sleep(WAIT_TIME_WRITING)
+
             return True
-        except sqlite3.Error as eee:
-            print(eee)
+
+        except (sqlite3.Error, ValueError) as eee:
+            self.log_cb(eee)
             return False
+
         finally:
-            # Release all resources
             c.close()
+
 
     def table_exists(self, table: str) -> bool:
         """Table exists
@@ -494,7 +520,7 @@ class SQLiteDatabase:
             c.execute(sql)
             return len(c.fetchall()) > 0
         except (sqlite3.OperationalError, ValueError) as eee:
-            print("No table:", eee)
+            self.log_cb("No table:", eee)
             return False
 
     def describe_table_in_db(self, table: str) -> list:
@@ -518,16 +544,16 @@ class SQLiteDatabase:
         description = []
         try:
             c = self.conn.cursor()
-            c.execute(f"PRAGMA table_info({self.quotes(table)})")
+            c.execute(f"PRAGMA table_info({self.quote_identifier(table)})")
             description = c.fetchall()
-            # print(table,": ",description)
+            # self.log_cb(table,": ",description)
         except sqlite3.OperationalError as eee:
-            print("No description:", eee)
+            self.log_cb("No description:", eee)
         # Print a string with the table name, column names, and data types
         # result = f"{table}: \n"
         # for row in description:
         #     result += f"- {row[0]} ({row[1]})\n"
-        # print(result)
+        # self.log_cb(result)
         return description
 
     def add_data_to_table_id(self, table: str, an_id: int, sample_data: tuple):
@@ -540,7 +566,7 @@ class SQLiteDatabase:
         """
         description = self.describe_table_in_db(table)
         if len(description) == 0:
-            print("No data in table")
+            self.log_cb("No data in table")
             return False
         column_name_list = []
         data_type_list = []
@@ -562,15 +588,15 @@ class SQLiteDatabase:
             # Update the specified column with the given value for all rows that match the condition
             if len(sample_data) == len(column_name_list) - 1:
 
-                c.execute(f"INSERT INTO {self.quotes(table)} {sqltxt}", (an_id,) + sample_data)
+                c.execute(f"INSERT INTO {self.quote_identifier(table)} {sqltxt}", (an_id,) + sample_data)
             else:
-                print(f"id or data size is not correct {column_name_list} != {sample_data}")
+                self.log_cb(f"id or data size is not correct {column_name_list} != {sample_data}")
                 return False
             self.commit()
             return True
-            # print("Row updated successfully")
+            # self.log_cb("Row updated successfully")
         except sqlite3.Error as eee:
-            print(eee)
+            self.log_cb(eee)
             return False
         finally:
             # Release all resources
@@ -649,7 +675,7 @@ class SQLiteDatabase:
                 (db_from,)
             )
             where_sql = f" WHERE {where}" if where else ""
-            # print("WHERE_SQL:      ", where_sql)
+            # self.log_cb("WHERE_SQL:      ", where_sql)
             if fields_from is None:
                 # ------------------------------------------------------
                 # Copy entire table
@@ -660,7 +686,7 @@ class SQLiteDatabase:
                     FROM {source_alias}.{self.quote_identifier(table_from)}
                     {where_sql}
                     """
-                # print("SQL:      ", sql)
+                # self.log_cb("SQL:      ", sql)
             else:
                 # ------------------------------------------------------
                 # Explicit field mapping
@@ -690,7 +716,7 @@ class SQLiteDatabase:
             return True, ""
 
         except sqlite3.Error as e:
-            print(e)
+            self.log_cb(e)
 
             try:
                 self.conn.rollback()
@@ -725,7 +751,7 @@ class SQLiteDatabase:
 
         description = self.describe_table_in_db(table)
         if not description:
-            print("No data in table")
+            self.log_cb("No data in table")
             return False
         # Exclude auto-generated ID column
         column_name_list = [
@@ -737,18 +763,18 @@ class SQLiteDatabase:
         # Validate all rows before touching the database
         for row in sample_data:
             if len(row) != expected:
-                print(
+                self.log_cb(
                     f"Data Size is not correct: "
                     f"expected {column_name_list}, got {row}"
                 )
                 return False
         columns = ", ".join(
-            self.quotes(column)
+            self.quote_identifier(column)
             for column in column_name_list
         )
         placeholders = ", ".join("?" for _ in column_name_list)
         sql = (
-            f"INSERT INTO {self.quotes(table)} "
+            f"INSERT INTO {self.quote_identifier(table)} "
             f"({columns}) VALUES ({placeholders})"
         )
 
@@ -759,7 +785,7 @@ class SQLiteDatabase:
             return True
 
         except sqlite3.Error as e:
-            print(e)
+            self.log_cb(e)
             return False
 
         finally:
@@ -791,9 +817,9 @@ class SQLiteDatabase:
                 if len(d_data[0]) > 0:
                     return d_data[0][0]
             #     else:
-            #         print("Debug---->>>",data)
+            #         self.log_cb("Debug---->>>",data)
             # else:
-            #     print("Debug---->>>",data)
+            #     self.log_cb("Debug---->>>",data)
         return None
 
     def reenumerate_id_sequence(self, table: str)->list:
@@ -806,13 +832,13 @@ class SQLiteDatabase:
         """
         try:
             self.rename_column_in_table(table,"id","old_id")
-            sql=f"ALTER TABLE IF EXISTS {self.quotes(table)} ADD COLUMN id INTEGER PRIMARY KEY AUTOINCREMENT"
+            sql=f"ALTER TABLE IF EXISTS {self.quote_identifier(table)} ADD COLUMN id INTEGER PRIMARY KEY AUTOINCREMENT"
             self.send_sql_command(sql,table)
             old_id_data=self.get_data_from_table(table,"id, old_id")
             self.remove_column_from_table(table,"old_id")
             return old_id_data
         except sqlite3.Error as eee:
-            print(eee)
+            self.log_cb(eee)
         return []    
 
     def add_column_to_table(self, table: str, column: str, column_type: str):
@@ -831,18 +857,40 @@ class SQLiteDatabase:
                 DATETIME: Stores a combination of date and time values in the format "YYYY-MM-DD HH:MM:SS".
                 BOOLEAN: Stores true or false values.
         """
-        # Connect to the database
+        valid_types = {
+            "INTEGER",
+            "REAL",
+            "TEXT",
+            "BLOB",
+            "DATE",
+            "TIME",
+            "DATETIME",
+            "BOOLEAN",
+        }
+
+        if column_type not in valid_types:
+            column_type = "TEXT"
+
+        c = self.conn.cursor()
+
         try:
-            c = self.conn.cursor()
-            # Add age and lastname columns to the users table
-            if column_type not in ["INTEGER", "REAL", "TEXT", "BLOB", "DATE", "TIME", "DATETIME", "BOOLEAN"]:
-                column_type = "TEXT"
-            c.execute(f"ALTER TABLE IF EXISTS {self.quotes(table)} ADD COLUMN {column} {column_type}")
+            if not self.table_exists(table):
+                return False
+
+            c.execute(
+                f"ALTER TABLE {self.quote_identifier(table)} "
+                f"ADD COLUMN {self.quote_identifier(column)} {column_type}"
+            )
+            self.conn.commit()
+            return True
+
         except sqlite3.Error as eee:
-            print(eee)
+            self.log_cb("Could not add column %s to table %s: %s", column, table, eee)
+            return False
+
         finally:
-            # Release all resources
             c.close()
+
 
 
 # Example usage

@@ -109,16 +109,18 @@ class DatabaseLazyLoader(LazyLoaderProvider):
         fm=None
         if node.i_am == "root":
             return fm
-        elif node.i_am == "database":
+        elif node.i_am == "database" and node.info:
             database = node.info
             fm=self.fmap.cma.get_file_map(database)
-        elif node.i_am == "map":
+        elif node.i_am == "map" and node.info:
             db_map_pair = node.info
             fm=self.fmap.cma.get_file_map(db_map_pair[0])
         else:
             bl=node.get_bloodline()
             if bl and len(bl)>2: #root->db->map
                 db_map_pair = bl[2].info
+                if not db_map_pair:
+                    return None
                 fm=self.fmap.cma.get_file_map(db_map_pair[0])                
         return fm
     
@@ -126,11 +128,11 @@ class DatabaseLazyLoader(LazyLoaderProvider):
         db_map_pair=None
         if node.i_am == "root":
             return db_map_pair
-        elif node.i_am == "database":
+        elif node.i_am == "database" and node.info:
             database = node.info
             node.db=database
             db_map_pair = None
-        elif node.i_am == "map":
+        elif node.i_am == "map" and node.info:
             node.db=node.info[0]
             node.map=node.info[1]
             return node.info
@@ -138,6 +140,8 @@ class DatabaseLazyLoader(LazyLoaderProvider):
             # db_map_pair=(node.parent.db,node.parent.map)
             bl=node.get_bloodline()
             if bl and len(bl)>2: #root->db->map
+                if not bl[2].info:
+                    return None
                 node.db=bl[2].info[0]
                 node.map=bl[2].info[1]
                 return bl[2].info
@@ -145,10 +149,7 @@ class DatabaseLazyLoader(LazyLoaderProvider):
 
     def _set_files_children_in_path(self, path, db_map_pair, fm: FileMapper,node: TreeNode):
         ext_path = path
-        # remove end separator
-        if path[-1] in ["/", "\\", os.sep]:
-            ext_path = path[:-1]
-
+    
         mount, serial = self.fmap.get_mount_serial_of_map(db_map_pair[0], db_map_pair[1])
         node.mount=mount
         node.serial=serial
@@ -159,18 +160,29 @@ class DatabaseLazyLoader(LazyLoaderProvider):
             ext_path = ext_path[1:]
         else:
             ext_path=self.fmap.fm.remove_mount_from_path(mount,ext_path,remove_start_separator=True)
+        
         # node.itempath = ext_path # path without / in the end
-        node.itempath=self._normalize_itempath(ext_path)
+        # remove end separator for itempath
+        itempath = ext_path
+        if ext_path and ext_path[-1] in ["/", "\\", os.sep] and len(ext_path)>1:
+            itempath = ext_path[:-1]
+        node.itempath=self._normalize_itempath(itempath)
+
         # print(f"File Set {node.name} -> {node.itempath}")
         a_map = db_map_pair[1]
         # ---------------------------
         # Direct files
         # ---------------------------
-        
+        #Here ext_path include / in the end and no / in start
         # data = fm.db.get_data_from_table(a_map, "*")
-
-        where = ("(replace(filepath, '\\', '/') = " + fm.db.quotes(ext_path)+")")
-        data_files = fm.db.get_data_from_table(a_map, "*", where)
+        where_files = (
+            "replace(filepath, char(92), '/') = "
+            + fm.db.quotes(ext_path)
+        )
+        data_files = fm.db.get_data_from_table(a_map, "*", where_files)
+        if not data_files:            
+            where1 = ("filepath = " + fm.db.quotes(ext_path))
+            data_files = fm.db.get_data_from_table(a_map, "*", where1)
         
         if not data_files:
             return 0
@@ -259,13 +271,13 @@ class DatabaseLazyLoader(LazyLoaderProvider):
         # Direct directories
         # ---------------------------
         where_dirs = (
-            "replace(filepath, '\\', '/') LIKE "
+            "replace(filepath, char(92), '/') LIKE "
             + fm.db.quotes(ext_path + "%")
         )
 
         relative_expr = (
             "substr("
-            "replace(filepath, '\\', '/'), "
+            "replace(filepath, char(92), '/'), "
             + str(len(ext_path) + 1)
             + ")"
         )
@@ -322,7 +334,7 @@ class DatabaseLazyLoader(LazyLoaderProvider):
     def _get_dir_size_sql(self, a_map, fm:FileMapper,ext_path):
         
         where_dirs = (
-            "replace(filepath, '\\', '/') LIKE "
+            "replace(filepath, char(92), '/') LIKE "
             + fm.db.quotes(ext_path + "%")
         )
         data_size = fm.db.get_data_from_table(
@@ -337,7 +349,7 @@ class DatabaseLazyLoader(LazyLoaderProvider):
     def _get_dir_quantity_sql(self, a_map, fm:FileMapper,ext_path):
         
         where_dirs = (
-            "replace(filepath, '\\', '/') LIKE "
+            "replace(filepath, char(92), '/') LIKE "
             + fm.db.quotes(ext_path + "%")
         )
         data_quant = fm.db.get_data_from_table(
@@ -382,7 +394,7 @@ class DatabaseLazyLoader(LazyLoaderProvider):
 
             return True, bl
         except Exception:
-            return None, None
+            return False, None
 
 
     def _node_selectable(self,node:TreeNode):

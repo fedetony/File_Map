@@ -292,7 +292,7 @@ class ForwardDBStructurer:
         # Direct files
         # ---------------------------
 
-        where = ("(replace(filepath, '\\', '/') = " + fm.db.quotes(ext_path)+")")
+        where = ("(replace(filepath, char(92), '/') = " + fm.db.quotes(ext_path)+")")
         data_files = fm.db.get_data_from_table(a_map, "*", where)
         
         if not data_files:
@@ -392,13 +392,13 @@ class ForwardDBStructurer:
         # Direct directories
         # ---------------------------
         where_dirs = (
-            "replace(filepath, '\\', '/') LIKE "
+            "replace(filepath, char(92), '/') LIKE "
             + fm.db.quotes(ext_path + "%")
         )
 
         relative_expr = (
             "substr("
-            "replace(filepath, '\\', '/'), "
+            "replace(filepath, char(92), '/'), "
             + str(len(ext_path) + 1)
             + ")"
         )

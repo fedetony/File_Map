@@ -700,16 +700,7 @@ class MappingMenu(QtCore.QObject):
         db_from = self._get_db_from_context(context)
         map_from = self._get_map_from_context(context)
 
-        db_list = self.fmap.get_active_databases_in_dbm()
-
-        databases = [
-            (
-                str(db.database_filepath),
-                str(db.name),
-                str(db.db_file),
-            ) for db in db_list]
-
-        dialog = CloneMapDialog(self.fmap, databases, db_from, map_from, self.parent_widget)
+        dialog = CloneMapDialog(self.fmap, db_from, map_from, self.parent_widget)
 
         if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
             return
@@ -810,7 +801,7 @@ class MappingMenu(QtCore.QObject):
         self.search_dialog=search_setter.get_dialog() 
         if not isinstance(self.search_dialog,SearchDialog):
             return    
-        self.search_dialog.refresh_mapping_tree.connect(lambda: self.generate_mapping_struct)
+        self.search_dialog.refresh_mapping_tree.connect(self.generate_mapping_struct)
         # Mapping State
         self.search_dialog.mapping_is_running_signal.connect(
             lambda: self._set_mapping_state(is_mapping= True))
@@ -876,7 +867,7 @@ class MappingMenu(QtCore.QObject):
         if not isinstance(dialog,SelectionDialog):
             return
         db = self._get_databaseinfo_from_context(context)
-        dialog.refresh_mapping_tree.connect(lambda: self.generate_mapping_struct)
+        dialog.refresh_mapping_tree.connect(self.generate_mapping_struct)
         self.dialog_register[database] = {
             "dbinfo": db,
             "dialog": dialog,
@@ -965,7 +956,7 @@ class MappingMenu(QtCore.QObject):
     def _register_connect_show(self,context,dialog:MappingDialog):
         database = self._get_db_from_context(context)
         db = self._get_databaseinfo_from_context(context)
-        dialog.refresh_mapping_tree.connect(lambda: self.generate_mapping_struct)
+        dialog.refresh_mapping_tree.connect(self.generate_mapping_struct)
         self.dialog_register[database] = {
             "dbinfo": db,
             "dialog": dialog,

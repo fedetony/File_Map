@@ -296,9 +296,7 @@ class FileMapper:
         """
         db = self.db
         # if not db.table_exists(self.mapper_reference_table):
-        db.create_table(
-            self.mapper_reference_table,
-            [
+        mapper_list=[
                 ("dt_map_created", "DATETIME DEFAULT CURRENT_TIMESTAMP", True),
                 ("dt_map_modified", "DATETIME", True),
                 ("mappath", "TEXT", True),
@@ -307,8 +305,11 @@ class FileMapper:
                 ("serial", "TEXT", True),
                 ("mapname", "TEXT", True),
                 ("maptype", "TEXT", True),
-            ],
-        )
+                ("origin_db", "TEXT", True),
+                ("origin_map", "TEXT", True),
+            ]
+        db.create_table(self.mapper_reference_table, mapper_list)
+        self._resize_mapper_reference_to_new_columns(db,mapper_list)
         db_result = DBResult(db.describe_table_in_db(self.mapper_reference_table))
         db_result.set_values(db.get_data_from_table(self.mapper_reference_table, "*", f"tablename={db.quotes(table_name)}"))
         table_indexed = False
@@ -322,6 +323,8 @@ class FileMapper:
         if not table_indexed:
             print(f"Table {table_name} is Not in reference indexed")
         mapname = ""
+        origin_db = ""
+        origin_map = ""
         if not table_type:
             maptype = MapType.DEVICE.value #"Device Map"
         else:
@@ -341,7 +344,7 @@ class FileMapper:
             was_indexed = db.edit_value_in_table(self.mapper_reference_table, an_id, "mount", mount)
         else:
             print(f"Indexing table {table_name}")
-            data = [(dt_map_created, dt_map_modified, mappath, table_name, mount, serial, mapname, maptype)]
+            data = [(dt_map_created, dt_map_modified, mappath, table_name, mount, serial, mapname, maptype, origin_db, origin_map)]
             was_indexed = db.insert_data_to_table(self.mapper_reference_table, data)
         if not was_indexed:
             print(f"[red] Table {table_name} was not correctly indexed!!")
@@ -349,6 +352,17 @@ class FileMapper:
         # # check
         # if db.get_number_or_rows_in_table(self.mapper_reference_table):
         #     raise ValueError("No data was added to index")
+    
+    def _resize_mapper_reference_to_new_columns(self,db: SQLiteDatabase, mapper_list:list):
+        """Adds new columns to an existing reference table with missing fields"""
+        mapper_fields=db.get_column_list_of_table(self.mapper_reference_table)
+        for map_field_tup in mapper_list:
+            col_name=map_field_tup[0]
+            col_type=map_field_tup[1]
+            if col_name not in mapper_fields:
+                db.add_column_to_table(table=self.mapper_reference_table,
+                                       column=col_name,
+                                       column_type=col_type)
 
     def map_to_file_structure(
         self, a_map, where=None, fields_to_tab: list[str] = None, sort_by: list = None, 
@@ -681,7 +695,8 @@ class FileMapper:
             an_id=self.get_table_id(selection_name)
             if an_id:
                 self.db.insert_data_to_table(selection_name,map_data)
-            self.set_mapname(selection_name,origin_map)
+            # self.set_mapname(selection_name,origin_map)
+            self.set_origin_db_map(selection_name,origin_map=origin_map) #same db
 
     def _create_map_in_db(self,table_name):
         """Creates map structure with table_name"""
@@ -1352,6 +1367,25 @@ class FileMapper:
         an_id=self.get_table_id(table_name)
         if an_id:
             self.db.edit_value_in_table(self.mapper_reference_table, an_id, "mapname", name)
+        
+    def set_origin_db_map(self, table_name, origin_db="",origin_map=""):
+        """Sets origin database and map fields in Reference
+
+        Args:
+            table_name (str): table
+            origin_db (str): Changed if value given.Defaults to "".
+            origin_map (str): Changed if value given.Defaults to "".
+        """
+        an_id=self.get_table_id(table_name)
+        if not an_id:
+            return
+        try:
+            if origin_db:
+                self.db.edit_value_in_table(self.mapper_reference_table, an_id, "origin_db", origin_db)
+            if origin_map:
+                self.db.edit_value_in_table(self.mapper_reference_table, an_id, "origin_map", origin_map)
+        except Exception as eee:
+            print(f"error in set_origin_db_map:{eee}")
 
     def get_referenced_attribute(self, attr):
         """Returns the column of mapper_reference_table as list for the attribute

@@ -4,6 +4,7 @@ import json
 from models.class_explorer_tree_model import *
 from controllers.class_filemap_cli_manager import FileMapCliManager
 from widgets.class_export_widget import *
+from class_file_structurer import FileStructurer
 
 class NodeExportFilters:
     @staticmethod
@@ -493,11 +494,11 @@ class TableTextExporter:
     # ==========================================================
     # Row generation
     # ==========================================================
-    def _get_node_row(
-        self,
-        node: TreeNode,
-        fields: list[str],
-    ) -> list:
+    def get_node_row(self, node: TreeNode, fields: list[str]) -> list:
+        """Api call for getting values out of a node"""
+        self._get_node_row(node,fields)
+
+    def _get_node_row(self, node: TreeNode, fields: list[str]) -> list:
         info = self._parse_node_info(node)
         row = []
         for field in fields:
@@ -810,6 +811,456 @@ class TabulatedTableTextExporter:
 
         return rows_written
 
+
+class FileStructureJsonExporter:
+    """
+    Export the file structure represented by a loaded TreeNode hierarchy.
+
+    The exporter operates only on the nodes currently present in the tree.
+    It does not query the database to discover additional files.
+
+    File nodes are processed in batches so that the intermediate
+    FileStructure created for each batch remains bounded in size.
+
+    The project's FileStructure merge functions are used to combine
+    the individual batch structures.
+
+    Notes:
+        A FileStructure may contain dictionaries and lists. Lists are
+        valid FileStructure containers according to the project's
+        FileStructure representation.
+    """
+
+    def __init__(self, fmap: FileMapCliManager):
+        self.fmap = fmap
+        self._fields_cache = {}
+
+    # ==========================================================
+    # Field handling
+    # ==========================================================
+
+    def _get_fields(self, node:TreeNode) -> list[str]:
+        """
+        Return the database fields associated with a file node.
+
+        Field definitions are cached by ``(node.db, node.map)`` because
+        all file nodes belonging to the same database/map pair share
+        the same database field order.
+        """
+        if not node:
+            return []
+
+        if node.i_am != "file":
+            return []
+
+        if not node.db or not node.map:
+            return []
+
+        cache_key = (node.db, node.map)
+
+        if cache_key in self._fields_cache:
+            return self._fields_cache[cache_key]
+
+        fm = self.fmap.cma.get_file_map(node.db)
+
+        if not fm:
+            self._fields_cache[cache_key] = []
+            return []
+
+        fields = fm.db.get_column_list_of_table(node.map)
+
+        self._fields_cache[cache_key] = fields
+
+        return fields
+
+    # ==========================================================
+    # Node traversal
+    # ==========================================================
+
+    def _iter_file_nodes(
+        self,
+        start_node:TreeNode,
+        *,
+        node_filter=None,
+        max_level=None,
+    ):
+        """
+        Yield file nodes one at a time.
+
+        Uses an explicit stack so traversal does not depend on
+        Python recursion depth.
+        """
+        if start_node is None:
+            return
+
+        stack = [start_node]
+
+        while stack:
+            node = stack.pop()
+            if node is None:
+                continue
+            # --------------------------------------------------
+            # Level limit
+            # --------------------------------------------------
+            if (max_level is not None and node.level > max_level):
+                continue
+
+            # --------------------------------------------------
+            # File node
+            # --------------------------------------------------
+            # if node.i_am == "file":
+            if (node_filter is None or node_filter(node)):
+                yield node
+                # Files normally have no children.
+                if node.i_am == "file":
+                    continue
+            # --------------------------------------------------
+            # Stop descending beyond max level
+            # --------------------------------------------------
+            if (max_level is not None and node.level >= max_level):
+                continue
+            # --------------------------------------------------
+            # Traverse children
+            # --------------------------------------------------
+            for child in reversed(node.children):
+                stack.append(child)
+
+    # ==========================================================
+    # Batched traversal
+    # ==========================================================
+
+    def iter_file_node_batches(
+        self,
+        start_node:TreeNode,
+        batch_size: int = 100,
+        node_filter=None,
+        max_level=None,
+    ):
+        """
+        Yield file nodes in batches.
+
+        A batch ends when either ``batch_size`` is reached or the
+        database/map pair changes.
+
+        Therefore every yielded batch contains file nodes belonging
+        to the same ``(db, map)`` pair.
+
+        Args:
+            start_node:
+                Node where traversal starts.
+
+            batch_size:
+                Maximum number of file nodes per batch.
+
+            node_filter:
+                Optional callable(node) -> bool.
+
+            max_level:
+                Optional maximum tree level.
+
+        Yields:
+            list:
+                A homogeneous batch of file nodes.
+        """
+        if start_node is None:
+            return
+        if batch_size <= 0:
+            raise ValueError("batch_size must be greater than zero")
+        batch = []
+
+        batch_db = None
+        batch_map = None
+
+        for node in self._iter_file_nodes(
+            start_node,
+            node_filter=node_filter,
+            max_level=max_level,
+            ):
+            node_pair = (node.db, node.map)
+            # --------------------------------------------------
+            # Database/map changed.
+            #
+            # Finish the current batch before starting another
+            # database/map pair.
+            # --------------------------------------------------
+            if batch and node_pair != (batch_db, batch_map):
+                yield batch
+
+                batch = []
+                batch_db = None
+                batch_map = None
+
+            # --------------------------------------------------
+            # Start a new batch
+            # --------------------------------------------------
+            if not batch:
+                batch_db = node.db
+                batch_map = node.map
+            # only add file nodes...
+            if node.i_am == "file":
+                batch.append(node)
+
+            # --------------------------------------------------
+            # Batch full
+            # --------------------------------------------------
+            if len(batch) >= batch_size:
+                yield batch
+
+                batch = []
+                batch_db = None
+                batch_map = None
+
+        # ------------------------------------------------------
+        # Remaining nodes
+        # ------------------------------------------------------
+        if batch:
+            yield batch
+
+    # ==========================================================
+    # Node info
+    # ==========================================================
+
+    def _parse_node_info(self, node) -> dict:
+        """
+        Convert the positional node.info data into a field
+        dictionary using the database column order.
+        """
+        if not node:
+            return {}
+
+        if node.i_am != "file":
+            return {}
+
+        if not node.info:
+            return {}
+
+        fields = self._get_fields(node)
+
+        if not fields:
+            return {}
+
+        return dict(zip(fields, node.info))
+    
+    # ==========================================================
+    # Batch iterator
+    # ==========================================================
+
+    def iter_file_structure_batches(
+        self,
+        start_node,
+        *,
+        fields: list[str] | None = None,
+        batch_size: int = 100,
+        node_filter=None,
+        max_level=None,
+        ):
+        """
+        Yield FileStructure objects one batch at a time.
+
+        This is the main memory-friendly API.
+
+        Example:
+
+            for fs_batch in exporter.iter_file_structure_batches(
+                start_node,
+                batch_size=500,
+            ):
+                process(fs_batch)
+
+        A yielded value may be either:
+
+            dict
+
+        or:
+
+            list
+
+        because both are valid FileStructure representations.
+        """
+        if start_node is None:
+            return
+
+        for nodes in self.iter_file_node_batches(
+            start_node,
+            batch_size=batch_size,
+            node_filter=node_filter,
+            max_level=max_level,
+        ):
+            if not nodes:
+                continue
+
+            fs_batch = self._get_file_structure_batch(nodes, fields)
+
+            if fs_batch:
+                yield fs_batch
+
+    # ==========================================================
+    # Merge batch FileStructures
+    # ==========================================================
+
+    def merge_file_structure_batches(self, fs_batches):
+        """
+        Merge a sequence of FileStructure batches.
+
+        ``merge_file_structure_lists()`` is the general merge
+        operation because a FileStructure may itself be a list.
+
+        The result is a valid FileStructure:
+
+            dict
+            or
+            list
+        """
+        merged_list = []
+
+        for fs_batch in fs_batches:
+            if not fs_batch:
+                continue
+            # A dictionary is one FileStructure item.
+            if isinstance(fs_batch, dict):
+                batch_list = [fs_batch]
+            # A list is already a FileStructure list.
+            elif isinstance(fs_batch, list):
+                batch_list = fs_batch
+            else:
+                continue
+
+            if not merged_list:
+                merged_list = list(batch_list)
+                continue
+
+            merged_list = self.fmap.fm.merge_file_structure_lists(
+                merged_list, batch_list)
+
+        # ------------------------------------------------------
+        # Preserve the convenient dict representation when there
+        # is only one structure.
+        # ------------------------------------------------------
+        if len(merged_list) == 1:
+            return merged_list[0]
+
+        return merged_list
+
+    # ==========================================================
+    # Public API
+    # ==========================================================
+
+    def dump_to_json(
+        self,
+        filename,
+        start_node,
+        fields: list[str] | None = None,
+        batch_size: int = 100,
+        node_filter=None,
+        max_level=None,
+    ):
+        """
+        Export loaded TreeNode data to a JSON FileStructure.
+
+        Each batch is written as one item in a top-level FileStructure
+        list. Since lists are valid FileStructures, the resulting JSON
+        remains compatible with the FileStructure representation.
+
+        Memory usage is bounded approximately by the size of one batch.
+        """
+        if start_node is None:
+            return 0
+
+        batches_written = 0
+
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write("[\n")
+            first_batch = True
+            for fs_batch in self.iter_file_structure_batches(
+                start_node,
+                fields=fields,
+                batch_size=batch_size,
+                node_filter=node_filter,
+                max_level=max_level,
+            ):
+                if not fs_batch:
+                    continue
+
+                if not first_batch:
+                    f.write(",\n")
+
+                json.dump(fs_batch, f, ensure_ascii=False, indent=2)
+                first_batch = False
+                batches_written += 1
+            f.write("\n]")
+        return batches_written
+    
+    # ==========================================================
+    # Batch -> FileStructure
+    # ==========================================================
+
+    def _get_file_structure_batch(
+        self,
+        nodes: list[TreeNode],
+        fields: list[str],
+        ):
+       
+        if not nodes:
+            return {}
+        # --------------------------------------------------
+        # DataFrame
+        # --------------------------------------------------
+        df = self.batch_to_dataframe(nodes,fields)
+        
+        if df.empty:
+            return {}
+        
+        fields_2_tab = []
+
+        for field in fields:
+            if field in ("filename", "size"):
+                continue
+            fields_2_tab.append(field)
+
+        FS=FileStructurer(df,fields_2_tab,log_callback=print)
+        fs_batch=FS.get_file_structure()
+        node = nodes[0]
+        node_db=self.fmap.fm.extract_filename(node.db)
+        node_map=node.map
+
+        if not node_db in node_map:
+            fdb_dict={f"{node_db}::{node_map}":fs_batch}
+        else: 
+            fdb_dict={f"{node_map}":fs_batch}
+
+        return fdb_dict
+    
+    def batch_to_dataframe(self,nodes: list[TreeNode], fields: list[str]):
+        """
+        Convert one batch of file nodes into a DataFrame.
+        """
+        rows = [self._get_node_row(node, fields)
+            for node in nodes]
+
+        return pd.DataFrame(
+            rows, columns=fields)
+    
+    def _get_node_row(self, node: TreeNode, fields: list[str]) -> list:
+        """
+        Return the requested field values for one file node.
+        """
+        info = self._parse_node_info(node)
+        row = []
+        for field in fields:
+            # --------------------------------------------------
+            # Direct TreeNode attribute
+            # --------------------------------------------------
+            if hasattr(node, field):
+                row.append(getattr(node, field))
+                continue
+
+            # --------------------------------------------------
+            # Database info stored in node.info
+            # --------------------------------------------------
+            row.append(info.get(field, ""))
+
+        return row
+
     
 class ExporterHandler:
 
@@ -1044,12 +1495,13 @@ class ExporterHandler:
         """
         batch_size = self.fmap.cfg.export.get("batch_size", 100)
         if selection == "directory_tree":
+            # no directory filestructure -> same as file tree
             self.filestruct_ex.dump_to_json(
                 filename=self.filepath_target,
                 start_node=self.root_node,
                 batch_size=batch_size,
                 fields=field_list,
-                node_filter=self.filters.container,
+                node_filter=self.filters.all,
                 max_level=None,
             )
 
@@ -1084,561 +1536,3 @@ class ExporterHandler:
             )
 
 
-        # {'selection': 'expanded', 'format': 'filestruct_json', 'fields': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], 'target': 'File_Map/export.json'}
-        # {'selection': 'expanded', 'format': 'list_txt', 'fields': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], 'target': 'File_Map/export.txt'}
-        # {'selection': 'expanded', 'format': 'list_csv', 'fields': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], 'target': 'File_Map/export.csv'}
-        # {'selection': 'expanded', 'format': 'text_tree', 'fields': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], 'target': 'File_Map/export.txt'}
-        # {'selection': 'selected', 'format': 'text_tree', 'fields': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], 'target': 'File_Map/export.txt'}
-        # {'selection': 'file_tree', 'format': 'text_tree', 'fields': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], 'target': 'File_Map/export.txt'}
-        # {'selection': 'directory_tree', 'format': 'text_tree', 'fields': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], 'target': 'File_Map/export.txt'}
-
-
-class FileStructureJsonExporter:
-    """
-    Export the file structure represented by a loaded TreeNode hierarchy.
-
-    The exporter operates only on the nodes currently present in the tree.
-    It does not query the database to discover additional files.
-
-    File nodes are processed in batches so that the intermediate
-    FileStructure created for each batch remains bounded in size.
-
-    The project's FileStructure merge functions are used to combine
-    the individual batch structures.
-
-    Notes:
-        A FileStructure may contain dictionaries and lists. Lists are
-        valid FileStructure containers according to the project's
-        FileStructure representation.
-    """
-
-    def __init__(self, fmap: FileMapCliManager):
-        self.fmap = fmap
-        self._fields_cache = {}
-
-    # ==========================================================
-    # Field handling
-    # ==========================================================
-
-    def _get_fields(self, node:TreeNode) -> list[str]:
-        """
-        Return the database fields associated with a file node.
-
-        Field definitions are cached by ``(node.db, node.map)`` because
-        all file nodes belonging to the same database/map pair share
-        the same database field order.
-        """
-        if not node:
-            return []
-
-        if node.i_am != "file":
-            return []
-
-        if not node.db or not node.map:
-            return []
-
-        cache_key = (node.db, node.map)
-
-        if cache_key in self._fields_cache:
-            return self._fields_cache[cache_key]
-
-        fm = self.fmap.cma.get_file_map(node.db)
-
-        if not fm:
-            self._fields_cache[cache_key] = []
-            return []
-
-        fields = fm.db.get_column_list_of_table(node.map)
-
-        self._fields_cache[cache_key] = fields
-
-        return fields
-
-    # ==========================================================
-    # Node traversal
-    # ==========================================================
-
-    def _iter_file_nodes(
-        self,
-        start_node:TreeNode,
-        *,
-        node_filter=None,
-        max_level=None,
-    ):
-        """
-        Yield file nodes one at a time.
-
-        Uses an explicit stack so traversal does not depend on
-        Python recursion depth.
-        """
-        if start_node is None:
-            return
-
-        stack = [start_node]
-
-        while stack:
-            node = stack.pop()
-            if node is None:
-                continue
-            # --------------------------------------------------
-            # Level limit
-            # --------------------------------------------------
-            if (max_level is not None and node.level > max_level):
-                continue
-
-            # --------------------------------------------------
-            # File node
-            # --------------------------------------------------
-            if node.i_am == "file":
-                if (node_filter is None or node_filter(node)):
-                    yield node
-                # Files normally have no children.
-                continue
-            # --------------------------------------------------
-            # Stop descending beyond max level
-            # --------------------------------------------------
-            if (max_level is not None and node.level >= max_level):
-                continue
-            # --------------------------------------------------
-            # Traverse children
-            # --------------------------------------------------
-            for child in reversed(node.children):
-                stack.append(child)
-
-    # ==========================================================
-    # Batched traversal
-    # ==========================================================
-
-    def iter_file_node_batches(
-        self,
-        start_node:TreeNode,
-        batch_size: int = 100,
-        node_filter=None,
-        max_level=None,
-    ):
-        """
-        Yield file nodes in batches.
-
-        A batch ends when either ``batch_size`` is reached or the
-        database/map pair changes.
-
-        Therefore every yielded batch contains file nodes belonging
-        to the same ``(db, map)`` pair.
-
-        Args:
-            start_node:
-                Node where traversal starts.
-
-            batch_size:
-                Maximum number of file nodes per batch.
-
-            node_filter:
-                Optional callable(node) -> bool.
-
-            max_level:
-                Optional maximum tree level.
-
-        Yields:
-            list:
-                A homogeneous batch of file nodes.
-        """
-        if start_node is None:
-            return
-        if batch_size <= 0:
-            raise ValueError("batch_size must be greater than zero")
-        batch = []
-
-        batch_db = None
-        batch_map = None
-
-        for node in self._iter_file_nodes(
-            start_node,
-            node_filter=node_filter,
-            max_level=max_level,
-            ):
-            node_pair = (node.db, node.map)
-            # --------------------------------------------------
-            # Database/map changed.
-            #
-            # Finish the current batch before starting another
-            # database/map pair.
-            # --------------------------------------------------
-            if batch and node_pair != (batch_db, batch_map):
-                yield batch
-
-                batch = []
-                batch_db = None
-                batch_map = None
-
-            # --------------------------------------------------
-            # Start a new batch
-            # --------------------------------------------------
-            if not batch:
-                batch_db = node.db
-                batch_map = node.map
-
-            batch.append(node)
-
-            # --------------------------------------------------
-            # Batch full
-            # --------------------------------------------------
-            if len(batch) >= batch_size:
-                yield batch
-
-                batch = []
-                batch_db = None
-                batch_map = None
-
-        # ------------------------------------------------------
-        # Remaining nodes
-        # ------------------------------------------------------
-        if batch:
-            yield batch
-
-    # ==========================================================
-    # Node info
-    # ==========================================================
-
-    def _parse_node_info(self, node) -> dict:
-        """
-        Convert the positional node.info data into a field
-        dictionary using the database column order.
-        """
-        if not node:
-            return {}
-
-        if node.i_am != "file":
-            return {}
-
-        if not node.info:
-            return {}
-
-        fields = self._get_fields(node)
-
-        if not fields:
-            return {}
-
-        return dict(zip(fields, node.info))
-
-    # ==========================================================
-    # Node -> FileStructure
-    # ==========================================================
-
-    def _get_node_dict(self, node: TreeNode, fields: list[str]) -> dict:
-        """
-        Convert one TreeNode into a FileStructure dictionary.
-        """
-        if not node:
-            return {}
-        node_db=self.fmap.fm.extract_filename(node.db)
-        node_map=node.map
-        if node.i_am == "file":
-            info = self._parse_node_info(node)
-            # ------------------------------------------------------
-            # Build row
-            # ------------------------------------------------------
-            row = []
-            for field in fields:
-                # --------------------------------------------------
-                # filename and size are handled separately below
-                # --------------------------------------------------
-                if field in ("filename", "size"):
-                    continue
-                # --------------------------------------------------
-                # Fields stored directly on TreeNode
-                # --------------------------------------------------
-                if hasattr(node, field):
-                    row.append(getattr(node, field))
-                    continue
-                # --------------------------------------------------
-                # Fields stored in node.info
-                # --------------------------------------------------
-                row.append(info.get(field, ""))
-
-            # ------------------------------------------------------
-            # FileStructure row
-            # ------------------------------------------------------
-            row_tup = (info.get("filename", ""), node.size) + tuple(row)
-        else:
-            row_tup = None
-        node_path = os.path.join(node.mount,node.itempath)
-        fs_dict = self.fmap.fm.path_to_file_structure_dict(node_path, row_tup)
-        if not node_db in node_map:
-            fdb_dict={f"{node_db}({node_map})":fs_dict}
-        else: 
-            fdb_dict={f"{node_map}":fs_dict}
-        return [fdb_dict]
-
-    # ==========================================================
-    # Batch -> FileStructure
-    # ==========================================================
-
-    def _batch_to_file_structure(self, nodes: list[TreeNode], fields: list[str]):
-        """
-        Convert one batch of TreeNodes into one FileStructure.
-
-        The batch is intentionally kept small. Once the returned
-        structure has been consumed by the caller, the batch and
-        its intermediate structures can be released.
-        """
-        fs_batch = {}
-
-        for node in nodes:
-            if fields is None and node.i_am=="file":
-                fields = self._get_fields(node)
-
-                if not fields:
-                    continue
-            node_fs = self._get_node_dict(node, fields)
-
-            if not node_fs:
-                continue
-            if fs_batch:
-                merged = self.fmap.fm.merge_file_structure_dicts(fs_batch, node_fs)
-            else:
-                merged = [node_fs]
-
-            # merge_file_structure_dicts() returns a list.
-            #
-            # If there is exactly one structure, keep the dictionary.
-            # If there are multiple independent structures, represent
-            # them as a list -- which is a valid FileStructure.
-            if len(merged) == 1:
-                fs_batch = merged[0]
-            elif len(merged) > 1:
-                fs_batch = merged
-        return fs_batch
-
-    # ==========================================================
-    # Batch iterator
-    # ==========================================================
-
-    def iter_file_structure_batches(
-        self,
-        start_node,
-        *,
-        fields: list[str] | None = None,
-        batch_size: int = 100,
-        node_filter=None,
-        max_level=None,
-        ):
-        """
-        Yield FileStructure objects one batch at a time.
-
-        This is the main memory-friendly API.
-
-        Example:
-
-            for fs_batch in exporter.iter_file_structure_batches(
-                start_node,
-                batch_size=500,
-            ):
-                process(fs_batch)
-
-        A yielded value may be either:
-
-            dict
-
-        or:
-
-            list
-
-        because both are valid FileStructure representations.
-        """
-        if start_node is None:
-            return
-
-        for nodes in self.iter_file_node_batches(
-            start_node,
-            batch_size=batch_size,
-            node_filter=node_filter,
-            max_level=max_level,
-        ):
-            if not nodes:
-                continue
-
-            fs_batch = self._batch_to_file_structure(nodes, fields)
-
-            if fs_batch:
-                yield fs_batch
-
-    # ==========================================================
-    # Merge batch FileStructures
-    # ==========================================================
-
-    def merge_file_structure_batches(self, fs_batches):
-        """
-        Merge a sequence of FileStructure batches.
-
-        ``merge_file_structure_lists()`` is the general merge
-        operation because a FileStructure may itself be a list.
-
-        The result is a valid FileStructure:
-
-            dict
-            or
-            list
-        """
-        merged_list = []
-
-        for fs_batch in fs_batches:
-            if not fs_batch:
-                continue
-            # A dictionary is one FileStructure item.
-            if isinstance(fs_batch, dict):
-                batch_list = [fs_batch]
-            # A list is already a FileStructure list.
-            elif isinstance(fs_batch, list):
-                batch_list = fs_batch
-            else:
-                continue
-
-            if not merged_list:
-                merged_list = list(batch_list)
-                continue
-
-            merged_list = self.fmap.fm.merge_file_structure_lists(
-                merged_list, batch_list)
-
-        # ------------------------------------------------------
-        # Preserve the convenient dict representation when there
-        # is only one structure.
-        # ------------------------------------------------------
-        if len(merged_list) == 1:
-            return merged_list[0]
-
-        return merged_list
-
-    # ==========================================================
-    # Public API
-    # ==========================================================
-
-    def dump_to_json(
-        self,
-        filename,
-        start_node,
-        fields: list[str] | None = None,
-        batch_size: int = 100,
-        node_filter=None,
-        max_level=None,
-    ):
-        """
-        Export loaded TreeNode data to a JSON FileStructure.
-
-        Each batch is written as one item in a top-level FileStructure
-        list. Since lists are valid FileStructures, the resulting JSON
-        remains compatible with the FileStructure representation.
-
-        Memory usage is bounded approximately by the size of one batch.
-        """
-        if start_node is None:
-            return 0
-
-        batches_written = 0
-
-        with open(filename, "w", encoding="utf-8") as f:
-            f.write("[\n")
-            first_batch = True
-            for fs_batch in self.iter_file_structure_batches(
-                start_node,
-                fields=fields,
-                batch_size=batch_size,
-                node_filter=node_filter,
-                max_level=max_level,
-            ):
-                if not fs_batch:
-                    continue
-
-                if not first_batch:
-                    f.write(",\n")
-
-                json.dump(fs_batch, f, ensure_ascii=False, indent=2)
-                first_batch = False
-                batches_written += 1
-            f.write("\n]")
-        return batches_written
-
-    # def dump_to_json(
-    #     self,
-    #     filename,
-    #     start_node,
-    #     fields: list[str] | None = None,
-    #     batch_size: int = 100,
-    #     node_filter=None,
-    #     max_level=None,
-    # ):
-    #     """
-    #     Export loaded TreeNode data to a JSON FileStructure.
-
-    #     Only nodes currently reachable from ``start_node`` are
-    #     considered.
-
-    #     Nodes are processed in batches. Each batch is converted
-    #     into a FileStructure and then merged with the previous
-    #     batches.
-
-    #     Args:
-    #         filename:
-    #             Output JSON filename.
-
-    #         start_node:
-    #             Node where export starts.
-
-    #         fields:
-    #             Fields to export. If None, fields are determined
-    #             from the start node.
-
-    #         batch_size:
-    #             Maximum number of file nodes in one batch.
-
-    #         node_filter:
-    #             Optional callable(node) -> bool.
-
-    #         max_level:
-    #             Optional maximum tree level.
-
-    #     Returns:
-    #         The resulting FileStructure.
-    #     """
-    #     if start_node is None:
-    #         return None
-
-    #     if fields is None:
-    #         fields = self._get_fields(start_node)
-
-    #     if not fields:
-    #         return None
-
-    #     # ------------------------------------------------------
-    #     # Important:
-    #     #
-    #     # We do NOT json.load() an existing file here.
-    #     #
-    #     # This export represents the current tree state and
-    #     # therefore creates a fresh JSON file.
-    #     # ------------------------------------------------------
-    #     fs_batches = []
-
-    #     for fs_batch in self.iter_file_structure_batches(
-    #         start_node,
-    #         fields=fields,
-    #         batch_size=batch_size,
-    #         node_filter=node_filter,
-    #         max_level=max_level,
-    #     ):
-    #         if fs_batch:
-    #             fs_batches.append(fs_batch)
-
-    #     # ------------------------------------------------------
-    #     # Merge all batches using the project's general
-    #     # FileStructure merge operation.
-    #     # ------------------------------------------------------
-    #     fs = self.merge_file_structure_batches(fs_batches)
-
-    #     # ------------------------------------------------------
-    #     # Write final FileStructure
-    #     # ------------------------------------------------------
-    #     with open(filename, "w", encoding="utf-8") as f:
-    #         json.dump(fs, f, ensure_ascii=False, indent=2)
-
-    #     return fs

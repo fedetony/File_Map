@@ -1114,10 +1114,10 @@ class MappingActions():
 
     def edit_selection_map(self,database,a_map):
         map_info=self.get_map_info(database,a_map)
-        if map_info[0][8] in [MAP_TYPES_LIST[0],MAP_TYPES_LIST[2]]:
+        if map_info[0][8] in [MapType.DEVICE.value,MapType.BACKUP.value]:
             return f"{a_map} is not a selection map!"
         origin_map=map_info[0][7] 
-        if (database,origin_map) not in self.get_maps_by_type([MAP_TYPES_LIST[0],MAP_TYPES_LIST[2]]):
+        if (database,origin_map) not in self.get_maps_by_type([MapType.DEVICE.value,MapType.BACKUP.value]):
             return f"Can't find {(database,origin_map)} origin map!"
         fm=self.get_file_map(database)
         fn_fp=fm.db.get_data_from_table(a_map,'filename, filepath')
@@ -1485,10 +1485,10 @@ class MappingActions():
                         fm.db.create_connection()    
                         fm.map_a_path_to_db(tablename,file_or_path,True,shallow_map=shallow,press_to_continue=False)
                         # set map type
-                        fm.db.edit_value_in_table(fm.mapper_reference_table,fm.get_table_id(tablename),'maptype',MAP_TYPES_LIST[5])
+                        fm.db.edit_value_in_table(fm.mapper_reference_table,fm.get_table_id(tablename),'maptype',MapType.SORTED.value)
                 if fp_type == 'file' and mount==a_mount:
                     if tablename not in fm.db.tables_in_db():
-                        fm.add_table_to_mapper_index(tablename, os.path.join(mount,common_path),MAP_TYPES_LIST[5])
+                        fm.add_table_to_mapper_index(tablename, os.path.join(mount,common_path),MapType.SORTED.value)
                         fm._create_map_in_db(tablename)
                     if tablename in fm.db.tables_in_db():
                         dp=F_M.extract_parent_path(file_or_path,False)

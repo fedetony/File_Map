@@ -477,18 +477,18 @@ class BackupActions():
             # modd_t[2]=F_M.fix_path_separators(modd_t[2])
             modd_t[2]=str(modd_t[2]).replace(mappath,'')
             mod_data.append(tuple(modd_t))
-        fm.map_a_selection(table_name,db_map_pair[1],mod_data,MAP_TYPES_LIST[2])
+        fm.map_a_selection(table_name,db_map_pair[1],mod_data,MapType.BACKUP.value)
         return mappath, map_info[0][5]
     
     def remove_selection_files_from_mount(self,db_map_pair,remove_from_origin:bool=True,where:str=None):   
         """Removes a file and its map reference"""
         map_info=self.cma.get_map_info(db_map_pair[0],db_map_pair[1])
-        if map_info[0][8] in [MAP_TYPES_LIST[0],MAP_TYPES_LIST[2]]:
+        if map_info[0][8] in [MapType.DEVICE.value,MapType.BACKUP.value]:
             return f"{db_map_pair[1]} is not a selection map!"
         origin_map=map_info[0][7] 
-        if map_info[0][8]==MAP_TYPES_LIST[5]: # Sorted Maps 
+        if map_info[0][8]==MapType.SORTED.value: # Sorted Maps 
             origin_map=db_map_pair[1]
-        if (db_map_pair[0],origin_map) not in self.cma.get_maps_by_type([MAP_TYPES_LIST[0],MAP_TYPES_LIST[2],MAP_TYPES_LIST[5]]):
+        if (db_map_pair[0],origin_map) not in self.cma.get_maps_by_type([MapType.DEVICE.value,MapType.BACKUP.value,MapType.SORTED.value]):
             return f"Can't find {(db_map_pair[0],origin_map)} origin map!"
         # check mount exist
         fm=self.cma.get_file_map(db_map_pair[0])

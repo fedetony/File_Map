@@ -10,9 +10,10 @@ from controllers.class_filemap_cli_manager import FileMapCliManager
 from controllers.mapping_worker_thread import WorkerManager
 from functional.class_icons import Icons
 from functional.class_text_renderer import TextRenderer
-from functional.class_text_exporter import ExporterHandler
+from functional.class_text_exporter import ExporterHandler, TableTextExporter
 from widgets.class_explorer_tree_widget import *
 from widgets.search_query_widget import *
+from widgets.ask_new_name_dialog import NewMapDialog
 
 from models.class_provider_engine import DefaultProviderEngine, FM
 from models.class_action_provider import *
@@ -20,6 +21,10 @@ from models.class_action_provider import *
 from models.class_style_provider import *
 from models.class_lazy_loader import *
 from controllers.class_database_manager import DatabaseInfo
+from class_file_mapper import MapType
+
+from functional.class_LogHandler import LM
+log=LM.get_logger_with_handler("SearchDialog","debug",True,None)
 
 from copy import deepcopy
 from dataclasses import dataclass
@@ -356,6 +361,7 @@ class SearchDialog(QtWidgets.QDialog):
 
         self.selection_map_button = QtWidgets.QPushButton("Create Selection Map")
         self.selection_map_button.setIcon(self.icons.icon("selection map"))
+        self.selection_map_button.clicked.connect(self._create_selection_map)
 
         self.export_button = QtWidgets.QPushButton("Export")
         self.export_button.setIcon(self.icons.icon("export"))
@@ -403,7 +409,16 @@ class SearchDialog(QtWidgets.QDialog):
         self.properties_tree.setAlternatingRowColors(True)
 
         self.close_button.clicked.connect(self.reject)
+
+    def log_callback(self,*args):
+        self.log_print(*args, logger=log, level="info", sep=" ", end="")
     
+    @staticmethod
+    def log_print(*args, logger=None, level="info", sep=" ", end="\n"):
+        text = sep.join(str(arg) for arg in args) + end
+        log_func = getattr(logger, level) if logger else getattr(logging, level)
+        log_func("%s", text)
+
     def _on_search_requested(self,user_query_txt, sql_where):
         #set this to a worker
         self.search_for_(user_query_txt, sql_where)
@@ -428,7 +443,7 @@ class SearchDialog(QtWidgets.QDialog):
 
         (temp_db, idx_map)=self.fmap.do_a_search(self.db_map_pairs,
                               sql_where,
-                              log_callback=print, # set log_callback
+                              log_callback=self.log_callback, # set log_callback
                               )
         self.s_result=[]
         for idx,idx_dict in idx_map.items():
@@ -454,7 +469,7 @@ class SearchDialog(QtWidgets.QDialog):
 
     
     def _get_search_result_obj(self,idx, temp_db, idx_dict , user_query_txt, sql_where)->SearchResult:
-        print(f"{idx} Search '{user_query_txt}' found {idx_dict['matches']} matches!")
+        self.log_callback(f"{idx} Search '{user_query_txt}' found {idx_dict['matches']} matches!")
         return SearchResult(idx = idx,
                             user_query = user_query_txt,
                             sql_where = sql_where,
@@ -496,7 +511,7 @@ class SearchDialog(QtWidgets.QDialog):
             
             for e_node in self._explorer_root_node.children:
                 e_copy=deepcopy(e_node)
-                print("E_NODE AFTER DEEP:", type(e_copy), e_copy)
+                # print("E_NODE AFTER DEEP:", type(e_copy), e_copy)
                 t_m.add_child(root_node,e_copy)   
         finally:
             model.endResetModel() 
@@ -562,7 +577,7 @@ class SearchDialog(QtWidgets.QDialog):
         map_node = TreeNode(f"{s_r.temp_map} @ ({mount}) - found {s_r.matches} matches!")
         map_node.i_am = "map"
         map_node.path = mount
-        map_node.info = s_r.temp_db_map_pair
+        map_node.info = s_r.temp_db_map_pair+s_r.origin_db_map_pair # add the pair so tup len = 4
         map_node.loaded = False
         map_node.db = s_r.temp_db
         map_node.i_exist=self.fmap.is_mount_serial_active(mount,serial)
@@ -827,7 +842,7 @@ class SearchDialog(QtWidgets.QDialog):
                 self._set_statistics_node(node)
     
     def on_export_requested(self,export_dict):
-        print("Got export Request ",export_dict)
+        self.log_callback("Got export Request ",export_dict)
         t_m=self.results_tree.model.t_m
         ex_handler=ExporterHandler(fmap=self.fmap,
                         export_request_dict=export_dict,
@@ -835,7 +850,7 @@ class SearchDialog(QtWidgets.QDialog):
                         style=DefaultExportStyle(), 
                         available_fields=None,
                         available_formats=None,
-                        log_callback=print,
+                        log_callback=self.log_callback,
                         )
         was_exported, msg = ex_handler.do_export()
         msgbox=MsgBoxHelper()
@@ -865,7 +880,7 @@ class SearchDialog(QtWidgets.QDialog):
         if format not in ("filestruct_json", "list_txt", "list_csv", "text_tree"):
             return
         if format == "filestruct_json":
-            req_fields=['filename','filepath']
+            req_fields=['filename','filepath','id','size']
         elif format == "list_txt":
             req_fields=['id']
         elif format == "list_csv":
@@ -873,7 +888,218 @@ class SearchDialog(QtWidgets.QDialog):
         elif format == "text_tree":
             req_fields=['filename','filepath']
         ex_wid.SetRequiredFields(req_fields)
+    
+    def _create_selection_map(self):
+
+        selected_nodes_list=self.results_tree.selected_nodes()
+        msgbox = MsgBoxHelper()
+        if not selected_nodes_list:
+            
+            msgbox.show("Create Selection Map",
+                    "There are no selected items to Create a Map!\n Select some Files first :P",
+                    icon=QMessageBox.Icon.Critical,
+                    buttons=None,
+                    default=None,
+                    detailed_text=None,
+                    informative_text=None,
+                    )
+            return    
+        mount_serial_list,mount_serial_dict=self._get_mount_serial_pair(selected_nodes_list)
+        if len(mount_serial_list)<1:
+            log.debug("_create_selection_map No mount serial")
+            return
+        maps_created=[]
+        for mount_serial_pair in mount_serial_list:
+            mount,serial =mount_serial_pair
+            dialog = NewMapDialog(fmap = self.fmap, 
+                                default_map_name = None, 
+                                title = f"Create Selection Map for ({mount},{serial})", 
+                                icon_name = "selection map", 
+                                parent = self)
+
+            if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
+                log.debug("_create_selection_map User did not accept")
+                continue
+            db_to, map_to = dialog.get_values()
+            common_path=self._get_common_path(mount_serial_pair,mount_serial_dict)
+            fm=self.fmap.cma.get_file_map(db_to)
+            if not fm:
+                log.debug("_create_selection_map No file mapper")
+                continue
+            # route database logger
+            fm.db.set_log_callback(self.log_callback)
+            # Destination table fields
+            origin_db, origin_map = self._get_origin_from_nodes(mount_serial_pair, mount_serial_dict)
+            origin_fm=self.fmap.cma.get_file_map(origin_db)
+            if not origin_fm:
+                log.debug(f"_create_selection_map No Origin Filemapper: {origin_db}")
+                continue
+            field_list = origin_fm.db.get_column_list_of_table(origin_map)
+            if not field_list:
+                log.debug("_create_selection_map No fieldlist")
+                continue
+
+            # Get data selected nodes
+            data = self._get_data_from_nodes(
+                mount_serial_pair, mount_serial_dict, field_list)
+            
+            if not data:
+                log.debug("_create_selection_map No data")
+                continue
+
+            #Create Selection map 
+            fm.db.create_connection()
+            was_indexed=fm.add_table_to_mapper_index(map_to, common_path, 
+                MapType.SELECTION.value)
+            if not was_indexed:
+                log.debug("_create_selection_map Not indexed")
+                continue
+
+            fm._create_map_in_db(map_to)
+            an_id=fm.get_table_id(map_to)
+            if an_id:
+                was_inserted = fm.db.insert_data_to_table(map_to,data)
+                if not was_indexed:
+                    log.debug("_create_selection_map Not data inserted")
+                    continue
+                if db_to != origin_db:
+                    fm.set_origin_db_map(map_to,origin_db,origin_map)
+                else:
+                    # dont set origin_db if is the same database
+                    fm.set_origin_db_map(map_to,origin_map=origin_map)
+                test = fm.db.get_data_from_table(map_to,'*')
+                maps_created.append((db_to,map_to))
+            else:
+                log.debug("_create_selection_map No id")
         
+        if maps_created:
+            #Set the correct size of new map in cache
+            self.fmap.refresh_map_size_cache()
+            # Ask for refresh
+            self.refresh_mapping_tree.emit()
+
+            dmsg="Maps Created:"
+            for iii,db_map_pair in enumerate(maps_created):
+                dmsg+="\n"+"-"*33
+                dmsg+=f"\n{iii}\tDatabase: {db_map_pair[0]}"
+                dmsg+=f"\n{iii}\t     Map: {db_map_pair[1]}"
+            dmsg+="\n"+"-"*33
+            msgbox.show("Create Selection Map",
+                    f"Successfully created {len(maps_created)} selection maps!",
+                    icon=QMessageBox.Icon.Information,
+                    buttons=None,
+                    default=None,
+                    detailed_text=dmsg,
+                    informative_text=None,
+                    )
+    
+   
+    def _get_mount_serial_pair(self,selected_nodes_list:list[TreeNode])->list[tuple]:
+        mount_serial_pair_list=[]
+        mount_serial_pair_node_dict={}
+        for node in selected_nodes_list:
+            mount_serial_pair = (node.mount, node.serial)
+            if mount_serial_pair not in mount_serial_pair_list:
+                mount_serial_pair_list.append(mount_serial_pair)
+            ms_p_l=mount_serial_pair_node_dict.get(mount_serial_pair,[])
+            ms_p_l+=[node]
+            mount_serial_pair_node_dict.update({mount_serial_pair:ms_p_l})
+        return mount_serial_pair_list, mount_serial_pair_node_dict
+    
+    def _get_common_path(self,mount_serial_pair, mount_serial_dict:dict)->str:
+        node_list=mount_serial_dict.get(mount_serial_pair,[])
+        paths_list=[]
+        for node in node_list:
+            if isinstance(node,TreeNode):
+                paths_list.append(node.path)
+        if paths_list:
+            return self.fmap.fm.get_common_path(paths_list)
+        return ""
+    
+    def _get_data_from_nodes(self, mount_serial_pair, mount_serial_dict: dict, fields:list):
+        """
+        Build database rows from the selected TreeNodes belonging to
+        one (mount, serial) pair.
+
+        The returned rows follow the supplied database field order.
+        """
+        node_list = mount_serial_dict.get(mount_serial_pair, [])
+        ttexp=TableTextExporter(self.fmap)
+        if not node_list:
+            return []
+        # remove id from data
+        fields_proc=[]
+        for fie in fields:
+            if fie != "id":
+                fields_proc.append(fie)
+        
+        data = []
+        for node in node_list:
+            if not isinstance(node, TreeNode):
+                continue
+            if node.i_am != "file":
+                continue
+            
+            row = ttexp._get_node_row(node, fields_proc)
+            # append tuples
+            data.append(tuple(row))
+
+        return data
+    
+    def _get_origin_from_nodes(self, mount_serial_pair, mount_serial_dict: dict):
+        """
+        Get the origin map belonging to one (mount, serial) pair form Treenodes.
+
+        Returns (origin_db,origin_map) tuple.
+        """
+        node_list = mount_serial_dict.get(mount_serial_pair, [])
+        
+        origin_db = None
+        origin_map = None
+        for node in node_list:
+            if not isinstance(node, TreeNode):
+                continue
+            if node.i_am == "map":
+                try:
+                    (_, _, origin_db, origin_map)=self._info_db_maps(node.info)
+                    return origin_db, origin_map
+                except:
+                    pass
+            if node.i_am != "file":
+                continue
+            # get origins
+            if origin_db is None or origin_map is None:
+                bl = node.get_bloodline()
+                for p_node in bl:
+                    # map info retains the origin db and map
+                    if p_node.i_am == "map":
+                        try:
+                            (_, _, origin_db, origin_map)=self._info_db_maps(p_node.info)
+                            return origin_db, origin_map
+                        except:
+                            pass 
+        return origin_db, origin_map
+    
+    def _info_db_maps(self,info):
+        """The node's info can have one db_map pair or two. 
+        If has one info comes from  origin map. If has 2 pairs then 
+        is a temporal map, with a origin map as the second tuple. 
+        The first tuple in info is used to build the tree, so loads the nodes 
+        from positions 0 and 1.
+        """
+        temp_db=None
+        temp_map=None
+        origin_db=None
+        origin_map=None
+        if isinstance(info,tuple):
+            if len(info) == 2:
+                (origin_db, origin_map)=info
+            elif len(info) == 4:
+                (temp_db,temp_map,origin_db, origin_map)=info  
+        return temp_db, temp_map, origin_db, origin_map  
+
+
+
         
             
 
