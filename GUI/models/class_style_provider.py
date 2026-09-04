@@ -7,11 +7,92 @@ from class_file_manipulate import FileManipulate
 FM=FileManipulate()
 
 TEXT_ICONS = {
-    "database": "🗄️",
-    "map":      "🗺️",
-    "dir":      "📁",
-    "file":     "📄",
+    # ------------------------------------------------------
+    # Color / visual
+    # ------------------------------------------------------
+    "database":       "🗄️",
+    "map":            "🗺️",
+    "dir":            "📁",
+    "file":           "📄",
+    "folder_open":    "📂",
+    "document":       "📃",
+    "hard_drive":     "💽",
+    "disk":           "💾",
+    "computer":       "💻",
+    "server":         "🖥️",
+    "device":         "📱",
+    "usb":            "🔌",
+    "link":           "🔗",
+    "search":         "🔍",
+    "settings":       "⚙️",
+    "tools":          "🛠️",
+    "folder_sync":    "🔄",
+
+    # Status
+    "online":         "🟢",
+    "offline":        "🔴",
+    "warning":        "🟡",
+    "info":           "🔵",
+    "unknown":        "⚪",
+    "busy":           "🟠",
+
+    # Actions
+    "selected":       "☑️",
+    "unchecked":      "⬜",
+    "add":            "➕",
+    "remove":         "➖",
+    "delete":         "🗑️",
+    "refresh":        "🔄",
+    "download":       "⬇️",
+    "upload":         "⬆️",
+    "export":         "📤",
+    "import":         "📥",
+    "play":           "▶️",
+    "stop":           "⏹️",
+    "pause":          "⏸️",
+
+    # Technical
+    "mount":          "📌",
+    "serial":         "🔢",
+    "id":             "🏷️",
+    "path":           "🛣️",
+    "time":           "🕐",
+    "calendar":       "📅",
+    "size":           "📏",
+    "count":          "🔢",
+
+    # Results / feedback
+    "success":        "✅",
+    "error":          "❌",
+    "warning_sign":   "⚠️",
+    "info_sign":      "ℹ️",
+    "question":       "❓",
+    "star":           "⭐",
+    "favorite":       "❤️",
+    "new":            "🆕",
+
+    # ------------------------------------------------------
+    # Monochrome / technical
+    # ------------------------------------------------------
+    "mono_active":    "●",
+    "mono_inactive":  "○",
+    "mono_database":  "▣",
+    "mono_map":       "▦",
+    "mono_file":      "▤",
+    "mono_device":    "▰",
+    "mono_selected":  "▸",
+    "mono_action":    "→",
+    "mono_mount":     "⌂",
+    "mono_serial":    "⌁",
+    "mono_warning":   "⚠",
+    "mono_success":   "✓",
+    "mono_error":     "×",
+    "mono_info":      "ⓘ",
+    "mono_unknown":   "?",
 }
+
+
+
 class NodeVisualState(Enum):
     NORMAL = auto()
     SELECTED = auto()

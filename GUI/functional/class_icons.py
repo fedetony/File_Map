@@ -342,6 +342,7 @@ class Icons:
         "export":":/icons/Icojam-Blue-Bits-Arrow-up.256.png",
         "notexport":":/icons/Icojam-Blue-Bits-Arrow-down.256.png",
         "save as":":/icons/Ahmadhania-Spherical-Save-as.128.png",
+        "sort":":/icons/Icojam-Blue-Bits-Module-puzzle.256.png",
         
     }
 

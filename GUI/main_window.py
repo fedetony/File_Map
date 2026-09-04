@@ -107,7 +107,7 @@ class MainWindow(QMainWindow):
     def create_pages(self):
 
         self.pages = {
-            "Home": HomePage(),
+            "Home": HomePage(self.fmap),
             "Devices": DevicesPage(self.fmap),
             "Databases": DatabasePage(self.fmap),
             "Mapping": MappingPage(self.fmap),
@@ -129,6 +129,9 @@ class MainWindow(QMainWindow):
             pass
         # When Activating/Deactivating databases refresh Mapping
         dbpage.databasesActivationChange.connect(mappingpage.refresh_mapping_struct) 
+        homepage = self.pages["Home"]
+        if isinstance(homepage,HomePage):
+            pass
 
     # --------------------------------------------------
     # Central Widget
@@ -225,6 +228,8 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(
             f"File Mapping Tool - {name}"
         )
+        if name == "Home" and isinstance(page,HomePage):
+            page.refresh_all_cards()
 
 
     # --------------------------------------------------

@@ -841,8 +841,9 @@ class SearchDialog(QtWidgets.QDialog):
             if isinstance(node,TreeNode):
                 self._set_statistics_node(node)
     
-    def on_export_requested(self,export_dict):
-        self.log_callback("Got export Request ",export_dict)
+    def on_export_requested(self,export_dict: dict):
+        self.log_callback("Got export Request " + 
+            "\n".join([f"{kkk}: {vvv} " for kkk,vvv in export_dict.items()]))
         t_m=self.results_tree.model.t_m
         ex_handler=ExporterHandler(fmap=self.fmap,
                         export_request_dict=export_dict,
@@ -938,36 +939,43 @@ class SearchDialog(QtWidgets.QDialog):
             if not field_list:
                 log.debug("_create_selection_map No fieldlist")
                 continue
-
+            origin_info=self.fmap.cma.get_map_info_as_dict(origin_db, origin_map)
+            mappath=self.fmap.fm.remove_mount_from_path(
+                origin_info['mount'], common_path,remove_start_separator=True)
+            
             # Get data selected nodes
             data = self._get_data_from_nodes(
                 mount_serial_pair, mount_serial_dict, field_list)
-            
             if not data:
                 log.debug("_create_selection_map No data")
                 continue
 
             #Create Selection map 
             fm.db.create_connection()
-            was_indexed=fm.add_table_to_mapper_index(map_to, common_path, 
+            was_indexed=fm.add_table_to_mapper_index(map_to, mappath, 
                 MapType.SELECTION.value)
             if not was_indexed:
                 log.debug("_create_selection_map Not indexed")
                 continue
-
+            # fix mount and serial
+            was_mount_serial_set=fm.set_mount_serial_to_map(
+                    map_to, origin_info['mount'],origin_info['serial'])
+            if not was_mount_serial_set:
+                log.debug(f"_create_selection_map mount and serial failed")
+                continue
             fm._create_map_in_db(map_to)
             an_id=fm.get_table_id(map_to)
             if an_id:
                 was_inserted = fm.db.insert_data_to_table(map_to,data)
-                if not was_indexed:
-                    log.debug("_create_selection_map Not data inserted")
+                if not was_inserted:
+                    log.debug("_create_selection_map No data inserted")
                     continue
                 if db_to != origin_db:
                     fm.set_origin_db_map(map_to,origin_db,origin_map)
                 else:
                     # dont set origin_db if is the same database
                     fm.set_origin_db_map(map_to,origin_map=origin_map)
-                test = fm.db.get_data_from_table(map_to,'*')
+                # test = fm.db.get_data_from_table(map_to,'*')
                 maps_created.append((db_to,map_to))
             else:
                 log.debug("_create_selection_map No id")

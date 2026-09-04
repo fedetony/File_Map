@@ -831,9 +831,10 @@ class FileStructureJsonExporter:
         FileStructure representation.
     """
 
-    def __init__(self, fmap: FileMapCliManager):
+    def __init__(self, fmap: FileMapCliManager,log_callback=None):
         self.fmap = fmap
         self._fields_cache = {}
+        self.log_callback=log_callback
 
     # ==========================================================
     # Field handling
@@ -1217,7 +1218,7 @@ class FileStructureJsonExporter:
                 continue
             fields_2_tab.append(field)
 
-        FS=FileStructurer(df,fields_2_tab,log_callback=print)
+        FS=FileStructurer(df,fields_2_tab,log_callback=self.log_callback)
         fs_batch=FS.get_file_structure()
         node = nodes[0]
         node_db=self.fmap.fm.extract_filename(node.db)
@@ -1304,7 +1305,7 @@ class ExporterHandler:
         self.tab_list_ex = TabulatedTableTextExporter(self.fmap)
         self.table_ex = TableTextExporter(self.fmap)
         self.tree_ex = TreeTextExporter(self.style)
-        self.filestruct_ex = FileStructureJsonExporter(self.fmap)
+        self.filestruct_ex = FileStructureJsonExporter(self.fmap,self.log_callback)
         self.filepath_target = None
 
         # self.do_export()

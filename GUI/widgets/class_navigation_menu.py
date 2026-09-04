@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import *
 from functional.class_treeview_functions import *
 from functional.class_struct_conditioner import *
 from functional.class_struct_tracker import TreeStructTracker
+from functional.class_icons import Icons
 
 
 FIELDS_POSITION=[
@@ -19,20 +20,22 @@ conditions={"rapid": "me_set('meta[hidden]',False) if node_get('rapid[Show[value
 
 NAV_STRUCT_EXAMPLE={
         "FileMap": {"children":[                  
-                {"1": {"value": "About", "type": "str", "unit":"",  
+                {"1": {"value": "Home", "type": "str", "unit":"", "icon_key": "home", 
                            "meta": {"editable": False, "selectable": True,  "hidden": False}}},
-                {"2": {"value": "Devices", "type": "str", "unit":"",  
+                {"2": {"value": "Devices", "type": "str", "unit":"", "icon_key": "devices", 
                              "meta": {"editable": False, "selectable": True,  "hidden": False}}},
-                {"3": {"value": "Databases", "type": "str", "unit":"",  
+                {"3": {"value": "Databases", "type": "str", "unit":"", "icon_key": "databases", 
                                "meta": {"editable": False, "selectable": True,  "hidden": False}}},
-                {"4": {"value": "Mapping", "type": "str", "unit":"",  
+                {"4": {"value": "Mapping", "type": "str", "unit":"", "icon_key": "mapping", 
                              "meta": {"editable": False, "selectable": True,  "hidden": False}}},
-                {"5": {"value": "Backup", "type": "str", "unit":"",  
+                {"5": {"value": "Backup", "type": "str", "unit":"", "icon_key": "backup", 
                             "meta": {"editable": False, "selectable": True,  "hidden": False}}},
-                {"6": {"value": "Sort", "type": "str", "unit":"",  
+                {"6": {"value": "Sort", "type": "str", "unit":"", "icon_key": "sort", 
                           "meta": {"editable": False, "selectable": True,  "hidden": False}}},
-                {"7": {"value": "Settings", "type": "str", "unit":"",  
+                {"7": {"value": "Settings", "type": "str", "unit":"", "icon_key": "settings", 
                               "meta": {"editable": False, "selectable": True,  "hidden": False}}},
+                {"8": {"value": "About", "type": "str", "unit":"", "icon_key": "about", 
+                           "meta": {"editable": False, "selectable": True,  "hidden": False}}},
             ]},            
         }
 
@@ -43,6 +46,18 @@ class NavigationMenu(QtCore.QObject):
     def __init__(self, treeview_obj:QTreeView, nav_struct=None, parent=None):
         super().__init__(parent)
         self.parent_widget = parent
+        # Nice icons
+        self.icons=Icons()
+        self.all_icons_dict={
+            "home":self.icons.icon("home"),
+            "devices":self.icons.icon("devices"),
+            "databases":self.icons.icon("databases"),
+            "mapping":self.icons.icon("mapping"),
+            "backup":self.icons.icon("backup map"),
+            "sort":self.icons.icon("sort"),
+            "settings":self.icons.icon("settings"),
+            "about":self.icons.icon("info"),
+            }
         # Define main structure or use example
         self.nav_tv_obj=treeview_obj
         if isinstance(nav_struct,dict):
@@ -72,7 +87,7 @@ class NavigationMenu(QtCore.QObject):
         self.nav_tv.item_clicked.connect(self.item_clicked)
         
         # Add cache tooltip, icons, backgrounds, styles
-        # self.nav_tv.set_icons_cache(self.all_icons_dict)
+        self.nav_tv.set_icons_cache(self.all_icons_dict)
         # self.nav_tv.set_nav_cache(nav_dict)
 
         # Right click Menu 
