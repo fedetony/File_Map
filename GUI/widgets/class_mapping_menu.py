@@ -13,7 +13,8 @@ from widgets.class_qt_map_progress import QtMapProgress
 from widgets.mapping_dialog import MappingDialog
 from widgets.selection_dialog import SelectionDialog,SelectionDialogSetter
 from widgets.repeated_duplicate_result_dialog import RepeatedDuplicateResultDialog
-from widgets.search_dialog import SearchDialog,SearchDialogSetter
+from widgets.search_dialog import SearchDialog, SearchDialogSetter
+from widgets.browse_dialog import BrowseDialog, BrowseDialogSetter
 from widgets.compare_dialog import CompareResultDialog
 from widgets.class_file_dialogs import DeleteConfirmDialog
 from widgets.map_cloneing_dialog import CloneMapDialog
@@ -778,9 +779,7 @@ class MappingMenu(QtCore.QObject):
 
     def _menu_search_map(self, context):
         db_map_pairs = self._get_dbmap_pairs_from_context(context)
-        self._start_search_dialog(db_map_pairs,
-                                  
-                                  parent=self.parent_widget)
+        self._start_search_dialog(db_map_pairs, parent=self.parent_widget)
 
     def _start_search_dialog(self,
                              db_map_pair_list:list,
@@ -810,13 +809,46 @@ class MappingMenu(QtCore.QObject):
         # self.search_dialog.dialog_exit.connect(self._mapping_dialog_closed)
         #self.search_dialog.exec() # blocks user until closing window
         self.search_dialog.show() # allows user to change windows, keep self refrence to not garbage collect :)
+    
+    def _start_browse_dialog(self,
+                             db_map_pair_list:list,
+                             modding_info:dict=None,
+                             parent=None,
+                             ):
+        if not db_map_pair_list or len(db_map_pair_list)==0:
+            log.error("You need to make a map selection to browse!")
+            return
+        if not isinstance(modding_info,dict):
+            modding_info={}
+        browse_setter=BrowseDialogSetter(fmap=self.fmap, 
+                            db_map_pair_list=db_map_pair_list,
+                            worker_manager=self.worker_manager,
+                            modding_info=modding_info,
+                            parent=parent,
+                            )   
+        self.browse_dialog=browse_setter.get_dialog() 
+        if not isinstance(self.browse_dialog,BrowseDialog):
+            return    
+        self.browse_dialog.refresh_mapping_tree.connect(self.generate_mapping_struct)
+        # Mapping State
+        self.browse_dialog.mapping_is_running_signal.connect(
+            lambda: self._set_mapping_state(is_mapping= True))
+        self.browse_dialog.mapping_is_not_running_signal.connect(
+            lambda: self._set_mapping_state(is_mapping= False))
+        # self.search_dialog.dialog_exit.connect(self._mapping_dialog_closed)
+        #self.search_dialog.exec() # blocks user until closing window
+        self.browse_dialog.show() # allows user to change windows, keep self refrence to not garbage collect :)
        
 
     def _menu_browse_tree(self, context):
-        pass
+        db_map_pairs = self._get_dbmap_pairs_from_context(context)
+        modding_info={"mode": "files"}
+        self._start_browse_dialog(db_map_pairs,modding_info, parent=self.parent_widget)
 
     def _menu_browse_directory(self, context):
-        pass
+        db_map_pairs = self._get_dbmap_pairs_from_context(context)
+        modding_info={"mode": "dirs"}
+        self._start_browse_dialog(db_map_pairs,modding_info, parent=self.parent_widget)
 
     def _menu_export_tree(self, context):
         pass

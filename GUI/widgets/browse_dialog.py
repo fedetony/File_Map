@@ -20,29 +20,16 @@ from models.class_action_provider import *
 
 from models.class_style_provider import *
 from models.class_lazy_loader import *
+from widgets.class_export_widget import *
 from controllers.class_database_manager import DatabaseInfo
 from class_file_mapper import MapType
 
 from functional.class_LogHandler import LM
-log=LM.get_logger_with_handler("SearchDialog","debug",True,None)
+log=LM.get_logger_with_handler("BrowseDialog","debug",True,None)
 
 from copy import deepcopy
 from dataclasses import dataclass
 
-@dataclass
-class SearchResult:
-    idx: int
-    user_query: str
-    sql_where: str
-    temp_map: str
-    temp_db: str
-    temp_db_map_pair: tuple[str,str]
-    origin_db: str
-    origin_map: str
-    origin_db_map_pair: tuple[str,str]
-    idx_dict: dict
-    matches: int = 0
-    title: str = ""
 
 NODE_HIDDEN_PROPERTIES = {
     "parent",
@@ -50,8 +37,8 @@ NODE_HIDDEN_PROPERTIES = {
 }
 
 
-class SearchDialogSetter:
-    """Sets the configuration for the search dialog
+class BrowseDialogSetter:
+    """Sets the configuration for the browse dialog
     """
     def __init__(self, 
                  fmap:FileMapCliManager, 
@@ -74,9 +61,9 @@ class SearchDialogSetter:
         self.db_map_pair_list =db_map_pair_list
 
         # mode=modding_info.get("mode")
-        # if mode == "Search":        
+        # if mode == "Files":        
         #     self._set_db_mode_config()
-        self._set_db_mode_config()
+        self._set_db_browse_mode_config()
             
             # raise AttributeError("Mode not supported!")
         if not isinstance(self.config,ExplorerConfig):
@@ -87,7 +74,7 @@ class SearchDialogSetter:
         if not isinstance(self.config.tree_style,TreeStyleProvider):
             self.config.tree_style = DefaultTreeStyle() # role formatting by node, treemanager
 
-        self.dlg = SearchDialog(fmap=self.fmap,
+        self.dlg = BrowseDialog(fmap=self.fmap,
                                 db_map_pairs=self.db_map_pair_list,
                                 worker_manager=self.worker_manager,
                                 modding_info=self.modding_info,
@@ -119,8 +106,8 @@ class SearchDialogSetter:
                 selected_maps.append(a_map)
         return selected_maps
 
-    def _set_db_mode_config(self):
-        virtual_root = TreeNode("Map Explorer")
+    def _set_db_browse_mode_config(self):
+        virtual_root = TreeNode("Map Browser")
         virtual_root.loaded = True
         virtual_root.i_am = "root"
 
@@ -161,10 +148,18 @@ class SearchDialogSetter:
         # Basic
         config.root_node = virtual_root
         # 
-        config.show_path_edit = False
+        config.show_path_edit = True
         config.show_context_menu = True
         # Mode selection
-        config.selection_by_type_mode = SelectionByTypeMode.FILES_ONLY
+        mode=self.modding_info.get("mode")
+        
+        if mode == "files":
+            config.selection_by_type_mode = SelectionByTypeMode.FILES_ONLY
+        elif mode == "dirs":
+            config.selection_by_type_mode = SelectionByTypeMode.DIRS_ONLY
+        else:
+            config.selection_by_type_mode = SelectionByTypeMode.ANY
+
         config.checkbox_mode = CheckBoxMode.CHECKBOX
         config.selection_mode = SelectionMode.MULTI
         # You must pass lazy_loader, providers and styles in agreement to Mode selection
@@ -181,7 +176,7 @@ class SearchDialogSetter:
 
         config.lazy_loader = lazy_class
         config.provider = DefaultProviderEngine() # functions for behavior
-        config.action_provider = SearchFileActionProvider() # menu, shortcuts, global shortcuts
+        config.action_provider = BrowseFileActionProvider() # menu, shortcuts, global shortcuts
         styles_dict=self.styles_dict
         if not isinstance(styles_dict,dict):
             styles_dict={}
@@ -195,7 +190,7 @@ class SearchDialogSetter:
 ##########################################################################
 ##########################################################################
 
-class SearchDialog(QtWidgets.QDialog):
+class BrowseDialog(QtWidgets.QDialog):
 
     refresh_mapping_tree = QtCore.pyqtSignal()
     mapping_is_running_signal = QtCore.pyqtSignal()
@@ -213,34 +208,32 @@ class SearchDialog(QtWidgets.QDialog):
         self.fmap = fmap
         self.db_map_pairs = db_map_pairs
         self.modding_info = modding_info
+        self.mode = self.modding_info.get("mode")
         self.worker_manager = worker_manager
         self.explorer_config = explorer_config
         self.icons=Icons()
         self.text_renderer = TextRenderer()
-
-        self.s_result = None # list[SearchResult]        
-        self._has_been_searched=False
+    
         self._explorer_root_node=None
         self.debug_counter=0
         self._lazy_loading = False
-        self.statistic_dict={}
+        # self.statistic_dict={}
         
         self.db_idx_map_registry=[]
 
-        self.setWindowTitle("Search")
+        self.setWindowTitle("Browse")
         self.resize(1600, 950)
 
         self.build_ui()
+        # Hide files
+        if self.mode == "dirs":
+            self.show_hide_files(self.hide_files_cb.checkState())
+        elif self.mode == "files":
+            self.hide_files_cb.setChecked(False)
+            self.show_hide_files(self.hide_files_cb.checkState())
 
     def build_ui(self):
 
-        # ==============================================================
-        # Query widget
-        # ==============================================================
-
-        self.search_widget = SearchQueryWidget(self.fmap,parent=self)
-        self.search_widget.searchRequested.connect(self._on_search_requested)
-        self.search_widget.queryCleared.connect(self._clear_search)
 
         # ==============================================================
         # View filters
@@ -250,31 +243,36 @@ class SearchDialog(QtWidgets.QDialog):
 
         filter_layout = QtWidgets.QHBoxLayout(filter_group)
 
-        self.clear_search_icon = QtWidgets.QToolButton()
-        self.clear_search_icon.setIcon(self.icons.icon("clear"))
-        self.clear_search_icon.setAutoRaise(True)
-        self.clear_search_icon.setEnabled(True)
-        self.clear_search_icon.setFixedWidth(32)
-        self.clear_search_icon.setToolTip("Clear Search")
-        self.clear_search_icon.clicked.connect(self.search_widget.clear_search)
+        self.clear_selected_icon = QtWidgets.QToolButton()
+        self.clear_selected_icon.setIcon(self.icons.icon('unselect'))
+        self.clear_selected_icon.setAutoRaise(True)
+        self.clear_selected_icon.setEnabled(True)
+        self.clear_selected_icon.setFixedWidth(32)
+        self.clear_selected_icon.setToolTip("Clear Selection")
+        self.clear_selected_icon.clicked.connect(self.clear_files_folders_selection)
 
-        self.show_files_cb = QtWidgets.QCheckBox("Files")
-        self.show_files_cb.setChecked(True)
 
-        self.show_folders_cb = QtWidgets.QCheckBox("Folders")
-        self.show_folders_cb.setChecked(True)
+        self.hide_files_cb = QtWidgets.QCheckBox("Hide Files")
+        self.hide_files_cb.setChecked(True)
+        self.hide_files_cb.checkStateChanged.connect(self.show_hide_files)
 
-        self.show_size_cb = QtWidgets.QCheckBox("Show Size")
-        self.show_size_cb.setChecked(True)
+        # self.show_folders_cb = QtWidgets.QCheckBox("Folders")
+        # self.show_folders_cb.setChecked(True)
 
-        self.show_dates_cb = QtWidgets.QCheckBox("Show Dates")
-        self.show_dates_cb.setChecked(False)
+        # self.show_size_cb = QtWidgets.QCheckBox("Show Size")
+        # self.show_size_cb.setChecked(True)
 
-        self.show_md5_cb = QtWidgets.QCheckBox("Show MD5")
-        self.show_md5_cb.setChecked(False)
+        # self.show_dates_cb = QtWidgets.QCheckBox("Show Dates")
+        # self.show_dates_cb.setChecked(False)
 
-        filter_layout.addWidget(self.clear_search_icon)
-        # filter_layout.addWidget(self.show_files_cb)
+        # self.show_md5_cb = QtWidgets.QCheckBox("Show MD5")
+        # self.show_md5_cb.setChecked(False)
+
+        filter_layout.addWidget(self.clear_selected_icon)
+
+        if self.mode == "dirs":
+            filter_layout.addWidget(self.hide_files_cb)
+        
         # filter_layout.addWidget(self.show_folders_cb)
         # filter_layout.addWidget(self.show_size_cb)
         # filter_layout.addWidget(self.show_dates_cb)
@@ -294,15 +292,20 @@ class SearchDialog(QtWidgets.QDialog):
         ##################################
         # Explorer widget
         ##################################
-        self.results_tree = ExplorerTreeWidget(self.explorer_config)
-        self.results_tree.userSelectionChanged.connect(self.on_selection_changed)
-        # self.results_tree.actionEvaluated.connect(self.on_action_evaluated)
-        self.results_tree.exportRequested.connect(self.on_export_requested)
-        self.results_tree.exportFormatChanged.connect(self.on_export_format_changed)
-        self.results_tree.lazyLoading.connect(self.on_lazy_loading)
-        #self.results_tree.nodeDoubleClicked.connect(self._show_node_properties)
-        self.results_tree.nodeClicked.connect(self._show_node_properties)
-        self.results_tree.currentSelectionChanged.connect(self._on_current_selection_changed)
+        self.br_tree = ExplorerTreeWidget(self.explorer_config)
+        self.br_tree.action_provider.set_mode(self.mode)
+        self.br_tree.userSelectionChanged.connect(self.on_selection_changed)
+        self.br_tree.nodeExpanded.connect(lambda: 
+                self._on_node_expanded(True))
+        self.br_tree.nodeCollapsed.connect(lambda: 
+                self._on_node_expanded(False))
+        # self.br_tree.actionEvaluated.connect(self.on_action_evaluated)
+        self.br_tree.exportRequested.connect(self.on_export_requested)
+        self.br_tree.exportFormatChanged.connect(self.on_export_format_changed)
+        self.br_tree.lazyLoading.connect(self.on_lazy_loading)
+        #self.br_tree.nodeDoubleClicked.connect(self._show_node_properties)
+        self.br_tree.nodeClicked.connect(self._show_node_properties)
+        self.br_tree.currentSelectionChanged.connect(self._on_current_selection_changed)
         # Exporter widget
         self._set_export_default_configuration()
 
@@ -311,10 +314,10 @@ class SearchDialog(QtWidgets.QDialog):
             ["Property", "Value"]
         )
 
-        results_splitter.addWidget(self.results_tree)
+        results_splitter.addWidget(self.br_tree)
         results_splitter.addWidget(self.properties_tree)
 
-        results_splitter.setSizes([1200, 400])
+        results_splitter.setSizes([1600, 0])
 
         # ==============================================================
         # Statistics
@@ -328,8 +331,6 @@ class SearchDialog(QtWidgets.QDialog):
         self.folders_label = QtWidgets.QLabel("Node Folders: 0")
         self.quantity_label = QtWidgets.QLabel("Node Quantity: 0")
         self.size_label = QtWidgets.QLabel("Size: 0 MB")
-        self.db_matches_label = QtWidgets.QLabel("DB Matches: 0")
-        self.map_matches_label = QtWidgets.QLabel("Map Matches: 0")
         self.selected_label = QtWidgets.QLabel("Selected: 0")
 
         stats_layout.addWidget(self.quantity_label)
@@ -342,12 +343,6 @@ class SearchDialog(QtWidgets.QDialog):
         stats_layout.addSpacing(20)
 
         stats_layout.addWidget(self.size_label)
-        stats_layout.addSpacing(33)
-
-        stats_layout.addWidget(self.db_matches_label)
-        stats_layout.addSpacing(20)
-
-        stats_layout.addWidget(self.map_matches_label)
         stats_layout.addSpacing(20)
 
         stats_layout.addWidget(self.selected_label)
@@ -360,9 +355,9 @@ class SearchDialog(QtWidgets.QDialog):
 
         button_layout = QtWidgets.QHBoxLayout()
 
-        self.selection_map_button = QtWidgets.QPushButton("Create Selection Map")
-        self.selection_map_button.setIcon(self.icons.icon("selection map"))
-        self.selection_map_button.clicked.connect(self._create_selection_map)
+        # self.selection_map_button = QtWidgets.QPushButton("Create Selection Map")
+        # self.selection_map_button.setIcon(self.icons.icon("selection map"))
+        # self.selection_map_button.clicked.connect(self._create_selection_map)
 
         self.export_button = QtWidgets.QPushButton("Export")
         self.export_button.setIcon(self.icons.icon("export"))
@@ -375,10 +370,8 @@ class SearchDialog(QtWidgets.QDialog):
 
         self.close_button = QtWidgets.QPushButton("Close")
 
-        button_layout.addWidget(self.selection_map_button)
+        # button_layout.addWidget(self.selection_map_button)
         button_layout.addWidget(self.export_button)
-        # button_layout.addWidget(self.delete_button)
-        # button_layout.addWidget(self.copy_button)
         button_layout.addStretch(1)
         button_layout.addWidget(self.close_button)
 
@@ -392,7 +385,6 @@ class SearchDialog(QtWidgets.QDialog):
         main_layout.setSpacing(8)
 
         # Query widget gets the most natural amount of space
-        main_layout.addWidget(self.search_widget)
         main_layout.addWidget(filter_group)
 
         # Results should consume all remaining vertical space
@@ -404,8 +396,8 @@ class SearchDialog(QtWidgets.QDialog):
         # Final sizing
         # ==============================================================
 
-        self.results_tree.tree.setAlternatingRowColors(True)
-        self.results_tree.tree.setUniformRowHeights(False)
+        self.br_tree.tree.setAlternatingRowColors(True)
+        self.br_tree.tree.setUniformRowHeights(False)
 
         self.properties_tree.setAlternatingRowColors(True)
 
@@ -420,16 +412,14 @@ class SearchDialog(QtWidgets.QDialog):
         log_func = getattr(logger, level) if logger else getattr(logging, level)
         log_func("%s", text)
 
-    def _on_search_requested(self,user_query_txt, sql_where):
-        #set this to a worker
-        self.search_for_(user_query_txt, sql_where)
+    
     
     def _set_export_default_configuration(self):
         ex_cfg=self.fmap.cfg.export
         selection=ex_cfg.get("default_selection","file_tree") # options: "expanded", "selected", "file_tree","directory_tree"
         format=ex_cfg.get("default_format", "filestruct_json") #options: "filestruct_json", "list_txt", "list_csv", "text_tree"
         selected_fields=ex_cfg.get("default_selected_fields") # null -> all selected [] -> none selected
-        ex_wid=self.results_tree.export_widget
+        ex_wid=self.br_tree.export_widget
         ex_wid.setSelection(selection)
         ex_wid.setFormat(format)
         field_list=ex_wid.getFields()
@@ -440,51 +430,6 @@ class SearchDialog(QtWidgets.QDialog):
                     field_id_list.append(an_id)
             ex_wid.setSelectedFields(field_id_list)
     
-    def search_for_(self, user_query_txt, sql_where):
-
-        (temp_db, idx_map)=self.fmap.do_a_search(self.db_map_pairs,
-                              sql_where,
-                              log_callback=self.log_callback, # set log_callback
-                              )
-        self.s_result=[]
-        for idx,idx_dict in idx_map.items():
-            s_result=self._get_search_result_obj(idx, temp_db, idx_dict , user_query_txt, sql_where)
-            self.s_result.append(s_result)
-
-        self.db_idx_map_registry.append((temp_db, idx_map , user_query_txt, sql_where))
-        # do this with Qtimer oneshot
-        self._do_statistic()
-        self._load_search_results_to_tree()
-    
-    def _do_statistic(self):
-        self.statistic_dict={}        
-        tot_total=0
-        for s_r in self.s_result:
-            if isinstance(s_r,SearchResult):
-                total=self.statistic_dict.get(f"Total_{s_r.temp_db}",0)
-                self.statistic_dict.update({s_r.temp_db_map_pair:s_r.matches})
-                total+=s_r.matches
-                self.statistic_dict.update({f"Total_{s_r.temp_db}":total})
-                tot_total+=s_r.matches
-        self.statistic_dict.update({f"Total":tot_total})
-
-    
-    def _get_search_result_obj(self,idx, temp_db, idx_dict , user_query_txt, sql_where)->SearchResult:
-        self.log_callback(f"{idx} Search '{user_query_txt}' found {idx_dict['matches']} matches!")
-        return SearchResult(idx = idx,
-                            user_query = user_query_txt,
-                            sql_where = sql_where,
-                            idx_dict=idx_dict,
-                            temp_map = idx_dict["name"],
-                            temp_db = temp_db,
-                            temp_db_map_pair = (temp_db, idx_dict["name"]),
-                            origin_db = idx_dict["db_map_pair"][0],
-                            origin_map = idx_dict["db_map_pair"][1],
-                            origin_db_map_pair = idx_dict["db_map_pair"],
-                            matches = idx_dict["matches"],
-                            )
-    
-
 
     def _get_db_info_obj(self,db_filepath:str)->DatabaseInfo:
         db_info_list = self.fmap.get_active_databases_in_dbm()
@@ -494,111 +439,6 @@ class SearchDialog(QtWidgets.QDialog):
             if str(db.database_filepath) == db_filepath:
                 return db    
         return None
-    
-    def _clear_search(self):
-        if not self._has_been_searched:
-            return
-        # get tree manager 
-        model=self.results_tree.model
-        t_m=self.results_tree.model.t_m
-        root_node = t_m.root
-        self.results_tree.set_title_label_text("Map Explorer")
-        self._has_been_searched = False
-        # remove all children
-        try:
-            model.beginResetModel()
-            for ch_node in root_node.children[:]:
-                t_m.remove_node(ch_node)
-            
-            for e_node in self._explorer_root_node.children:
-                e_copy=deepcopy(e_node)
-                # print("E_NODE AFTER DEEP:", type(e_copy), e_copy)
-                t_m.add_child(root_node,e_copy)   
-        finally:
-            model.endResetModel() 
-        self._explorer_root_node = None
-
-    def _load_search_results_to_tree(self):
-        if not self.s_result:
-            return
-        # get tree manager 
-        model=self.results_tree.model
-        t_m=self.results_tree.model.t_m
-        root_node = t_m.root
-        root_node.expand = True
-        #print("ROOT:", type(root_node), root_node)
-        if not self._has_been_searched:
-            self._explorer_root_node = deepcopy(root_node)
-            #print("ROOT AFTER DEEP:", type(root_node), root_node)
-            self._has_been_searched = True
-        self.results_tree.set_title_label_text(f"Search Results: {self.statistic_dict.get('Total')} matches!")
-        # remove all children
-        model.beginResetModel()
-        try:
-            for ch_node in root_node.children[:]:
-                t_m.remove_node(ch_node)
-            
-            for s_r in self.s_result:
-                if not isinstance(s_r,SearchResult):
-                    continue
-                self._load_a_search_result_to_tree(root_node=root_node, s_r=s_r)
-        finally:
-            model.endResetModel()
-
-    def _load_a_search_result_to_tree(self,root_node:TreeNode,s_r:SearchResult):
-        #print("1 _load_a_search_result_to_tree entered")
-        is_on_db = False
-        total_matches=self.statistic_dict.get(f"Total_{s_r.temp_db}",0)
-        if len(root_node.children)>0:
-            for chdb_node in root_node.children:
-                if chdb_node.i_am == "database" and chdb_node.db == s_r.temp_db:
-                    is_on_db=True
-                    db_node=chdb_node
-                    db_node.expand = True
-                    break
-        #print(f"2 is_on_db={is_on_db}")
-        if not is_on_db:
-            # Load database
-            db=self._get_db_info_obj(s_r.origin_db)
-            db_node = TreeNode(f"Search Result {db.name} - {total_matches} matches found!")
-            db_node.i_am = "database"
-            real_db_filepath=str(db.database_filepath)
-            db_node.path = "" # do not add to path
-            db_node.db = real_db_filepath
-            db_node.i_exist = db.active
-            db_node.map = None
-            db_node.info = s_r.temp_db
-            db_node.loaded = True
-            db_node.expand = True
-            #print(f"3 dbnode formed={db_node}")
-            root_node.add_child(db_node)
-        #print(f"4 db_node={db_node}")
-        # Load map                    
-        mount,serial = self.fmap.get_mount_serial_of_map(s_r.temp_db,s_r.temp_map) 
-        map_node = TreeNode(f"{s_r.temp_map} @ ({mount}) - found {s_r.matches} matches!")
-        map_node.i_am = "map"
-        map_node.path = mount
-        map_node.info = s_r.temp_db_map_pair+s_r.origin_db_map_pair # add the pair so tup len = 4
-        map_node.loaded = False
-        map_node.db = s_r.temp_db
-        map_node.i_exist=self.fmap.is_mount_serial_active(mount,serial)
-        map_node.mount = mount
-        map_node.serial = serial
-        map_node.map = s_r.temp_map
-        map_node.expand = True
-        #print(f"5 map_node formed={map_node}")
-        db_node.add_child(map_node)
-        # Children are added with results
-        map_full_path = self.fmap.get_full_mount_path_of_map(s_r.temp_db,s_r.temp_map) 
-        self._add_db_map_children(map_node,map_full_path)
-        # Set by the lazyloader
-        #  # database mapping
-        # map_node.db_id = None
-        # # file mapping
-        # map_node.itempath = None
-        # map_node.quantity = 0
-        # map_node.num_files = None
-        # map_node.num_dirs = None
 
     def _add_db_map_children(self,map_node:TreeNode,full_path):    
         multiple_folders=self.modding_info.get("multiple_folders")
@@ -675,11 +515,8 @@ class SearchDialog(QtWidgets.QDialog):
             if self._lazy_loading:
                 self._lazy_loading = False
                 QtWidgets.QApplication.restoreOverrideCursor()   
-                self._set_statistics_node(self.results_tree.current_node())
-    
-    def _on_current_selection_changed(self,current_selection_list:list):
-        if current_selection_list and isinstance(current_selection_list,list): 
-            self._set_statistics_node(current_selection_list[0])
+                self._set_statistics_node(self.br_tree.current_node())
+
 
     def _toggle_export_show(self):
         if self.is_export_showing:
@@ -688,7 +525,8 @@ class SearchDialog(QtWidgets.QDialog):
         else:
             self.export_button.setIcon(self.icons.icon("notexport"))
             self.is_export_showing = True
-        self.results_tree.show_export_widget(self.is_export_showing)
+        self._configure_export_widget()
+        self.br_tree.show_export_widget(self.is_export_showing)
     
     
     def _format_property_value(self, value):
@@ -825,10 +663,10 @@ class SearchDialog(QtWidgets.QDialog):
     def _set_statistics_node(self, node: TreeNode):
         if not node:
             return
-        db_total_matches=self.statistic_dict.get(f"Total_{node.db}",0)
-        map_total_matches=self.statistic_dict.get((node.db,node.map),0)
-        # sel_node_list=self.results_tree.selected_nodes()
-        all_selected=len(self.results_tree.selected_ids())
+        # db_total_matches=self.statistic_dict.get(f"Total_{node.db}",0)
+        # map_total_matches=self.statistic_dict.get((node.db,node.map),0)
+        # sel_node_list=self.br_tree.selected_nodes()
+        all_selected=len(self.br_tree.selected_ids())
 
         self.files_label.setText(f"Node Files: {node.num_files or 0}")
         self.folders_label.setText(f"Node Folders: {node.num_dirs or 0}")
@@ -838,8 +676,6 @@ class SearchDialog(QtWidgets.QDialog):
         else:
             value = 0
         self.size_label.setText(f"Size: {value}")
-        self.db_matches_label.setText(f"DB Matches: {db_total_matches}")
-        self.map_matches_label.setText(f"Map Matches: {map_total_matches}")
         self.selected_label.setText(f"Selected: {all_selected}")
 
     def on_selection_changed(self,nodes_list):
@@ -848,16 +684,39 @@ class SearchDialog(QtWidgets.QDialog):
             if isinstance(node,TreeNode):
                 self._set_statistics_node(node)
     
+    def get_export_formats_selections(self):
+        if self.mode == "dirs" and self.hide_files:
+            ex_formats = [
+                # These require files
+                # ExportFormat("Filestruct → JSON", "filestruct_json", ".json"),
+                # ExportFormat("List → TXT", "list_txt", ".txt"),
+                # ExportFormat("List → CSV", "list_csv", ".csv"),
+                ExportFormat("Text Tree", "text_tree", ".txt"),
+            ]
+            ex_selections = [
+                ExportSelection("Expanded", "expanded"),
+                ExportSelection("Selected", "selected"),
+                #ExportSelection("File Tree", "file_tree"),
+                ExportSelection("Directory Tree", "directory_tree"),
+                ]
+        else:
+            ex_formats=DC_DEFAULT_FORMATS
+            ex_selections=DC_DEFAULT_SELECTIONS
+        return ex_formats,ex_selections
+
     def on_export_requested(self,export_dict: dict):
         self.log_callback("Got export Request " + 
             "\n".join([f"{kkk}: {vvv} " for kkk,vvv in export_dict.items()]))
-        t_m=self.results_tree.model.t_m
+        t_m=self.br_tree.model.t_m
+        
+        ex_formats,ex_selections =self.get_export_formats_selections()        
         ex_handler=ExporterHandler(fmap=self.fmap,
                         export_request_dict=export_dict,
                         root_node=t_m.root,
                         style=DefaultExportStyle(), 
                         available_fields=None,
-                        available_formats=None,
+                        available_formats=ex_formats,
+                        available_selections=ex_selections,
                         log_callback=self.log_callback,
                         )
         was_exported, msg = ex_handler.do_export()
@@ -884,7 +743,7 @@ class SearchDialog(QtWidgets.QDialog):
     
     def on_export_format_changed(self,format_tup):
         label,format = format_tup
-        ex_wid=self.results_tree.export_widget
+        ex_wid=self.br_tree.export_widget
         if format not in ("filestruct_json", "list_txt", "list_csv", "text_tree"):
             return
         if format == "filestruct_json":
@@ -897,221 +756,62 @@ class SearchDialog(QtWidgets.QDialog):
             req_fields=['filename','filepath']
         ex_wid.SetRequiredFields(req_fields)
     
-    def _create_selection_map(self):
+    def _configure_export_widget(self):
+        ex_wid = self.br_tree.export_widget
+        ex_formats,ex_selections =self.get_export_formats_selections()   
+        selections=[]
+        for sel_obj in ex_selections:
+            if isinstance(sel_obj,ExportSelection):
+                selections.append((sel_obj.label,sel_obj.value))
+        ex_wid.setSelections(selections)
+        if selections:
+            ex_wid.setSelection(selections[0][1])
+        formats=[]
+        for for_obj in ex_formats:
+            if isinstance(for_obj,ExportFormat):
+                formats.append((for_obj.label,for_obj.value))
+        ex_wid.setFormats(formats)
+        if formats:
+            ex_wid.setFormat(formats[0][1])
 
-        selected_nodes_list=self.results_tree.selected_nodes()
-        msgbox = MsgBoxHelper()
-        if not selected_nodes_list:
-            
-            msgbox.show("Create Selection Map",
-                    "There are no selected items to Create a Map!\n Select some Files first :P",
-                    icon=QMessageBox.Icon.Critical,
-                    buttons=None,
-                    default=None,
-                    detailed_text=None,
-                    informative_text=None,
-                    )
-            return    
-        mount_serial_list,mount_serial_dict=self._get_mount_serial_pair(selected_nodes_list)
-        if len(mount_serial_list)<1:
-            log.debug("_create_selection_map No mount serial")
-            return
-        maps_created=[]
-        for mount_serial_pair in mount_serial_list:
-            mount,serial =mount_serial_pair
-            dialog = NewMapDialog(fmap = self.fmap, 
-                                default_map_name = None, 
-                                title = f"Create Selection Map for ({mount},{serial})", 
-                                icon_name = "selection map", 
-                                parent = self)
-
-            if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
-                log.debug("_create_selection_map User did not accept")
-                continue
-            db_to, map_to = dialog.get_values()
-            common_path=self._get_common_path(mount_serial_pair,mount_serial_dict)
-            fm=self.fmap.cma.get_file_map(db_to)
-            if not fm:
-                log.debug("_create_selection_map No file mapper")
-                continue
-            # route database logger
-            fm.db.set_log_callback(self.log_callback)
-            # Destination table fields
-            origin_db, origin_map = self._get_origin_from_nodes(mount_serial_pair, mount_serial_dict)
-            origin_fm=self.fmap.cma.get_file_map(origin_db)
-            if not origin_fm:
-                log.debug(f"_create_selection_map No Origin Filemapper: {origin_db}")
-                continue
-            field_list = origin_fm.db.get_column_list_of_table(origin_map)
-            if not field_list:
-                log.debug("_create_selection_map No fieldlist")
-                continue
-            origin_info=self.fmap.cma.get_map_info_as_dict(origin_db, origin_map)
-            mappath=self.fmap.fm.remove_mount_from_path(
-                origin_info['mount'], common_path,remove_start_separator=True)
-            
-            # Get data selected nodes
-            data = self._get_data_from_nodes(
-                mount_serial_pair, mount_serial_dict, field_list)
-            if not data:
-                log.debug("_create_selection_map No data")
-                continue
-
-            #Create Selection map 
-            fm.db.create_connection()
-            was_indexed=fm.add_table_to_mapper_index(map_to, mappath, 
-                MapType.SELECTION.value)
-            if not was_indexed:
-                log.debug("_create_selection_map Not indexed")
-                continue
-            # fix mount and serial
-            was_mount_serial_set=fm.set_mount_serial_to_map(
-                    map_to, origin_info['mount'],origin_info['serial'])
-            if not was_mount_serial_set:
-                log.debug(f"_create_selection_map mount and serial failed")
-                continue
-            fm._create_map_in_db(map_to)
-            an_id=fm.get_table_id(map_to)
-            if an_id:
-                was_inserted = fm.db.insert_data_to_table(map_to,data)
-                if not was_inserted:
-                    log.debug("_create_selection_map No data inserted")
-                    continue
-                if db_to != origin_db:
-                    fm.set_origin_db_map(map_to,origin_db,origin_map)
-                else:
-                    # dont set origin_db if is the same database
-                    fm.set_origin_db_map(map_to,origin_map=origin_map)
-                # test = fm.db.get_data_from_table(map_to,'*')
-                maps_created.append((db_to,map_to))
-            else:
-                log.debug("_create_selection_map No id")
+    def clear_files_folders_selection(self):
+        """Unselect all nodes"""
+        tm=self.br_tree.t_m
+        selected_nodes=self.br_tree.selected_nodes()
+        for node in selected_nodes:
+            tm.set_selected(node,False)
+        self.br_tree.refresh()
+    
+    def show_hide_files(self, checkstate):
+        self.hide_files = (checkstate == Qt.CheckState.Checked)
+        tm=self.br_tree.t_m
+        ap=self.br_tree.action_provider
+        if isinstance(ap,BrowseFileActionProvider):
+            ap.hide_all_files(tm,self.hide_files)
+        self.set_nodes_hidden_in_treeview(tm.root)
+        self._configure_export_widget()
         
-        if maps_created:
-            #Set the correct size of new map in cache
-            self.fmap.refresh_map_size_cache()
-            # Ask for refresh
-            self.refresh_mapping_tree.emit()
+    def set_nodes_hidden_in_treeview(self,node:TreeNode):
+        index = self.br_tree.model.get_index_from_node(node)
+        if index.isValid():
+            self.br_tree.tree.setRowHidden(
+                index.row(), index.parent(), node.hidden)
+        for ch_node in node.children:
+            self.set_nodes_hidden_in_treeview(ch_node)
+    
+    def _on_node_expanded(self,is_expand:bool):
+        self.show_hide_files(self.hide_files_cb.checkState())
+    
+    def _on_current_selection_changed(self,current_selection_list:list):
+        if current_selection_list and isinstance(current_selection_list,list): 
+            self._set_statistics_node(current_selection_list[0])
 
-            dmsg="Maps Created:"
-            for iii,db_map_pair in enumerate(maps_created):
-                dmsg+="\n"+"-"*33
-                dmsg+=f"\n{iii}\tDatabase: {db_map_pair[0]}"
-                dmsg+=f"\n{iii}\t     Map: {db_map_pair[1]}"
-            dmsg+="\n"+"-"*33
-            msgbox.show("Create Selection Map",
-                    f"Successfully created {len(maps_created)} selection maps!",
-                    icon=QMessageBox.Icon.Information,
-                    buttons=None,
-                    default=None,
-                    detailed_text=dmsg,
-                    informative_text=None,
-                    )
-    
-   
-    def _get_mount_serial_pair(self,selected_nodes_list:list[TreeNode])->list[tuple]:
-        mount_serial_pair_list=[]
-        mount_serial_pair_node_dict={}
-        for node in selected_nodes_list:
-            mount_serial_pair = (node.mount, node.serial)
-            if mount_serial_pair not in mount_serial_pair_list:
-                mount_serial_pair_list.append(mount_serial_pair)
-            ms_p_l=mount_serial_pair_node_dict.get(mount_serial_pair,[])
-            ms_p_l+=[node]
-            mount_serial_pair_node_dict.update({mount_serial_pair:ms_p_l})
-        return mount_serial_pair_list, mount_serial_pair_node_dict
-    
-    def _get_common_path(self,mount_serial_pair, mount_serial_dict:dict)->str:
-        node_list=mount_serial_dict.get(mount_serial_pair,[])
-        paths_list=[]
-        for node in node_list:
-            if isinstance(node,TreeNode):
-                paths_list.append(node.path)
-        if paths_list:
-            return self.fmap.fm.get_common_path(paths_list)
-        return ""
-    
-    def _get_data_from_nodes(self, mount_serial_pair, mount_serial_dict: dict, fields:list):
-        """
-        Build database rows from the selected TreeNodes belonging to
-        one (mount, serial) pair.
-
-        The returned rows follow the supplied database field order.
-        """
-        node_list = mount_serial_dict.get(mount_serial_pair, [])
-        ttexp=TableTextExporter(self.fmap)
-        if not node_list:
-            return []
-        # remove id from data
-        fields_proc=[]
-        for fie in fields:
-            if fie != "id":
-                fields_proc.append(fie)
         
-        data = []
-        for node in node_list:
-            if not isinstance(node, TreeNode):
-                continue
-            if node.i_am != "file":
-                continue
+    
+    
+
             
-            row = ttexp._get_node_row(node, fields_proc)
-            # append tuples
-            data.append(tuple(row))
 
-        return data
-    
-    def _get_origin_from_nodes(self, mount_serial_pair, mount_serial_dict: dict):
-        """
-        Get the origin map belonging to one (mount, serial) pair form Treenodes.
-
-        Returns (origin_db,origin_map) tuple.
-        """
-        node_list = mount_serial_dict.get(mount_serial_pair, [])
-        
-        origin_db = None
-        origin_map = None
-        for node in node_list:
-            if not isinstance(node, TreeNode):
-                continue
-            if node.i_am == "map":
-                try:
-                    (_, _, origin_db, origin_map)=self._info_db_maps(node.info)
-                    return origin_db, origin_map
-                except:
-                    pass
-            if node.i_am != "file":
-                continue
-            # get origins
-            if origin_db is None or origin_map is None:
-                bl = node.get_bloodline()
-                for p_node in bl:
-                    # map info retains the origin db and map
-                    if p_node.i_am == "map":
-                        try:
-                            (_, _, origin_db, origin_map)=self._info_db_maps(p_node.info)
-                            return origin_db, origin_map
-                        except:
-                            pass 
-        return origin_db, origin_map
-    
-    def _info_db_maps(self,info):
-        """The node's info can have one db_map pair or two. 
-        If has one info comes from  origin map. If has 2 pairs then 
-        is a temporal map, with a origin map as the second tuple. 
-        The first tuple in info is used to build the tree, so loads the nodes 
-        from positions 0 and 1.
-        """
-        temp_db=None
-        temp_map=None
-        origin_db=None
-        origin_map=None
-        if isinstance(info,tuple):
-            if len(info) == 2:
-                (origin_db, origin_map)=info
-            elif len(info) == 4:
-                (temp_db,temp_map,origin_db, origin_map)=info  
-        return temp_db, temp_map, origin_db, origin_map  
 
 
 

@@ -128,6 +128,8 @@ class ExportWidget(QtWidgets.QWidget):
         self.selectionCombo = QtWidgets.QComboBox()
         self._populateCombo(self.selectionCombo, self.selections)
         self.setSelection(default_selection)
+        self.selectionCombo.setSizeAdjustPolicy(
+            QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToContents)
         self.selectionCombo.currentIndexChanged.connect(self.on_selection_changed)
 
         # ------------------------------------------------------------
@@ -136,6 +138,8 @@ class ExportWidget(QtWidgets.QWidget):
         self.formatCombo = QtWidgets.QComboBox()
         self._populateCombo(self.formatCombo, self.formats)
         self.setFormat(default_format)
+        self.formatCombo.setSizeAdjustPolicy(
+            QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToContents)
         self.formatCombo.currentIndexChanged.connect(self.on_format_changed)
 
         # ------------------------------------------------------------
@@ -200,6 +204,8 @@ class ExportWidget(QtWidgets.QWidget):
 
         topLayout.addWidget(QtWidgets.QLabel("Format:"))
         topLayout.addWidget(self.formatCombo)
+        
+
 
         topLayout.addStretch()
 

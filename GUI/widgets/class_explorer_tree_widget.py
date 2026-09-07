@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (
     QMenu,
     QListWidget,
 )
+from PyQt6.QtCore import QSortFilterProxyModel
 from PyQt6.QtWidgets import QAbstractItemView
 
 from PyQt6.QtCore import Qt, pyqtSignal
@@ -200,12 +201,44 @@ class ExplorerTreeWidget(QWidget):
     def expanded_ids(self):
         return self.t_m.get_expanded_ids()
     
+    def loaded_nodes(self):
+        return self.t_m.get_loaded_nodes()
+    
+    def loaded_ids(self):
+        return self.t_m.get_loaded_ids()
+    
+    def unloaded_nodes(self):
+        return self.t_m.get_unloaded_nodes()
+    
+    def unloaded_ids(self):
+        return self.t_m.get_unloaded_ids()
+    
     def refresh(self):
         self.model.layoutChanged.emit()
 
     # --------------------------------------------------
     # lazy load
     # --------------------------------------------------
+
+    def load_node(self, node:TreeNode, max_level=None):
+        """Loads the node branch without expanding. 
+        Use max level with node.level to stop loading 
+        in a relative depth.
+        Examples: 
+            load_node(node,node.level) -> just this node
+            load_node(node,node.level+1) -> this node and children only
+            load_node(node) -> all branch
+            """
+        if not node:
+            return
+        index= self.model.index_from_node(node)
+        self._fetch(index)
+        if max_level is None:
+            for child in node.children:
+                self.load_node(child,max_level)
+        elif isinstance(max_level,int) and node.level < max_level:
+            for child in node.children:
+                self.load_node(child,max_level)
 
     def _on_tree_expanded(self, index):
         node = self.model.get_node_from_index(index)

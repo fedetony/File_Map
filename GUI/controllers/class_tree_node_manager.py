@@ -326,7 +326,9 @@ class TreeManager:
         result = []
         for node in self.nodes_by_id.values():
             if hasattr(node, attribute):
-                if getattr(node, attribute) == value:
+                if node and value is None and getattr(node, attribute) is None:
+                    result.append(node)
+                if value is not None and getattr(node, attribute) == value:
                     result.append(node)
         return result
     
@@ -354,6 +356,19 @@ class TreeManager:
     def get_locked_nodes(self):
         return self.get_nodes_by_attribute("locked",True)
     
+    def get_loaded_nodes(self):
+        return self.get_nodes_by_attribute("loaded",True)
+    
+    def get_unloaded_nodes(self):
+        return (self.get_nodes_by_attribute("loaded",None) +
+         self.get_nodes_by_attribute("loaded",False))
+    
+    def get_loaded_ids(self):
+        return [node.id for node in self.get_loaded_nodes()]
+    
+    def get_unloaded_ids(self):
+        return [node.id for node in self.get_unloaded_nodes()]
+
     def get_selected_ids(self):
         return [node.id for node in self.get_selected_nodes()]
     

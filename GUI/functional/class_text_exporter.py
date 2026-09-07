@@ -1271,6 +1271,7 @@ class ExporterHandler:
                  style: ExportTreeStyle =None,
                  available_fields: list[ExportField]=None,
                  available_formats: list[ExportFormat]=None,
+                 available_selections: list[ExportSelection]=None,
                  log_callback=None,
                  ):
         self.fmap = fmap
@@ -1287,7 +1288,7 @@ class ExporterHandler:
             self.available_fields=available_fields
             for av_field in self.available_fields:
                 if not isinstance(av_field, ExportField):
-                    raise TypeError(f"Fields must be ExportField type {type(ExportField)}")
+                    raise TypeError(f"Fields must be type {type(ExportField)}")
         else:
             self.available_fields=DC_DEFAULT_FIELDS
         
@@ -1295,11 +1296,17 @@ class ExporterHandler:
             self.available_formats=available_formats
             for av_format in self.available_formats:
                 if not isinstance(av_format, ExportFormat):
-                    raise TypeError(f"Fields must be ExportField type {type(ExportFormat)}")
+                    raise TypeError(f"Formats must be type {type(ExportFormat)}")
         else:
             self.available_formats=DC_DEFAULT_FORMATS
         
-        self.available_selections = DC_DEFAULT_SELECTIONS
+        if available_selections and isinstance(available_selections,list):
+            self.available_selections=available_selections
+            for av_sel in self.available_selections:
+                if not isinstance(av_sel, ExportSelection):
+                    raise TypeError(f"Selections must be type {type(ExportSelection)}")
+        else:
+            self.available_selections = DC_DEFAULT_SELECTIONS
 
         self.filters = NodeExportFilters()
         self.tab_list_ex = TabulatedTableTextExporter(self.fmap)

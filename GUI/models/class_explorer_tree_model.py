@@ -90,7 +90,7 @@ class ExplorerTreeModel(QAbstractItemModel):
         if not index.isValid():
             return None
         node = self.get_node_from_index(index)
-        if node.hidden is None:
+        if node.hidden is None: 
             return None
         # text provider
         if role == Qt.ItemDataRole.DisplayRole:
