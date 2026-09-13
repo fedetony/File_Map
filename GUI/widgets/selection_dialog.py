@@ -4,6 +4,7 @@ from widgets.class_qt_map_progress import QtMapProgress
 
 from collections import deque
 import threading
+from dataclasses import fields
 
 from controllers.class_filemap_cli_manager import FileMapCliManager
 from controllers.mapping_worker_thread import WorkerManager
@@ -11,6 +12,7 @@ from functional.class_icons import Icons
 from functional.class_text_renderer import TextRenderer
 from widgets.class_explorer_tree_widget import *
 from widgets.class_selection_menu import SelectionMenu
+from widgets.class_simple_target_widget import *
 
 from models.class_provider_engine import DefaultProviderEngine, FM
 from models.class_action_provider import DefaultFileActionProvider
@@ -101,7 +103,6 @@ class SelectionDialogSetter:
                 map_node.map = a_map
                 db_node.add_child(map_node)
                 self._add_db_map_children(map_node,map_node.path,map_full_path)
-                
 
         config = ExplorerConfig()
         # Basic
@@ -174,9 +175,6 @@ class SelectionDialogSetter:
             p_node.add_child(ch_node)
             # Next iteration
             p_node = ch_node
-
-            
-
 
     def _set_fe_mode_config(self):
 
@@ -355,46 +353,19 @@ class SelectionDialog(QtWidgets.QDialog):
         ##################################
         self.s_m_tv =QTreeView()
         self.sel_menu=SelectionMenu(self.fmap,self.s_m_tv,self)
+        self.sel_menu.target_items_changed.connect(self._new_targets_selected)
         self.sel_menu.set_end_database(self.database)
+
         ##################################
-        # Processing widget
+        # Target widget
         ##################################
-        table_label = QtWidgets.QLabel("Table name:")
-
-        self.table_name_edit = QtWidgets.QLineEdit()
-        if not self.predifined_map_name:
-            self.table_name_edit.setPlaceholderText("Enter table name")
-            self.table_name_edit.setToolTip(
-                "Special characters will be replaced: "
-                "% (Date_Time), # (Date), ? (Time), "
-                "& (Dir), ! (Full_Path)"
-            )
-        else:
-            self.table_name_edit.setText(self.predifined_map_name)
-            self.table_name_edit.setEnabled(False)
-
-        path_label = QtWidgets.QLabel("Path:")
-
-        self.path_edit = QtWidgets.QLineEdit()
-        if not self.predifined_path_to_map:
-            self.path_edit.setPlaceholderText("Select folder to map")
-        else:
-            self.path_edit.setText(self.predifined_path_to_map)
-            self.path_edit.setEnabled(False)
-
-        self.browse_button = QtWidgets.QPushButton("Browse...")
-        self.browse_button.setIcon(self.icons.icon("search folder"))
-        if not self.predifined_path_to_map:
-            self.browse_button.clicked.connect(self.browse_folder)
-
-        path_layout = QtWidgets.QHBoxLayout()
-        path_layout.addWidget(self.path_edit,1)
-        path_layout.addWidget(self.browse_button)
+        self.target_widget=TargetManagerWidget(self.fmap,target_type="map")
+        #self.target_widget=MapTargetManagerWidget(self.fmap)
+        self.target_widget.targetChanged.connect(self._on_target_changed)
 
         # -------------------------------------------------
         # Progress
         # -------------------------------------------------
-
         self.progress_container = QtWidgets.QWidget()
         self.progress_layout = QtWidgets.QVBoxLayout(self.progress_container)
         self.progress_layout.setContentsMargins(0, 0, 0, 0)
@@ -488,11 +459,12 @@ class SelectionDialog(QtWidgets.QDialog):
         processing_widget = QtWidgets.QWidget()
         processing_layout = QtWidgets.QVBoxLayout(processing_widget)
 
-        processing_layout.addWidget(table_label)
-        processing_layout.addWidget(self.table_name_edit)
+        # processing_layout.addWidget(table_label)
+        # processing_layout.addWidget(self.table_name_edit)
 
-        processing_layout.addWidget(path_label)
-        processing_layout.addLayout(path_layout)
+        # processing_layout.addWidget(path_label)
+        # processing_layout.addLayout(path_layout)
+        processing_layout.addWidget(self.target_widget)
 
         processing_layout.addWidget(self.progress_container)
 
@@ -948,6 +920,20 @@ class SelectionDialog(QtWidgets.QDialog):
     def mark_color(txt:str,color:str):
         return f"[{color}]{txt}[/{color}]"
 
+    def _new_targets_selected(self, targets: list[MapTargetItem]):
+        if self.target_widget.target_type == "map":
+            self.target_widget.set_targets(targets)
+
+        elif self.target_widget.target_type == "file":
+            new_file_list = [
+                copy_shared_fields(tar, FileTargetItem())
+                for tar in targets
+            ]
+            self.target_widget.set_targets(new_file_list)
+
+    def _on_target_changed(self,targets:list[MapTargetItem]):
+        print(targets)
+
 
 class MappingLogBuffer:
     def __init__(self):
@@ -966,4 +952,3 @@ class MappingLogBuffer:
         with self._lock:
             count = min(maximum, len(self._queue))
             return [self._queue.popleft() for _ in range(count)]
-

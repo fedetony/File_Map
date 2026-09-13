@@ -159,7 +159,8 @@ class TableWidgetFunctions(QtWidgets.QWidget):
         # print(self.show_dict_types)
         self.refresh_tablewidget(self.show_dict, self.modelobj, self.tablewidgetobj)
         # connect action
-        self.tablewidgetobj.clicked.connect(self._tablewidget_onclick)
+        #self.tablewidgetobj.clicked.connect(self._tablewidget_onclick)
+        self.tablewidgetobj.itemSelectionChanged.connect(self._tablewidget_on_item_selection)
         #Install event filter for right click
         self.tablewidgetobj.viewport().installEventFilter(self)
         
@@ -618,6 +619,11 @@ class TableWidgetFunctions(QtWidgets.QWidget):
                     itm.setToolTip(itt)
         except (AttributeError, TypeError):
             log.error("Setting ToolTiptext to item")
+
+    def _tablewidget_on_item_selection(self):
+        index_list=self.tablewidgetobj.selectedIndexes()
+        if index_list:
+            self._tablewidget_onclick(index_list[0])
 
     def _tablewidget_onclick(self, index: QtCore.QModelIndex):
         """Onclick method on table widget restores or edits the item

@@ -248,6 +248,8 @@ class Icons:
         "plus":":/icons/plus_icon.png",
         "main":":/icons/main_icon.png",
         "yes":":/icons/yes_icon.png",
+        "no":":/icons/Ahmadhania-Spherical-Close.128.png",
+        "ok":":/icons/Icojam-Blue-Bits-Thumbs-up.256.png",
         "open file":":/icons/open_file_icon.png",
         "db admin":":/icons/icons8-database-administrator-94.png",
         "minus":":/icons/minus_icon.png",

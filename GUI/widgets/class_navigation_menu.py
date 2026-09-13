@@ -119,7 +119,7 @@ class NavigationMenu(QtCore.QObject):
         #     self.apply_nav_changes(name)
 
         # here send signal to main
-        print("on_tree_item_edited triggered ->",track, value, typestr, subtype)
+        # print("on_tree_item_edited triggered ->",track, value, typestr, subtype)
         pass
 
     def _change_setting_trigger_evaluate_conditions(self, track, value):

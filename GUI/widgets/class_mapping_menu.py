@@ -294,7 +294,7 @@ class MappingMenu(QtCore.QObject):
         # Decide what to do with item value changed
         self._evaluate_conditions()
 
-        print("on_tree_item_edited triggered ->",track, value, typestr, subtype)
+        # print("on_tree_item_edited triggered ->",track, value, typestr, subtype)
 
     def _change_setting_trigger_evaluate_conditions(self, track, value):
         """Set a tracked value and re-evaluate conditions if the update succeeds.

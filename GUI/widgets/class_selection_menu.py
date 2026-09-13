@@ -9,6 +9,8 @@ from functional.class_icons import Icons
 from functional.class_struct_tracker import TreeStructTracker
 from controllers.class_filemap_cli_manager import *
 from widgets.class_delegates import ActiveMapDelegate,ItemTypeDelegate
+# from widgets.class_target_widget import MapTargetItem
+from widgets.class_simple_target_widget import MapTargetItem
 
 from models.class_style_provider import *
 
@@ -85,6 +87,7 @@ class SelectionMenu(QtCore.QObject):
             }
 
     mapping_running_state = QtCore.pyqtSignal(str,bool)
+    target_items_changed = QtCore.pyqtSignal(object)
 
     def __init__(self, fmap:FileMapCliManager, treeview_obj:QTreeView, parent=None):
         super().__init__(parent)
@@ -97,6 +100,7 @@ class SelectionMenu(QtCore.QObject):
         self.database = ""
         self.sel_struct=SELECT_STRUCT_EXAMPLE.copy()
         self._syncing_ui = False
+        self.target_list=[]
         self._build_selection_configuration_tree()
         self.generate_selection_struct()
     
@@ -281,7 +285,7 @@ class SelectionMenu(QtCore.QObject):
         # Decide what to do with item value changed
         self._evaluate_conditions()
 
-        print("on_tree_item_edited triggered ->",track, value, typestr, subtype)
+        # print("on_tree_item_edited triggered ->",track, value, typestr, subtype)
     
     def _change_setting_trigger_evaluate_conditions(self, track, value):
         """Set a tracked value and re-evaluate conditions if the update succeeds.
@@ -341,11 +345,13 @@ class SelectionMenu(QtCore.QObject):
         self.sel_struct=SELECT_STRUCT_EXAMPLE.copy() #clear struct
 
         if not node_list:
+            self._evaluate_target_items()
             self._refresh_the_tv()
             return 
         
         devices_set=self._get_devices_sets(node_list)
         if not devices_set:
+            self._evaluate_target_items() #node_list)
             self._refresh_the_tv()
             return 
         
@@ -432,6 +438,8 @@ class SelectionMenu(QtCore.QObject):
             
         # root=self.tracker.get_root()
         # print(root)
+        # Evaluate targets after generating new tree  
+        self._evaluate_target_items()
         if do_refresh_tv:
             self._refresh_the_tv()    
     
@@ -562,10 +570,25 @@ class SelectionMenu(QtCore.QObject):
                 
         return list(set(ms_list))
 
-
-
-
     def set_end_database(self,database):
         self.database=database
+    
+    def _evaluate_target_items(self): 
+        # Get the data from the tracker
+        self.target_list=[]
+        db_val_obj=self.tracker.get_validate_node_as_obj(["Database"])
+        for map_name in db_val_obj.children_keys:
+                
+            mount=self.tracker.get_value(["Database",map_name,"mount"])
+            serial=self.tracker.get_value(["Database",map_name,"serial"])
+            name=self.tracker.get_value(["Database",map_name,"value"])
+            # add tagets
+            target_item=MapTargetItem(name=name,
+                                      source_mount=mount,
+                                      source_serial=serial,
+                                      )
+            self.target_list.append(target_item)
+        
+        self.target_items_changed.emit(self.target_list)
 
         
