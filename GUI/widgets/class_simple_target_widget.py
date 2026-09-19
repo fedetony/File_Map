@@ -95,13 +95,23 @@ class TargetManagerWidget(QtWidgets.QWidget):
         self._create_ui()
         self._connect_ui()
         # Clear target list
-        self.set_targets([])
+        self.set_targets_to_ref([])
 
     # ---------------------------------------------------
     # Structs
     # ---------------------------------------------------
 
     def _define_structs(self):
+        self.style_dict = {
+            "Device Map Style":{"ForegroundRole":QtGui.QColor("#3498db"),
+                                "DecorationRole":self.icons.icon("device map")},
+            
+            "Selection Map Style": {"ForegroundRole":QtGui.QColor("#d061fc"), 
+                               "DecorationRole":self.icons.icon("selection map")},
+                               
+            "Database Style": {"ForegroundRole":QtGui.QColor("#ee9624"), 
+                               "DecorationRole":self.icons.icon("db activate")}, 
+        }
         if self.target_type == "map":
 
             self.table_struct={
@@ -156,6 +166,8 @@ class TargetManagerWidget(QtWidgets.QWidget):
         self.table_obj=QtWidgets.QTableWidget()
         self.twf=TableWidgetFunctions(
             self.table_obj, self.table_struct, self.table_mask, None, [])
+        # Set empty role value dict
+        self.twf.set_items_rolevalues()
 
         left_layout.addWidget(self.table_obj)
         layout.addWidget(left)
@@ -226,58 +238,74 @@ class TargetManagerWidget(QtWidgets.QWidget):
     #     self.current_id=track[0]
     #     ms=self.key_mount_serial[self.current_id]
     #     if ms:
-    #         obj=self.get_a_target(ms[0],ms[1])
+    #         obj=self.get_a_target_from_ref(ms[0],ms[1])
             
     #         self._refresh_status()
 
     # ---------------------------------------------------
     # Public
     # ---------------------------------------------------
-    def set_targets(self,map_list:list[MapTargetItem|FileTargetItem]):
+    def set_targets_to_ref(self,map_list:list[MapTargetItem|FileTargetItem]):
         """Populate a list of targets, only if target is not already set"""
         ms_list=[]
         for tar in map_list:
             ms_list.append((tar.source_mount,tar.source_serial))
         
         if not ms_list:
-            self.table_struct={}
-            self.targets={}
-            self.key_mount_serial={}
             self.target_ref_dict = {}
-            self.delegate_set=False
-            self._refresh_table()
+            self.key_mount_serial={}
+            self._reset_table() 
             return
 
         # Remove maps not in maplist
         ms_ref_list=list(self.target_ref_dict.keys())
         for ms in ms_ref_list:
             if ms not in ms_list:
-                tar_to_del=self.get_a_target(ms[0],ms[1])
-                # kkk=self.get_target_key_from_mount_serial(ms[0],ms[1])
-                # if kkk in self.table_struct.keys():
-                #     self.table_struct.pop(kkk)
-                #     self.targets.pop(kkk)
-                #     self.key_mount_serial.pop(kkk)
-                self.remove_from_targets(tar_to_del)
+                tar_to_del=self.get_a_target_from_ref(ms[0],ms[1])
+                self.remove_from_target_ref(tar_to_del)
+
+        # Set new names    
+        for tar in map_list:
+            ms = (tar.source_mount,tar.source_serial)
+            ref_tar=self.get_a_target_from_ref(ms[0],ms[1])
+            if ref_tar:
+                ref_tar.name=tar.name   
         
         # add new maps
-        for tar in map_list:
+        for idx, tar in enumerate(map_list):
             if self.is_in_targets(tar):
                 continue
-            # if not set already set it up
-            self.add_to_targets(tar)
+            # Set a default database
+            if self.target_type == "map" and self.target_db_options:
+                tar.target_database = self.target_db_options[0]
+            # if not set already set it up in target_ref_dict
+            key=self._get_unique_id(str(idx),self.key_mount_serial,"")
+            self.key_mount_serial[key] = (tar.source_mount,tar.source_serial)
+            self.add_to_target_ref(tar)
 
-
-        self.targets={}
-        self.key_mount_serial={}
-        
-        self.table_struct={}
+        # Reset rolevalues styles
+        self.twf.set_items_rolevalues() 
+        # Reset the table
+        self._reset_table()
         # populate with what is in target_ref_dict
-        for idx,(ms,item) in enumerate(self.target_ref_dict.items()):
-            key=str(idx) # self._get_unique_id(str(idx),list(self.table_struct.keys()),"")
-            self.key_mount_serial[key]=ms
-            self.set_target(key,item)
-        
+        for (ms,item) in self.target_ref_dict.items():
+            key=self._get_key_for_mount_serial(ms)
+            self.set_target_to_table(key,item)
+            
+        print(self.table_struct)
+        self._refresh_table()
+    
+    def _get_key_for_mount_serial(self,mount_serial):
+        for key,ms in self.key_mount_serial.items():
+            if ms == mount_serial:
+                return key
+        return None
+    
+    def _reset_table(self):
+        """resets dictionaries tha map table to reference data"""
+        self.targets={}
+        self.table_struct={}
+        self.delegate_set=False
         self._refresh_table()
     
     def get_targets(self)->list:
@@ -315,7 +343,7 @@ class TargetManagerWidget(QtWidgets.QWidget):
         return self.target_db_options
 
 
-    def set_target(self,key:str,target:MapTargetItem|FileTargetItem):
+    def set_target_to_table(self,key:str,target:MapTargetItem|FileTargetItem):
         """Sets the target item to the table struct"""
         self.twf.tablewidgetobj.clearSelection()
         self.targets[key]=target
@@ -347,7 +375,7 @@ class TargetManagerWidget(QtWidgets.QWidget):
             }
             self.table_struct.update({key:target_dict})
             self.set_fileopen_delegate(3)
-
+        self._add_styles_to_widget([key,"Name"],target)
            
         # for jjj,(tr_field,value) in enumerate(target_dict.items()):
         #     track = [key, tr_field]
@@ -364,13 +392,13 @@ class TargetManagerWidget(QtWidgets.QWidget):
         """Is the target already in targets"""
         return (target.source_mount,target.source_serial) in self.target_ref_dict
     
-    def add_to_targets(self,target:MapTargetItem|FileTargetItem):
+    def add_to_target_ref(self,target:MapTargetItem|FileTargetItem):
         """Is the target already in targets"""
         if not self.is_in_targets(target):
             key=(target.source_mount,target.source_serial)
             self.target_ref_dict[key]=target
     
-    def remove_from_targets(self,target:MapTargetItem|FileTargetItem):
+    def remove_from_target_ref(self,target:MapTargetItem|FileTargetItem):
         """Remove from targets"""
         if self.is_in_targets(target):
             key=(target.source_mount,target.source_serial)
@@ -393,7 +421,7 @@ class TargetManagerWidget(QtWidgets.QWidget):
 
             
     
-    def get_a_target(self,mount,serial)->MapTargetItem|FileTargetItem|None:
+    def get_a_target_from_ref(self,mount,serial)->MapTargetItem|FileTargetItem|None:
         """Returns the item if found"""
         return self.target_ref_dict.get((mount,serial))
         
@@ -527,47 +555,79 @@ class TargetManagerWidget(QtWidgets.QWidget):
             return False, "Item Name Duplicated"
         return True,""
     
-    def _add_database_combobox(self, key, db: str):
-        """Adds combobox to item with the database selection
-        """
-        combobox = QtWidgets.QComboBox()
-        # Tablewidget deletes objects after using setCellwidget, you can not set different comboboxes
-        # now combobox objects are delegated to cell information.
-        self._populate_databases()
-        if not self.target_db_options:
-            return
-        first_db=self.target_db_options[0]
-        for ppp in self.target_db_options:
-            combobox.addItem(str(ppp))
+    # def _add_database_combobox(self, key, db: str):
+    #     """Adds combobox to item with the database selection
+    #     """
+    #     combobox = QtWidgets.QComboBox()
+    #     # Tablewidget deletes objects after using setCellwidget, you can not set different comboboxes
+    #     # now combobox objects are delegated to cell information.
+    #     self._populate_databases()
+    #     if not self.target_db_options:
+    #         return
+    #     first_db=self.target_db_options[0]
+    #     for ppp in self.target_db_options:
+    #         combobox.addItem(str(ppp))
 
-        # set db as default
-        if not db:
-            index = combobox.findText(first_db, QtCore.Qt.MatchFlag.MatchFixedString)
-            combobox.setCurrentIndex(index)
-            ms=self.key_mount_serial.get(key)
-            target=self.get_a_target(ms[0],ms[1])
-            target.target_database=first_db
-            track = [key, "Target Database"]
-            self.twf.set_tracked_value_to_dict(track, first_db, self.table_struct, "", False)
+    #     # set db as default
+    #     if not db:
+    #         index = combobox.findText(first_db, QtCore.Qt.MatchFlag.MatchFixedString)
+    #         combobox.setCurrentIndex(index)
+    #         ms=self.key_mount_serial.get(key)
+    #         target=self.get_a_target_from_ref(ms[0],ms[1])
+    #         target.target_database=first_db
+    #         track = [key, "Target Database"]
+    #         self.twf.set_tracked_value_to_dict(track, first_db, self.table_struct, "", False)
 
-        # add or replace widget on twf
-        it_w_dict = self.twf.itemwidget_dict
-        # self.remove_key_from_tablewidgets(key)
-        track_list = it_w_dict["track_list"]
-        is_ontrack=False
-        for tr in track_list:
-            if tr[0]==key:
-                is_ontrack=True
-                break
-        if not is_ontrack:                
-            track_list.append([key, "Target Database"])
-            widget_list = it_w_dict["widget_list"]
-            widget_list.append(combobox)
-            it_w_dict.update({"track_list": track_list})
-            it_w_dict.update({"widget_list": widget_list})
-            self.twf.set_items_widgets(it_w_dict)
-        # print(self.twf.itemwidget_dict)
+    #     # add or replace widget on twf
+    #     it_w_dict = self.twf.itemwidget_dict
+    #     # self.remove_key_from_tablewidgets(key)
+    #     track_list = it_w_dict["track_list"]
+    #     is_ontrack=False
+    #     for tr in track_list:
+    #         if tr[0]==key:
+    #             is_ontrack=True
+    #             break
+    #     if not is_ontrack:                
+    #         track_list.append([key, "Target Database"])
+    #         widget_list = it_w_dict["widget_list"]
+    #         widget_list.append(combobox)
+    #         it_w_dict.update({"track_list": track_list})
+    #         it_w_dict.update({"widget_list": widget_list})
+    #         self.twf.set_items_widgets(it_w_dict)
+    #     # print(self.twf.itemwidget_dict)
     
+    def _add_styles_to_widget(self,track,target:MapTargetItem|FileTargetItem):
+        irv_dict=self.twf.itemrolevalue_dict
+        if not irv_dict:
+            irv_dict={"track_list": [], "role_list": [], "value_list": []}
+
+        if "device" in target.name.lower():
+            style_d = self.style_dict.get("Device Map Style")
+        elif "selection" in target.name.lower():
+            style_d = self.style_dict.get("Selection Map Style")
+        # Preserve old roles 
+        n_tr=[]
+        n_role=[]
+        n_val=[]
+        for tr, rrr, val in zip(irv_dict.get("track_list", []),
+                                irv_dict.get("role_list", []),
+                                irv_dict.get("value_list", [])):
+            if track != tr:    
+                n_tr.append(tr)
+                n_role.append(rrr)
+                n_val.append(val)
+        
+        # Add target role
+        for role_str,value in style_d.items():
+            role, _ =self.twf.roles_map.get(role_str)
+            n_tr.append(track)
+            n_role.append(role)
+            n_val.append(value)
+
+        irv_dict={"track_list": n_tr, "role_list": n_role, "value_list": n_val}    
+        self.twf.set_items_rolevalues(irv_dict)
+
+
     def _table_widget_data_changed(self, track: list[str], val: any, valtype: str, subtype: str):
         """Sets the changed information in table widget by user into the Structure
         """
@@ -578,7 +638,7 @@ class TargetManagerWidget(QtWidgets.QWidget):
 
         key=track[0]
         ms=self.key_mount_serial.get(key)
-        target=self.get_a_target(ms[0],ms[1])
+        target=self.get_a_target_from_ref(ms[0],ms[1])
             
         str_item = track[1]
         target_changed=False
@@ -593,10 +653,8 @@ class TargetManagerWidget(QtWidgets.QWidget):
             target_changed=True
         
         if target_changed:
-            self.set_target(key, target)
-            QtCore.QTimer.singleShot(0, self._refresh_table)
-
-            
+            self.set_target_to_table(key, target)
+            QtCore.QTimer.singleShot(0, self._refresh_table)   
 
     def _get_unique_id(self, desired_id:str,list_of_ids:list,prefix:str="")->str:
         """Gets a unique id with a prefix that is not in the list of ids.
@@ -628,6 +686,18 @@ class TargetManagerWidget(QtWidgets.QWidget):
         """Check if the id is in the list of ids
         """
         return an_id in list_of_ids
+    
+    def get_valid_target_list(self)->list[MapTargetItem|FileTargetItem]:
+        """Returns a list of validated targets"""
+        valid_target_list=[]
+        for ms,target in self.target_ref_dict.items():
+            if isinstance(target,MapTargetItem):
+                if target.is_db_valid and target.is_map_valid:
+                    valid_target_list.append(target)
+            elif isinstance(target,FileTargetItem):
+                if target.is_path_valid and target.is_file_valid:
+                    valid_target_list.append(target)
+        return valid_target_list
 
 
 

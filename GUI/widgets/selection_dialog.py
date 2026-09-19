@@ -18,6 +18,9 @@ from models.class_provider_engine import DefaultProviderEngine, FM
 from models.class_action_provider import DefaultFileActionProvider
 from models.class_style_provider import *
 from models.class_lazy_loader import *
+from functional.class_text_exporter import TableTextExporter
+from widgets.class_file_dialogs import MsgBoxHelper, QMessageBox
+from class_file_mapper import MapType
 
 class SelectionDialogSetter:
     """Sets the configuration for the selection dialog
@@ -417,7 +420,7 @@ class SelectionDialog(QtWidgets.QDialog):
 
         mode_actions = {
             "FESelection": (self.start_fe_selection, self.stop_fe_selection),
-            "FESelection": (self.start_db_selection, self.stop_db_selection),
+            "DBSelection": (self.start_db_selection, self.stop_db_selection),
         }
 
         actions = mode_actions.get(self.mode)
@@ -459,13 +462,7 @@ class SelectionDialog(QtWidgets.QDialog):
         processing_widget = QtWidgets.QWidget()
         processing_layout = QtWidgets.QVBoxLayout(processing_widget)
 
-        # processing_layout.addWidget(table_label)
-        # processing_layout.addWidget(self.table_name_edit)
-
-        # processing_layout.addWidget(path_label)
-        # processing_layout.addLayout(path_layout)
         processing_layout.addWidget(self.target_widget)
-
         processing_layout.addWidget(self.progress_container)
 
         # Let log consume most available space
@@ -508,58 +505,50 @@ class SelectionDialog(QtWidgets.QDialog):
     # -----------------------------------------------------
     def start_mapping(self):
         self._start_mapping(self.mode)
+    
+    def get_sorted_selected_nodes(self):
+        selected_nodes_list=self.fexp_widget.selected_nodes()
+        sorted_nodes={}
+        for node in selected_nodes_list:
+            ms=(node.mount,node.serial)
+            a_node_list=sorted_nodes.get(ms,[])
+            a_node_list.append(node)
+            sorted_nodes.update({ms:a_node_list})
+        return sorted_nodes
+
 
     def _start_mapping(self,mode="create"):
-        self._text_format()
-        table_name = (self.table_name_edit.text().strip())
-
-        if not table_name:
+        target_list=self.target_widget.get_valid_target_list()
+        if not target_list:
             QtWidgets.QMessageBox.warning(
                 self,
-                "Missing Table Name",
-                "Please enter a table name.",
+                "Missing Targets",
+                "Please enter a valid targets to make a map.",
             )
             return
-        if mode == "create":
-            # validate new names only
-            #momcomment is_ok, msg = self.fmap.map_validation(self.database, table_name)
-            is_ok =True #momcomment 
-            msg="" #momcomment 
-        else:
-            is_ok = True
-            msg=""
+        target_full={}
+        sorted_nodes=self.get_sorted_selected_nodes()
+        for target in target_list:
+            t_ms=(target.source_mount,target.source_serial)
+            for ms,node_list in sorted_nodes.items():
+                if t_ms == ms:
+                    target_full[ms]=(target,node_list)
+                    break
 
-        if not is_ok:
-            QtWidgets.QMessageBox.warning(self, msg, 
-                    "Please enter a valid table name.")
-            return
+        for ms, (a_target,a_node_list) in target_full.items():
+            if not isinstance(a_target,MapTargetItem):
+                continue
+            database = self.target_widget.database_ref.get(a_target.target_database)
+            a_map = a_target.target_map_name
+            target_db_map_pair=(database,a_map)
 
-        path_to_map = (self.path_edit.text().strip())
-
-        if not path_to_map:
-            QtWidgets.QMessageBox.warning(self,
-                "Missing Path", "Please select a folder to map.",)
-            return
-        
-        """ #momcomment 
-        file_exist, is_file = (
-            self.fmap.fm.validate_path_file(path_to_map))
-
-        if file_exist and is_file:
-            path_to_map = (self.fmap.fm.extract_path(path_to_map))
-
-            file_exist, is_file = (
-                self.fmap.fm.validate_path_file(path_to_map))
-        #momcomment """
-        file_exist=True #momcomment 
-        if not file_exist:
-            QtWidgets.QMessageBox.warning(self,
-                "Invalid Path",
-                "The selected folder does not exist.")
-            return
+            is_ok, msg = self.fmap.map_validation(database,a_map)
+            if not is_ok:
+                QtWidgets.QMessageBox.warning(self, msg, 
+                        "Please enter a valid table name.")
+                return
 
         self._start_ui()
-        self.target_dbmap_pair = (self.database, table_name)
 
         worker_actions = {
             "FESelection": self.start_fe_selection_worker,
@@ -570,7 +559,8 @@ class SelectionDialog(QtWidgets.QDialog):
         worker_action = worker_actions.get(mode)
 
         if worker_action:
-            worker_action(table_name, path_to_map)
+            worker_action(target_full)
+    
     
     def on_lazy_loading(self, is_loading: bool):
         """Change the mouse cursor while lazy loading is active."""
@@ -607,11 +597,24 @@ class SelectionDialog(QtWidgets.QDialog):
             self.fexp_widget.lazyLoading.emit(False)
         
 
-    def start_fe_selection_worker(self, table_name, path_to_map):
+    def start_fe_selection_worker(self, target_full):
         pass
+        # isn search map are the functions
 
-    def start_db_selection_worker(self, table_name, path_to_map):
-        pass
+    def start_db_selection_worker(self, target_full):
+        self.mapping_is_running_signal.emit()
+        self.worker = self.worker_manager.start(
+            self._create_selection_maps,
+            target_full=target_full,
+        )
+
+        self.worker.finished.connect(self.on_mapping_finished)
+        self.worker.stopped.connect(self.on_mapping_stopped)
+        self.worker.error.connect(self.on_mapping_error)
+        # killtemp=threading.Event()
+        # killtemp.clear()
+        # result=self._create_selection_maps(target_full,killtemp)
+        
 
     def start_create_worker(self, table_name, path_to_map):
         return #momcomment 
@@ -642,36 +645,6 @@ class SelectionDialog(QtWidgets.QDialog):
         self.worker.finished.connect(self.on_mapping_finished)
         self.worker.stopped.connect(self.on_mapping_stopped)
         self.worker.error.connect(self.on_mapping_error)
-
-    # -----------------------------------------------------
-    # Deepening
-    # -----------------------------------------------------
-    def start_deepening(self):
-        self._start_mapping(self.mode)
-
-    def start_deepening_worker(self, table_name, path_to_map):
-        return #momcomment 
-        self.mapping_is_running_signal.emit()
-
-        self.progress = QtMapProgress()
-        self.progress_layout.addWidget(self.progress)
-
-        self.mapping_running = True
-
-        self.worker = self.worker_manager.start(
-            self.fmap.deepen_shallow_map,
-            self.database,
-            table_name,
-            path_to_map,
-            progress_bar=self.progress,
-            press_to_continue=False,
-            log_callback=self.log_buffer.write
-        ) # kill_ev added by worker_manager
-
-        self.worker.finished.connect(self.on_deepening_finished)
-        self.worker.stopped.connect(self.on_deepening_stopped)
-        self.worker.error.connect(self.on_deepening_error)
-
 
     # -----------------------------------------------------
     # Updating
@@ -722,19 +695,11 @@ class SelectionDialog(QtWidgets.QDialog):
     # -----------------------------------------------------
 
     def _start_ui(self):
-        self.table_name_edit.setEnabled(False)
-        self.path_edit.setEnabled(False)
-        self.browse_button.setEnabled(False)
         self.start_button.setEnabled(False)
         self.stop_button.setEnabled(True)
 
     def _mapping_finished(self):
         self.mapping_running = False
-        if not self.predifined_map_name:
-            self.table_name_edit.setEnabled(True)
-        if not self.predifined_path_to_map:
-            self.path_edit.setEnabled(True)
-        self.browse_button.setEnabled(True)
         self.start_button.setEnabled(True)
         self.stop_button.setEnabled(False)
         self.stop_button.setText("Stop")
@@ -784,7 +749,7 @@ class SelectionDialog(QtWidgets.QDialog):
     @QtCore.pyqtSlot(object)
     def on_mapping_finished(self, result=None):
         try:
-            self._commit_mapping()
+            self._commit_mapping(result)
         except Exception as exc:
             self.on_mapping_error(exc)
             return
@@ -820,76 +785,330 @@ class SelectionDialog(QtWidgets.QDialog):
         self._mapping_finished()
 
     # -----------------------------------------------------
-    # Commit temporary database
+    # Commit 
     # -----------------------------------------------------
 
-    def _commit_mapping(self):
-        return #momcomment 
-        temp_db, temp_map = (self.fmap.mapping_to_pair)
-        target_db, target_map = (self.target_dbmap_pair)
+    def _commit_mapping(self,result=None):
+        if isinstance(result,dict):
+            maps_created=result
+            msgbox=MsgBoxHelper()
+            if maps_created:
+                #Set the correct size of new map in cache
+                self.fmap.refresh_map_size_cache()
+                # Ask for refresh
+                self.refresh_mapping_tree.emit()
 
-        if not all((temp_db, temp_map, target_db, target_map)):
-            raise RuntimeError(
-                "Mapping completed but mapping pair "
-                "information is missing.")
-
-        was_copied=self.fmap.copy_table_from_to_database(
-            temp_db, temp_map, target_db, target_map)
-        self._append_status(f"Map was copied: {was_copied} \n from {temp_db} \n to {target_db}")
-        if was_copied:
-            self._append_status("[yellow]Deleting Temporal database")
-            # for privacy dont keep temporal maps
-            self.fmap.delete_temporal_database()    
-        self.fmap.set_active_databases_in_dbm()
+                dmsg="Maps Created:"
+                for iii,db_map_pair in enumerate(maps_created):
+                    dmsg+="\n"+"-"*33
+                    dmsg+=f"\n{iii}\tDatabase: {db_map_pair[0]}"
+                    dmsg+=f"\n{iii}\t     Map: {db_map_pair[1]}"
+                dmsg+="\n"+"-"*33
+                msgbox.show("Create Selection Map",
+                        f"Successfully created {len(maps_created)} selection maps!",
+                        icon=QMessageBox.Icon.Information,
+                        buttons=None,
+                        default=None,
+                        detailed_text=dmsg,
+                        informative_text=None,
+                        )
         self.refresh_mapping_tree.emit()
     
-    def _commit_deepening(self):      
-        return #momcomment   
-        temp_db, temp_map = (self.fmap.mapping_to_pair)
-        target_db, target_map = (self.target_dbmap_pair)
-        was_replaced=self.fmap.replace_map_from_temporal_db(self.target_dbmap_pair,
-                log_callback=self.log_buffer.write)
+    # -----------------------------------------------------
+    # Load selection tree
+    # -----------------------------------------------------
+    def _load_selection_tree(self):
+        """Use lazy loader to load all nodes info... takes much more time"""
+        selected_nodes_list=self.fexp_widget.selected_nodes()
+        for node in selected_nodes_list:
+            if node.i_am == "dir":
+                # Load all branch
+                self.fexp_widget.load_node(node,None) 
+            if node.selected:
+                self.fexp_widget.t_m.select_subtree(node,node.selected)
+    
+    def _get_selection_ids(self,target_full:dict):
+        """Get ids lists of selections"""
+        id_results={}
+        for ms, (a_target,a_node_list) in target_full.items():
+            if not isinstance(a_target,MapTargetItem):
+                continue
+            # default pair
+            db_map_pair = (a_target.source_db, a_target.source_map)
+            fm=self.fmap.cma.get_file_map(db_map_pair[0])
+            # get ids
+            all_ids=[]
+            all_ids_dict={}
+            for node in a_node_list:
+                if not isinstance(node,TreeNode):
+                    continue
+                if node.i_am == "file":
+                    all_ids.append(node.db_id)
+                    continue
+                if not node.i_am == "dir":
+                    continue
+                if node.db and node.map:
+                    # A node can come from another map use the node's db_map pair
+                    if (node.db != db_map_pair[0] or node.map != db_map_pair[1]):
+                        if all_ids:
+                            all_ids_dict.update({db_map_pair:list(set(all_ids))})
+                            all_ids=[]  
+                        db_map_pair = (node.db, node.map)
+                        fm=self.fmap.cma.get_file_map(db_map_pair[0])
+                    if not fm:
+                        continue
+                    # get ids from database map
+                    # remove end separator for itempath
+                    itempath = node.itempath
+                    if node.itempath and node.itempath[-1] in ["/", "\\", os.sep] and len(node.itempath)>1:
+                        itempath = node.itempath[:-1]
+                    where_files_dirs = (
+                        "replace(filepath, char(92), '/') LIKE "
+                        + fm.db.quotes(itempath + "%")
+                    )
+                    data_ids=fm.db.get_data_from_table(db_map_pair[1],'id',where_files_dirs)
+                    if not data_ids:
+                        continue
 
-        if not all((temp_db, temp_map, target_db, target_map)):
-            raise RuntimeError(
-                "Deepening completed but mapping pair "
-                "information is missing.")
+                    ids=[an_id[0] for an_id in data_ids]
+                    all_ids+=ids
+            if all_ids:
+                all_ids_dict.update({db_map_pair:list(set(all_ids))})    
+            if all_ids_dict:    
+                id_results.update({ms:all_ids_dict.copy()})
 
-        msg = self.mark_color("Map was deepened and replaced: ","yellow")
-        msg += f"{self.mark_txt(str(was_replaced),was_replaced)} \n" 
-        msg += f"from {temp_db} \n to {target_db}"
-        self._append_status(msg)
+        return id_results
 
-        if was_replaced:
-            self._append_status("[yellow]Deleting Temporal database")
-            # for privacy dont keep temporal maps
-            self.fmap.delete_temporal_database()    
-        self.fmap.set_active_databases_in_dbm()
-        self.refresh_mapping_tree.emit()
+    def _get_data_from_nodes(self, mount_serial_pair, 
+                             id_results_dict:dict,
+                             fields:list):
+        """
+        Build the data directly from database id selection.
+
+        The returned rows follow the supplied database field order.
+        """
+        # remove id from data
+        fields_proc=[]
+        for fie in fields:
+            if fie != "id":
+                fields_proc.append('"' + fie + '"') # double quotes is identifier
+        what=", ".join(fields_proc) 
+        data=[]
+        for ms,dbmpair_ids_dict in id_results_dict.items():
+            if ms != mount_serial_pair:
+                continue
+            if isinstance(dbmpair_ids_dict,dict): 
+                for db_map_pair,id_list in dbmpair_ids_dict.items():
+                    data+=self.fmap.ba.get_data_from_id_list_batched(db_map_pair,
+                                                                    id_list,
+                                                                    what=what,
+                                                                    batch_size=33)
+        return data   
+
 
     # -----------------------------------------------------
-    # Table formatting
+    # Create Mapping functions
     # -----------------------------------------------------
 
-    def _text_format(self):
-        table_name = (self.table_name_edit.text())
+    def _create_selection_maps(self,target_full, kill_ev:threading.Event=None):
 
-        path_to_map = (self.path_edit.text())
-
-        if not path_to_map or not table_name:
+        selected_nodes_list=self.fexp_widget.selected_nodes()
+        if not selected_nodes_list:
+            message="There are no selected items to Create a Map!"
+            self._append_status(f"[red]{message}[/red]")
             return
         
-        new_table_name = (
-            self.fmap.cma.format_new_table_name(
-                table_name,
-                path_to_map,
-            )
-        )
+        mount_serial_list,mount_serial_dict=self._get_mount_serial_pair(selected_nodes_list)
+        if len(mount_serial_list)<1:
+            message="Cant Map there is No mount serial"
+            self._append_status(f"[red]{message}[/red]")
+            return
         
-        self.table_name_edit.blockSignals(True)
-        self.table_name_edit.setText(new_table_name)
-        self.table_name_edit.blockSignals(False)
+        maps_created=[]
+        target_list=self.target_widget.get_valid_target_list()
+        id_results_dict=self._get_selection_ids(target_full)
+        for mount_serial_pair in mount_serial_list:
+            if kill_ev.is_set():
+                return None
+            mount,serial =mount_serial_pair
+            sel_target=None
+            for target in target_list:
+                if mount == target.source_mount and serial==target.source_serial:
+                    sel_target=target
+                    break
+            if not sel_target:
+                message=f"No Target for mount {mount} serial {serial}"
+                self._append_status(f"[red]{message}[/red]")
+                continue
+            if not sel_target.is_db_valid:
+                message=f"No valid database for mount {mount} serial {serial}"
+                self._append_status(f"[red]{message}[/red]")
+                continue
+            if not sel_target.is_map_valid:
+                message=f"No valid map for mount {mount} serial {serial}"
+                self._append_status(f"[red]{message}[/red]")
+                continue
 
+            db_to =self.target_widget.database_ref.get(sel_target.target_database)
+            map_to = sel_target.target_map_name
+            common_path=self._get_common_path(mount_serial_pair,mount_serial_dict)
+            fm=self.fmap.cma.get_file_map(db_to)
+            if not fm:
+                message=f"No target Filemapper: {db_to}"
+                self._append_status(f"[red]{message}[/red]")
+                message= "check database is active!"
+                self._append_status(f"[yellow]{message}[/yellow]")
+                continue
+            # route database logger
+            fm.db.set_log_callback(self._append_status)
+            # Destination table fields
+            origin_db, origin_map = self._get_origin_from_nodes(mount_serial_pair, mount_serial_dict)
+            if not origin_db or not origin_map:
+                dbmappair_ids_dict=id_results_dict.get(mount_serial_pair)
+                for dbmpair in dbmappair_ids_dict.keys():
+                    # set first one as origin
+                    (origin_db, origin_map)=dbmpair
+                    break
+            origin_fm=self.fmap.cma.get_file_map(origin_db)
+            if not origin_fm:
+                message=f"No Origin Filemapper: {origin_db}"
+                self._append_status(f"[red]{message}[/red]")
+                message= "check database is active!"
+                self._append_status(f"[yellow]{message}[/yellow]")
+                continue
+            field_list = origin_fm.db.get_column_list_of_table(origin_map)
+            if not field_list:
+                message = f"No fieldlist for origin map {origin_map}"
+                self._append_status(f"[red]{message}[/red]")
+                continue
+            origin_info=self.fmap.cma.get_map_info_as_dict(origin_db, origin_map)
+            mappath=self.fmap.fm.remove_mount_from_path(
+                origin_info['mount'], common_path,remove_start_separator=True)
+            
+            # Get data selected nodes                 
+            data = self._get_data_from_nodes(
+                mount_serial_pair, id_results_dict, field_list)
+            if not data:
+                message = "No data found!"
+                self._append_status(f"[red]{message}[/red]")
+                continue
+            if kill_ev.is_set():
+                return None
+            #Create Selection map 
+            fm.db.create_connection()
+            was_indexed=fm.add_table_to_mapper_index(map_to, mappath, 
+                MapType.SELECTION.value)
+            if not was_indexed:
+                message = f"{map_to} could not be indexed!"
+                self._append_status(f"[red]{message}[/red]")
+                continue
+            # fix mount and serial
+            was_mount_serial_set=fm.set_mount_serial_to_map(
+                    map_to, origin_info['mount'],origin_info['serial'])
+            if not was_mount_serial_set:
+                message = (f"Failed setting mount and serial to {map_to}: "
+                f"{origin_info['mount']},{origin_info['serial']}")
+                self._append_status(f"[red]{message}[/red]")
+                continue
+            fm._create_map_in_db(map_to)
+            an_id=fm.get_table_id(map_to)
+            if an_id:
+                was_inserted = fm.db.insert_data_to_table(map_to,data)
+                if not was_inserted:
+                    message=f"Failed to insert data to {map_to}"
+                    self._append_status(f"[red]{message}[/red]")
+                    continue
+                # if db_to != origin_db:
+                #     fm.set_origin_db_map(map_to,origin_db,origin_map)
+                # else:
+                #     # dont set origin_db if is the same database
+                #     fm.set_origin_db_map(map_to,origin_map=origin_map)
+
+                # test = fm.db.get_data_from_table(map_to,'*')
+                maps_created.append((db_to,map_to))
+                message=f"Successfully Created {map_to}"
+                self._append_status(f"[green]{message}[/green]")
+            else:
+                message=f"Failed to insert data, could not find the table id for {map_to}"
+                self._append_status(f"[red]{message}[/red]")
+        
+        return maps_created
+    
+   
+    def _get_mount_serial_pair(self,selected_nodes_list:list[TreeNode])->list[tuple]:
+        mount_serial_pair_list=[]
+        mount_serial_pair_node_dict={}
+        for node in selected_nodes_list:
+            mount_serial_pair = (node.mount, node.serial)
+            if mount_serial_pair not in mount_serial_pair_list:
+                mount_serial_pair_list.append(mount_serial_pair)
+            ms_p_l=mount_serial_pair_node_dict.get(mount_serial_pair,[])
+            ms_p_l+=[node]
+            mount_serial_pair_node_dict.update({mount_serial_pair:ms_p_l})
+        return mount_serial_pair_list, mount_serial_pair_node_dict
+    
+    def _get_common_path(self,mount_serial_pair, mount_serial_dict:dict)->str:
+        node_list=mount_serial_dict.get(mount_serial_pair,[])
+        paths_list=[]
+        for node in node_list:
+            if isinstance(node,TreeNode):
+                paths_list.append(node.path)
+        if paths_list:
+            return self.fmap.fm.get_common_path(paths_list)
+        return ""
+    
+    def _get_origin_from_nodes(self, mount_serial_pair, mount_serial_dict: dict):
+        """
+        Get the origin map belonging to one (mount, serial) pair form Treenodes.
+
+        Returns (origin_db,origin_map) tuple.
+        """
+        node_list = mount_serial_dict.get(mount_serial_pair, [])
+        
+        origin_db = None
+        origin_map = None
+        for node in node_list:
+            if not isinstance(node, TreeNode):
+                continue
+            if node.i_am == "map":
+                try:
+                    (_, _, origin_db, origin_map)=self._info_db_maps(node.info)
+                    return origin_db, origin_map
+                except:
+                    pass
+            if node.i_am != "file":
+                continue
+            # get origins
+            if origin_db is None or origin_map is None:
+                bl = node.get_bloodline()
+                for p_node in bl:
+                    # map info retains the origin db and map
+                    if p_node.i_am == "map":
+                        try:
+                            (_, _, origin_db, origin_map)=self._info_db_maps(p_node.info)
+                            return origin_db, origin_map
+                        except:
+                            pass 
+        return origin_db, origin_map
+    
+    def _info_db_maps(self,info):
+        """The node's info can have one db_map pair or two. 
+        If has one info comes from  origin map. If has 2 pairs then 
+        is a temporal map, with a origin map as the second tuple. 
+        The first tuple in info is used to build the tree, so loads the nodes 
+        from positions 0 and 1.
+        """
+        temp_db=None
+        temp_map=None
+        origin_db=None
+        origin_map=None
+        if isinstance(info,tuple):
+            if len(info) == 2:
+                (origin_db, origin_map)=info
+            elif len(info) == 4:
+                (temp_db,temp_map,origin_db, origin_map)=info  
+        return temp_db, temp_map, origin_db, origin_map 
+    
     # -----------------------------------------------------
     # Close
     # -----------------------------------------------------
@@ -922,14 +1141,14 @@ class SelectionDialog(QtWidgets.QDialog):
 
     def _new_targets_selected(self, targets: list[MapTargetItem]):
         if self.target_widget.target_type == "map":
-            self.target_widget.set_targets(targets)
+            self.target_widget.set_targets_to_ref(targets)
 
         elif self.target_widget.target_type == "file":
             new_file_list = [
                 copy_shared_fields(tar, FileTargetItem())
                 for tar in targets
             ]
-            self.target_widget.set_targets(new_file_list)
+            self.target_widget.set_targets_to_ref(new_file_list)
 
     def _on_target_changed(self,targets:list[MapTargetItem]):
         print(targets)

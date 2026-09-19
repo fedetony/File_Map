@@ -60,6 +60,14 @@ from functional.class_LogHandler import LM
 log=LM.get_logger_with_handler("MainWindow","debug",True,None)
 log.info("Main Window Logger started")
 
+__author__ = "FG"
+__version__ = "1.1.333 Beta"
+__creationdate__ = "04.02.2025"
+__lastmodifieddate__ = "13.09.2026"
+__gitaccount__ = "<a href=\"https://github.com/fedetony/File_Map\">' Find FileMap on Github '</a>"
+__github__ ="https://github.com/fedetony/File_Map"
+__wiki__="<a href=\"https://github.com/fedetony/File_Map/wiki\">' Wiki'</a>"
+
 class MainWindow(QMainWindow):
 
     def __init__(
@@ -114,7 +122,16 @@ class MainWindow(QMainWindow):
             "Map Explorer": MapExplorerPage(),
             "Sort": SortPage(),
             "Settings": SettingsPage(),
-            "About": AboutPage(),
+            "About": AboutPage(
+                parent=None,
+                icon_path="main",
+                author=__author__,
+                version=__version__,
+                creation_date=__creationdate__,
+                github_text=__gitaccount__,
+                github=__github__,
+                copyright_text=__wiki__,
+            ),
         }
     
     def connect_pages(self):

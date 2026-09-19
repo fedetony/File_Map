@@ -645,7 +645,39 @@ class BackupActions():
             return []
         # Convert the DataFrame to a list of tuples
         return selected_df.to_numpy().tolist()
+    
+
+    def get_data_from_id_list_batched(self,db_map_pair:tuple, id_list:list, what = '*', batch_size = 33)->list:
+        """generates a datalist of the ids in the id_list from the db_map_par.
+
+        Args:
+            db_map_pair (tuple): database map pair
+            id_list (list): list of ids in form  [id1, id2, ...]
+            batch_size(int) Size of batch to process. Default 1000
+
+        Returns:
+            list: list of tuples with the data
+        """
+        fm=self.cma.get_file_map(db_map_pair[0])
+        if not fm:
+            return []
+        if not isinstance(id_list,list):
+            return []
+        id_list=list(set(id_list))
+        len_id_list = len(id_list)
+        if len_id_list == 0:
+            return []
         
+        data_from_ids=[]
+        for i in range(0, len_id_list, batch_size):
+            batch = id_list[i:i + batch_size]
+            id_query = "id IN (" + ", ".join(map(str, batch)) + ")"
+            data=fm.db.get_data_from_table(db_map_pair[1],what,id_query)
+            if data:
+                data_from_ids += data
+            # current = min(i + batch_size, len_id_list)
+
+        return data_from_ids
         
     
         

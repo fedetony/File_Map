@@ -355,3 +355,8 @@ class Icons:
         if name not in cls._cache:
             cls._cache[name] = QIcon(cls._paths.get(name,ICON_MAP["0"]))
         return cls._cache[name]
+    
+    @classmethod
+    def resource(cls, name: str) -> str:
+        return cls._paths.get(name)
+        

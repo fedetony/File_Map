@@ -114,6 +114,20 @@ class TableWidgetFunctions(QtWidgets.QWidget):
     item_doubleclicked = QtCore.pyqtSignal(list)
     signal_item_checkbox_checked = QtCore.pyqtSignal(bool, list)
 
+    roles_map={
+            "DisplayRole":(QtCore.Qt.ItemDataRole.DisplayRole,str), 
+            "ToolTipRole":(QtCore.Qt.ItemDataRole.ToolTipRole,str),
+            "StatusTipRole":(QtCore.Qt.ItemDataRole.StatusTipRole,str),
+            "WhatsThisRole":(QtCore.Qt.ItemDataRole.WhatsThisRole,str),
+            "DecorationRole":(QtCore.Qt.ItemDataRole.DecorationRole,QtGui.QIcon),
+            "ForegroundRole":(QtCore.Qt.ItemDataRole.ForegroundRole,QtGui.QColor),
+            "BackgroundRole":(QtCore.Qt.ItemDataRole.BackgroundRole,QtGui.QColor),
+            "FontRole":(QtCore.Qt.ItemDataRole.FontRole,QtGui.QFont),
+            "TextAlignmentRole":(QtCore.Qt.ItemDataRole.TextAlignmentRole,QtCore.Qt.AlignmentFlag),
+            "CheckStateRole":(QtCore.Qt.ItemDataRole.CheckStateRole,QtCore.Qt.CheckState),
+            "SizeHintRole":(QtCore.Qt.ItemDataRole.SizeHintRole,QtCore.QSize),
+            }
+    
     def __init__(
         self,
         tablewidgetobj: QtWidgets.QTableWidget,
@@ -131,6 +145,7 @@ class TableWidgetFunctions(QtWidgets.QWidget):
         self.data_struct = data_struct  # all info
         self.data_struct_mask = data_struct_mask
         self._last_value_selected = None
+        self._combo_delegate_columns = set()
         self.data_id = data_id
         if reference_track:
             self.reference_track = reference_track
@@ -158,11 +173,25 @@ class TableWidgetFunctions(QtWidgets.QWidget):
         self.resizetocontents = True
         # print(self.show_dict_types)
         self.refresh_tablewidget(self.show_dict, self.modelobj, self.tablewidgetobj)
-        # connect action
-        #self.tablewidgetobj.clicked.connect(self._tablewidget_onclick)
-        self.tablewidgetobj.itemSelectionChanged.connect(self._tablewidget_on_item_selection)
+        # connect actions
+        self.connect_tablewidget_obj()
         #Install event filter for right click
         self.tablewidgetobj.viewport().installEventFilter(self)
+    
+    def connect_tablewidget_obj(self):
+        #self.tablewidgetobj.clicked.connect(self._tablewidget_onclick)
+        self.tablewidgetobj.itemSelectionChanged.connect(self._tablewidget_on_item_selection)
+        self.tablewidgetobj.itemChanged.connect(self._tablewidget_on_item_changed)
+        # self.tablewidgetobj.itemEntered.connect(self._tablewidget_on_item_entered)
+    
+    def log_callback(self,*args):
+        self.log_print(*args, logger=log, level="info", sep=" ", end="")
+    
+    @staticmethod
+    def log_print(*args, logger=None, level="info", sep=" ", end="\n"):
+        text = sep.join(str(arg) for arg in args) + end
+        log_func = getattr(logger, level) if logger else getattr(logging, level)
+        log_func("%s", text)
         
     
     def eventFilter(self, source, event:QtGui.QMouseEvent):
@@ -505,49 +534,58 @@ class TableWidgetFunctions(QtWidgets.QWidget):
                     break
             if not in_track_list:
                 self._remove_registered_widget_track_from_list(tr)
-            
-    def _set_widget_to_item(self, itm: QtWidgets.QTableWidgetItem):
-        """Sets a widget to the item and connects the functionality
-            works for QPushButton, QComboBox , QCheckBox, QLabel objects
 
-        Args:
-            itm (QtWidgets.QTableWidgetItem): Item to set the widget
-        """
+
+    def _set_widget_to_item(self, itm: QtWidgets.QTableWidgetItem):
+        """Set a registered widget/delegate for a table item."""
         self._remove_non_active_widgets_from_register()
         try:
             track = self.get_track_of_item_in_table(itm)
             track_list = self.itemwidget_dict["track_list"]
             widget_list = self.itemwidget_dict["widget_list"]
-            
             for tr, iw in zip(track_list, widget_list):
-                if self._is_same_list(track, tr):
+                if not self._is_same_list(track, tr):
+                    continue
+                # ---------------------------------------------------------
+                # COMBOBOX
+                # ---------------------------------------------------------
+                if isinstance(iw, QtWidgets.QComboBox):
+                    # The item itself must not be editable because the
+                    # delegate provides the editor.
+                    itm.setFlags(itm.flags() & ~QtCore.Qt.ItemFlag.ItemIsEditable)
+                    # Install delegate only once for this column.
+                    if itm.column() not in self._combo_delegate_columns:
+                        delegate = Delegate(widget_obj=iw, parent=self.tablewidgetobj)
+                        self.tablewidgetobj.setItemDelegateForColumn(itm.column(), delegate)
+                        self._combo_delegate_columns.add(itm.column())
+                    # The delegate creates QComboBox it when the cell is edited.
+                # ---------------------------------------------------------
+                # OTHER REAL WIDGETS
+                # ---------------------------------------------------------
+                else:
                     if not self._is_registered_widget_track(tr):
-                        # Only set once the widget else will be deleted
-                        if not isinstance(iw, QtWidgets.QComboBox):
-                            self.tablewidgetobj.setCellWidget(itm.row(), itm.column(), iw)
+                        self.tablewidgetobj.setCellWidget(itm.row(), itm.column(), iw)
                         self._add_registered_widget_track_to_list(tr)
-                    # Delegated behavior 
-                    if isinstance(iw, QtWidgets.QComboBox):
-                        delegate = Delegate(itm.row(), itm.column(), iw, parent=self.tablewidgetobj)
-                        self.tablewidgetobj.setItemDelegateForColumn(itm.column(),delegate)
-                        iw.currentIndexChanged.connect(lambda: self._item_combobox_indexchanged(iw,track))
-                    
-                    itm.setFlags(itm.flags() ^ QtCore.Qt.ItemFlag.ItemIsEditable)
-                    
+
                     if isinstance(iw, QtWidgets.QPushButton):
-                        iw.clicked.connect(lambda: self._item_button_clicked(track))   
+                        iw.clicked.connect(
+                            lambda checked=False, t=track: self._item_button_clicked(t))
+
                     elif isinstance(iw, QtWidgets.QCheckBox):
-                        iw.stateChanged.connect(lambda: self._item_checkbox_checked(iw, track))
+                        iw.stateChanged.connect(
+                            lambda state, w=iw, t=track:self._item_checkbox_checked(w, t))
+
                     elif isinstance(iw, QtWidgets.QLabel):
-                        # self.tablewidgetobj.itemDoubleClicked.connect(self._doubleclick_on_item)
                         if self.resizetocontents:
                             self.tablewidgetobj.resizeColumnToContents(itm.column())
                             self.tablewidgetobj.resizeRowToContents(itm.row())
-                    break
+                break
+
         except RuntimeError as err:
-            log.error("RuntimeError setting widget_list to item: %s",err)
-        except (AttributeError, TypeError)  as err:
-            log.error("Setting widget_list to item: %s",err)
+            log.error("RuntimeError setting widget_list to item: %s", err)
+
+        except (AttributeError, TypeError) as err:
+            log.error("Setting widget_list to item: %s", err)
 
     def _set_icon_to_item(self, itm: QtWidgets.QTableWidgetItem):
         """Sets icon in icon_dict to item
@@ -562,8 +600,8 @@ class TableWidgetFunctions(QtWidgets.QWidget):
             for tr, ic in zip(track_list, icon_list):
                 if self._is_same_list(track, tr):
                     itm.setIcon(ic)
-        except (AttributeError, TypeError):
-            log.error("Setting icon_list to item")
+        except (AttributeError, TypeError) as eee:
+            log.error(f"Setting icon_list to item: {eee}")
 
     def _set_rolevalue_to_item(self, itm: QtWidgets.QTableWidgetItem):
         """Sets rolevalues in itemrolevalue_dict to item
@@ -579,8 +617,8 @@ class TableWidgetFunctions(QtWidgets.QWidget):
             for tr, role, value in zip(track_list, role_list, value_list):
                 if self._is_same_list(track, tr):
                     itm.setData(role, value)
-        except (AttributeError, TypeError):
-            log.error("Setting rolevalue to item")
+        except (AttributeError, TypeError) as eee:
+            log.error(f"Setting rolevalue to item: {eee}")
 
     def _set_backgroundcolor_to_item(self, itm: QtWidgets.QTableWidgetItem):
         """Sets backgrounds in backgroundcolor_dict to item
@@ -595,8 +633,8 @@ class TableWidgetFunctions(QtWidgets.QWidget):
             for tr, ic in zip(track_list, color_list):
                 if self._is_same_list(track, tr):
                     itm.setBackground(ic)
-        except (AttributeError, TypeError):
-            log.error("Setting backgroundcolor to item")
+        except (AttributeError, TypeError) as eee:
+            log.error(f"Setting backgroundcolor to item: {eee}")
 
     def _set_tooltiptext_to_item(self, itm: QtWidgets.QTableWidgetItem):
         """Sets tooltiptext in tooltip_dict to item.
@@ -617,13 +655,21 @@ class TableWidgetFunctions(QtWidgets.QWidget):
             for tr, itt in zip(track_list, tooltip_list):
                 if self._is_same_list(track, tr):
                     itm.setToolTip(itt)
-        except (AttributeError, TypeError):
-            log.error("Setting ToolTiptext to item")
+        except (AttributeError, TypeError) as eee:
+            log.error(f"Setting ToolTiptext to item: {eee}")
 
     def _tablewidget_on_item_selection(self):
-        index_list=self.tablewidgetobj.selectedIndexes()
-        if index_list:
-            self._tablewidget_onclick(index_list[0])
+        indexes = self.tablewidgetobj.selectedIndexes()
+        if indexes:
+            index = indexes[0]
+            self._store_table_widget_item_last_value(index)
+            # print(
+            #     "SELECTION:",
+            #     index.row(),
+            #     index.column(),
+            #     "value:",
+            #     repr(self._last_value_selected),
+            # )
 
     def _tablewidget_onclick(self, index: QtCore.QModelIndex):
         """Onclick method on table widget restores or edits the item
@@ -645,7 +691,9 @@ class TableWidgetFunctions(QtWidgets.QWidget):
             val_ = itm.text()
             if self.check_restrictions.str_to_bool_or_none(val_) in [True, False]:
                 self._set_checkbox_value_to_item(itm)
-            self._edit_a_table_widget_item(index)
+            # IMPORTANT:
+            # This now only stores the original value.
+            self._store_table_widget_item_last_value(index)
 
     def _set_checkbox_value(self, item: QtGui.QStandardItem, checked: bool):
         item.setCheckState(QtCore.Qt.CheckState.Checked if checked else QtCore.Qt.CheckState.Unchecked)
@@ -740,22 +788,30 @@ class TableWidgetFunctions(QtWidgets.QWidget):
                 
                 self.refresh_tablewidget(self.show_dict, self.modelobj, self.tablewidgetobj)
                 self._tablewidget_onclick(itmindex)
+    
+    def _tablewidget_on_item_changed(self, item: QtWidgets.QTableWidgetItem):
+        index = self.tablewidgetobj.indexFromItem(item)
+        if not index.isValid():
+            return
+        
+        val = self.get_item_value_text_from_index(index)
+        self._item_data_changed(index,val)
 
-    def _edit_a_table_widget_item(self, index: QtCore.QModelIndex):
-        """Connects item to datachange fuction
 
-        Args:
-            index (QtCore.QModelIndex): item being edited
-        """
-        # print('_edit_a_table_widget_item',index)
-        itm = self.tablewidgetobj.itemFromIndex(index)
-        val = itm.text()
-        # print('edit index set:',index.data())
+    def _store_table_widget_item_last_value(self, index: QtCore.QModelIndex):
+        """Prepare the item for editing and remember its original value."""
+        # self._last_value_selected = self.get_item_value_text_from_index(index)
+        track=self.get_track_from_index(index)
+        val=self.get_tracked_value_in_struct(track,self.data_struct)
         self._last_value_selected = val
-        self.tablewidgetobj.itemChanged.connect(lambda: self._item_data_changed(index, val))
+        # print(
+        # "STORED_LAST_VALUE:",
+        # index.row(),
+        # index.column(),
+        # "VALUE:",
+        # repr(self._last_value_selected),
+        # )
 
-    # def get_list_of_tracks_of_children(self, parenttrack):
-    #    self.get_gentrack_from_localtrack
 
     def get_item_from_track(self, track: list) -> None:
         """Get an item object and all related info
@@ -784,7 +840,7 @@ class TableWidgetFunctions(QtWidgets.QWidget):
  
             for tr in track:
                 if parent is None:
-                    log.debug('get_item_from_track if the size -> {}'.format(modelobj.rowCount()))
+                    #log.debug('get_item_from_track if the size -> {}'.format(modelobj.rowCount()))
                     itm = None
                     for iii in range(modelobj.rowCount()):
                         itmindex = modelobj.index(iii, col_pos)
@@ -839,6 +895,24 @@ class TableWidgetFunctions(QtWidgets.QWidget):
         except (UnboundLocalError,AttributeError):
             return False
 
+    def get_item_value_text_from_index(self,index:QtCore.QModelIndex):
+        """Returns the table's item text value""" 
+        itm=self.tablewidgetobj.itemFromIndex(index)
+        if itm:
+            return itm.text()
+        return None
+    
+    def get_track_from_index(self,index:QtCore.QModelIndex):
+        """Gets the track in the structure for an index in the table"""
+        try:
+            rowitm = self.tablewidgetobj.itemFromIndex(index)
+            col=index.column()
+            col_name=self.get_columnname_from_colpos(col)
+            key=self.get_key_value_from_item(rowitm)
+        except:
+            return []
+        return [key,col_name]
+
     def _item_data_changed(self, index: QtCore.QModelIndex, val: any):
         """If value has changed and item is editable, changes the value to new value
         only when value check is conform to mask and type. If not, sets the old value.
@@ -847,18 +921,29 @@ class TableWidgetFunctions(QtWidgets.QWidget):
             index (QtCore.QModelIndex): index of item
             val (any): new value to be set
         """
-        old_value = val  # self._last_value_selected
+        
         itm = self.tablewidgetobj.itemFromIndex(index)
         # when you click outside will be none
         if not itm:
+            self._last_value_selected = None
             return
-        new_value = itm.text()
-        #print("item_data_changed")
+        track = self.get_track_from_index(index)
+        old_value = self.get_tracked_value_in_struct(track,self.data_struct)
+        if old_value is None:
+            return
+        old_value_txt=str(old_value)
+        #a text from table
+        new_value = self.get_item_value_text_from_index(index) 
+        # print(
+        #     "CHANGED:",
+        #     index.row(),
+        #     index.column(),
+        #     "OLD:", repr(old_value),
+        #     "NEW:", repr(new_value),
+        # )
         # self._set_item_style(self.tablewidgetobj.item(itm.row(),icol)) # column item
-        if new_value != old_value and old_value is not None and index in self.tablewidgetobj.selectedIndexes():
-            # indextype=index.siblingAtColumn(tcol)
-            # typeitem=self.tablewidgetobj.itemFromIndex(indextype)
-            track = self.get_track_of_item_in_table(self.tablewidgetobj.itemFromIndex(index))
+        sel_indexes=self.tablewidgetobj.selectedIndexes()
+        if new_value != old_value_txt  and index in sel_indexes:    
             # Here check if value is ok if yes
             valisok = self.check_item_value_for_edit(index, new_value)
             log.info("Data changed -> New:%s Old:%s Track: %s isvalid: %s", new_value, old_value, track, valisok)
@@ -871,6 +956,7 @@ class TableWidgetFunctions(QtWidgets.QWidget):
                 do_refresh_tablewidget, self.show_dict = self.set_tracked_value_to_dict(
                     track, new_valwt, self.show_dict, subtype
                 )
+                self._last_value_selected = new_value
                 if not do_refresh_tablewidget:
                     itm.setText(new_value)
                     if thetype == str(bool):
@@ -887,14 +973,15 @@ class TableWidgetFunctions(QtWidgets.QWidget):
                     subtype = self._get_listitem_subtype(gentrack)
                 # Send value with correct type to dictionary
                 old_valwt = self.check_restrictions.set_type_to_value(old_value, thetype, subtype)
+                # self._last_value_selected = old_value
                 do_refresh_tablewidget, self.show_dict = self.set_tracked_value_to_dict(
                     track, old_valwt, self.show_dict, subtype
                 )
-                itm.setText(old_value)
+                itm.setText(str(old_value))
                 if thetype == str(bool):
                     self._set_checkbox_value_to_item(itm)
 
-        self._last_value_selected = None
+        
 
     def _is_item_supposed_to_be_a_list(self, itm: QtWidgets.QTableWidgetItem) -> bool:
         """Responds if Item is supposed to be a list or not looking at the mask
@@ -1017,14 +1104,6 @@ class TableWidgetFunctions(QtWidgets.QWidget):
                 if emitsignal:
                     self._data_change(trackstruct, str(val), str(type(val)), subtype)  # refresh on main
         return do_refresh_tablewidget, dict_struct
-
-    # def get_track_struct_from_dict_track(self, dict_, track):
-    #     if isinstance(dict_, dict):
-    #         if self.data_id is not None:
-    #             endtrack = [self.data_id].append(track)
-    #             # print ('ini_track->',track,'endtrack->',endtrack)
-    #             return endtrack
-    #     return track
 
     def _get_selected_tracklist_one_item(self, selected: dict, trlist: list) -> tuple[dict, list]:
         """Helper function to reduce the selected track to 1 item
