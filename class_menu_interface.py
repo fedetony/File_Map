@@ -597,9 +597,9 @@ class TerminalMenuInterface():
                     fm=self.cma.get_file_map(selected_db)
                     while self.ask_confirmation(f"Active devices \033[33m{fm.active_devices}\033[0m  Rescan Devices",False):
                         print(self.cma.rescan_database_devices())
-                    data=fm.db.get_data_from_table(fm.mapper_reference_table,'*',f"tablename='{tablename}'")
-                    #field_list=['id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype']
-                    path_to_map=os.path.join(data[0][5],data[0][3])
+                    # data=fm.db.get_data_from_table(fm.mapper_reference_table,'*',f"tablename='{tablename}'")
+                    # field_list=['id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype']
+                    # path_to_map=os.path.join(data[0][5],data[0][3])
                     device=self.menu_select_device(fm.active_devices)
                     if not device:
                         return '[yellow]Device Serial/Mount Not changed!'
@@ -672,9 +672,11 @@ class TerminalMenuInterface():
                     print(f'[yellow]Replacements: % (Date_Time), # (Date), ? (Time), & (Dir), ! (Full_Path) ') 
                     new_tablename=self.menu_get_table_name_input(tablename)
                     fm=self.cma.get_file_map(selected_db)
-                    data=fm.db.get_data_from_table(fm.mapper_reference_table,'*',f"tablename='{tablename}'")
+                    #data=fm.db.get_data_from_table(fm.mapper_reference_table,'*',f"tablename='{tablename}'")
                     #field_list=['id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype']
-                    path_to_map=os.path.join(data[0][5],data[0][3])
+                    #path_to_map=os.path.join(data[0][5],data[0][3])
+                    map_info_dict=self.cma.get_map_info_as_dict(selected_db,tablename)
+                    path_to_map=os.path.join(map_info_dict.get('mount'),map_info_dict.get('mappath'))
                     new_tablename=self.cma.format_new_table_name(new_tablename,path_to_map)
                     if new_tablename not in ['',None]+fm.db.tables_in_db():
                         fm.db.create_connection()
@@ -712,7 +714,9 @@ class TerminalMenuInterface():
         db_map_pair_list=self.cma.get_all_maps()
         selected_db_map_pair_list=[]
         if len(db_map_pair_list)>0:
-            field_list=['id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype']
+            # field_list=['id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype']
+            _map_info=self.cma.get_map_info_as_dict(db_map_pair_list[0][0],db_map_pair_list[0][1])
+            field_list=list(_map_info.keys())
             str_db_map=''
             # d_m1=DataManage(db_map_pair_list,["db",'Map'])
             # str_db_map=d_m1.get_tabulated_fields(fields_to_tab=None,index=False,justify='left',header=False)
@@ -756,7 +760,9 @@ class TerminalMenuInterface():
         """
         db_map_pair_list=self.cma.get_maps_by_type(types_list)
         if len(db_map_pair_list)>0:
-            field_list=['id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype']
+            # field_list=['id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype']
+            _map_info=self.cma.get_map_info_as_dict(db_map_pair_list[0][0],db_map_pair_list[0][1])
+            field_list=list(_map_info.keys())
             str_db_map=''
             # d_m1=DataManage(db_map_pair_list,["db",'Map'])
             # str_db_map=d_m1.get_tabulated_fields(fields_to_tab=None,index=False,justify='left',header=False)
@@ -765,7 +771,10 @@ class TerminalMenuInterface():
                 map_info=self.cma.get_map_info(database,a_map)
                 num_rows=self.cma.get_map_size(database,a_map)
                 if len(map_info)>0:
-                    end_list.append(map_info[0]+(database,num_rows))
+                    # new maps have more fields than legacy others, yet all have the basic ones
+                    m_i=list(map_info[0])
+                    m_i_t=tuple(m_i[:len(field_list)])
+                    end_list.append(m_i_t+(database,num_rows))
                 else:
                     print(f"Table {a_map} not in Reference table!!")
                     print("Press any key to continue")

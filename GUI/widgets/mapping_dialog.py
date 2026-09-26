@@ -456,6 +456,21 @@ class MappingDialog(QtWidgets.QDialog):
         self.worker.stopped.connect(self.on_deepening_stopped)
         self.worker.error.connect(self.on_deepening_error)
 
+        # tempkill=threading.Event()
+        # tempkill.clear()
+        # self.fmap.deepen_shallow_map(
+        #     self.database,
+        #     table_name,
+        #     path_to_map,
+        #     progress_bar=self.progress,
+        #     press_to_continue=False,
+        #     log_callback=self.log_buffer.write,
+        #     kill_ev=tempkill
+        # ) # kill_ev added by worker_manager
+        # self._flush_mapping_log()
+        # self._mapping_finished()
+         
+
 
     # -----------------------------------------------------
     # Updating

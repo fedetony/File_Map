@@ -465,6 +465,63 @@ class FileMapCliManager:
                 return True
         return False
     
+    def create_selection_map(self,database,
+                        mount_serial_pair_list: list[tuple],
+                        table_name_list: list[str],
+                        path_list_to_map_list: list[list[str]],
+                        log_print: bool = True,
+                        progress_bar: Callable | None = None,
+                        shallow_map: bool = False,
+                        press_to_continue: bool = False,
+                        log_callback: Callable | None = None,
+                        kill_ev: threading.Event | None = None
+                        ):
+        """Create a set of selection maps in a database"""
+        selected_db=database
+        if not selected_db:    
+            return False
+        for table_name in table_name_list:
+            is_ok,msg=self.map_validation(database,table_name)
+            if not is_ok:
+                if log_callback:
+                    log_callback(msg)
+                return False
+        self.mapping_to_pair=(None, None)
+        if is_ok:
+            temp_folder=FM.get_temp_directory_path(prefix="__filemap__",suffix=table_name)
+            temp_db=FM.extract_filename(selected_db,False)+"_temp.db"
+            
+            temp_db_filepath=os.path.join(temp_folder,temp_db)
+            # self.cma.create_filemap_database(temp_db_filepath) this asks for pwd
+            fm=FileMapper(temp_db_filepath,None,None,False) #->creates new database and assigns mapper
+            if not isinstance(fm,FileMapper):
+                if log_callback:
+                    log_callback(f"[red]Error creating database @ {temp_db_filepath}")
+                return False
+            self.cma.file_list.append(temp_db_filepath)
+            self.cma.password_list.append(None)
+            self.cma.key_list.append(None)
+            self.cma.activate_databases(temp_db_filepath)
+            if log_callback:
+                log_callback(f"[yellow]Created temporary database @ {temp_db_filepath}")
+                
+            fm.db.create_connection()    
+            # use the first map for reference
+            self.mapping_to_pair = (temp_db_filepath, table_name_list[0])
+            fm.map_a_selection_list_of_paths_to_db(
+                                mount_serial_pair_list=mount_serial_pair_list,
+                                table_name_list=table_name_list,
+                                path_list_to_map_list=path_list_to_map_list,
+                                log_print=log_print, 
+                                progress_bar=progress_bar,
+                                shallow_map=shallow_map,
+                                press_to_continue=press_to_continue,
+                                log_callback=log_callback,
+                                kill_ev=kill_ev,
+                                )    
+            return True
+        return False
+    
     def _create_temporal_database(self,selected_db,table_name,log_callback=None)->str:
         """Creates a temporal database based on the selected_db and table_name. 
             Both used to have a temporary folder with prefix="__filemap__",suffix=table_name

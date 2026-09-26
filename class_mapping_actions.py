@@ -316,28 +316,54 @@ class MappingActions():
     def show_maps(self,where:str=None):
         """Prints Map information
         """
-        for iii,a_db in enumerate(self.active_databases):
-            fm=a_db['mapdb']
+        col_names={'id':'id',
+                   'dt_map_created':'Date Time Created',
+                   'dt_map_modified':'Date Time Modified',
+                   'mappath':'Map Path',
+                   'tablename':'Table Name',
+                   'mount':'Mount',
+                   'serial':'Serial',
+                   'mapname':'Map Name',
+                   'maptype':'Map Type'}
+        for iii,a_db_dict in enumerate(self.active_databases):
+            fm=a_db_dict['mapdb']
             if isinstance(fm,FileMapper):
-                print(f"{iii+1}. [yellow]Maps in {a_db['file']}:")
-                table_list=fm.db.get_data_from_table(fm.mapper_reference_table,'*',where)
+                print(f"{iii+1}. [yellow]Maps in {a_db_dict['file']}:")
+                # table_list=fm.db.get_data_from_table(fm.mapper_reference_table,'*',where)
+                a_db=a_db_dict['file']
+                table_name_list=self.get_maps_in_db(a_db)
                 table_list_size=[]
-                for table_info in table_list:
-                    #field_list=['id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype']
-                    tablename=table_info[4]
-                    (shallow_count, calc_count)=self.get_shallow_calc_map_count(a_db,tablename)
-                    # data=fm.db.get_data_from_table(table_info[4],'*',f'md5="{MD5_CALC}"')
-                    # shallow_data=fm.db.get_data_from_table(table_info[4],'*',f'md5="{MD5_SHALLOW}"')
-                    num_rows=str(fm.db.get_number_or_rows_in_table(table_info[4]))
+                for table_name in table_name_list:
+                    table_info_dict=self.get_map_info_as_dict(a_db,table_name)
+                    (shallow_count, calc_count)=self.get_shallow_calc_map_count(a_db,table_name)
+                    num_rows = str(fm.db.get_number_or_rows_in_table(table_name))
                     if calc_count:
                         num_rows=f'{num_rows}({calc_count})'
                     if shallow_count:
                         num_rows=f'{num_rows}[{shallow_count}]'
-                    table_list_size.append(table_info+(num_rows,))
+                    table_info=[]
+                    field_list=[]
+                    for fie,val in table_info_dict.items():
+                        if fie in col_names.keys():
+                            table_info.append(val)
+                            field_list.append(col_names.get(fie))
+                            
+                    table_list_size.append(tuple(table_info)+(num_rows,))
+                    field_list += ['Items']
+                
                 if len(table_list_size)>0:
-                    field_list=['id','Date Time Created','Date Time Modified','Map Path','Table Name','Mount','Serial','Map Name','Map Type']+['Items']
+                    #field_list=['id','Date Time Created','Date Time Modified','Map Path',
+                    # 'Table Name','Mount','Serial','Map Name','Map Type']+['Items']
                     data_manage=DataManage(table_list_size,field_list)
-                    print(data_manage.get_tabulated_fields(fields_to_tab=[field_list[1],field_list[4],field_list[6],field_list[5],field_list[3],'Items',field_list[8]],index=True,justify='left'))
+                    fields_to_tab=[col_names.get('dt_map_created'),
+                                   col_names.get('tablename'),
+                                   col_names.get('serial'),
+                                   col_names.get('mount'),
+                                   col_names.get('mappath'),
+                                   'Items',
+                                   col_names.get('maptype')]
+                    print(data_manage.get_tabulated_fields(fields_to_tab=fields_to_tab
+                                                           ,index=True,justify='left'))
 
     def get_all_maps(self):
         """Finds all maps in all loaded databases

@@ -1,7 +1,7 @@
 """
 File Mapping functions for a single database
 ########################
-# F.garcia
+# F.Garcia
 # creation: 05.02.2025
 ########################
 """
@@ -787,7 +787,7 @@ class FileMapper:
                     iii = iii + 1
                     if os.name == "nt":
                         if keyboard.is_pressed("F12"):
-                            return "[red] User Interrupt"
+                            raise KeyboardInterrupt("User Cancelled")
                     if iii >= DATA_ADVANCE:
                         if log_print:
                             delta = datetime.now() - start_datetime
@@ -984,12 +984,215 @@ class FileMapper:
             msg = "[red] User Interrupt"
         except Exception as eee:  # pylint: disable=broad-exception-caught
             log_callback(f"[red]Error Mapping: {eee}")
-            log_callback(type(eee), line_data_tup)
+            # log_callback(type(eee), line_data_tup)
             if press_to_continue:
                 log_callback("@" * 100, "\nPress any Key to continue\n", "@" * 100)
                 getch()
             
             msg = f"[red]Error Mapping: {eee}"
+        finally:
+            if progress:
+                progress.stop()
+        return msg
+    
+    def map_a_selection_list_of_paths_to_db(
+        self,
+        mount_serial_pair_list:list[tuple],
+        table_name_list:list[str],
+        path_list_to_map_list:list[list[str]],  # pylint: disable=too-many-locals
+        log_print=True,
+        progress_bar=None,
+        shallow_map=False,
+        press_to_continue=True,
+        log_callback=None,
+        kill_ev:threading.Event=None
+    ):
+        """Maps a list of paths or files from a device with same mount and serial 
+        into a table in the database.
+
+        Args:
+            mount_serial_pair_list (list[tuple]), List of source map,serial mounts
+            table_name_list (list[str]): List of table_names
+            path_list_to_map_list (list[list[str]]): list of lists of files/dirs paths
+            log_print (bool, optional): print logs. Defaults to True.
+            shallow_map (bool, optional): Make shallow map (Does not calculate md5,does not run thread).
+            Defaults to False.
+        """
+
+        db = self.db
+        msg = ''
+        if (not isinstance(path_list_to_map_list,list) or
+            not isinstance(table_name_list,list) or
+            not isinstance(mount_serial_pair_list,list)):
+            return "All inputs must be a list"
+        if (len(path_list_to_map_list) != len(table_name_list) or
+            len(path_list_to_map_list) != len(mount_serial_pair_list) or 
+            len(path_list_to_map_list) == 0 ):
+            return "All inputs must be a list of same length"
+        
+        f_m=FileManipulate()
+        # Interrupts a
+        exit_key = "ctrl+c"
+        if os.name == "nt":
+            exit_key = "F12"
+
+        start_datetime = datetime.now()
+        fp_list=[]
+    
+        if not log_callback:
+            log_callback=print
+        try:
+            if progress_bar is None:
+                progress_bar = RichMapProgress()
+            if isinstance(progress_bar, MapProgress):
+                progress = progress_bar
+            if progress:
+                progress.start(
+                    100,
+                    f"[blue]Initial Selection Mapping [red]({exit_key} to Exit)",
+                )
+            def prog_upd(fp,nf):
+                per_progress=int(fp/(nf)*1000)/10
+                if progress:
+                    progress.update(
+                        current=per_progress,
+                        description=f"[blue]Selection Mapping [red]({exit_key} to Exit)",
+                    )
+                return per_progress
+            for (path_list_to_map, table_name, mount_serial_pair) in \
+                zip(path_list_to_map_list, 
+                    table_name_list, 
+                    mount_serial_pair_list):
+                if not isinstance(path_list_to_map,list):
+                    log_callback(f'[red] {table_name} No files or paths to map found! [/red]')
+                    continue
+                common_path=f_m.get_common_path(path_list_to_map)
+                # common_path=f_m.remove_mount_from_path(mount_serial_pair[0],common_path,
+                #                                     remove_start_separator=True)
+                if not common_path:
+                    log_callback(f'[red] {table_name} No common path found! [/red]')
+                    continue
+                if not self.add_table_to_mapper_index(table_name, common_path, 
+                                                      MapType.SELECTION.value):
+                    log_callback(f'[red] {table_name} could not be indexed! [/red]')
+                    continue
+                self._create_map_in_db(table_name)
+                fp_list.append(table_name)
+
+                n_total=0
+                data = []
+                files_processed = 0
+                num_sel_files=0
+                for iii,filepath in enumerate(path_list_to_map):
+                    if kill_ev and kill_ev.is_set():
+                        raise KeyboardInterrupt("User Cancel")
+                    file_exist, is_file= f_m.validate_path_file(filepath)
+                    if not file_exist:
+                        log_callback(f'[yellow] skipping {filepath} file does not exist! [/yellow]')
+                        continue
+                    if is_file:
+                        path_to_map=f_m.extract_path(filepath,with_separator=True)
+                        file_to_map=f_m.extract_filename(filepath,True) 
+                    else:
+                        path_to_map=filepath
+                        file_to_map=None
+                    mount, serial = self.find_mount_serial_of_path(path_to_map)
+                    if mount_serial_pair != (mount,serial):
+                        log_callback(f'[yellow] skipping {filepath} mount, serial mismatch! [/yellow]')
+                        continue
+                    num_files, num_folders = self.count_files_in_path(path_to_map)
+        
+                    per_progress=prog_upd(files_processed,num_files+num_sel_files)
+                    
+                    delta = datetime.now() - start_datetime
+                    log_callback(f"Counted: {num_files} files and {num_folders} folders in {delta.total_seconds()} sec")
+                    jjj=0
+                    if not file_to_map:
+                        for dirpath, _, filenames in os.walk(path_to_map):
+                            # Get the data for each file
+                            for file in filenames:
+                                if kill_ev and kill_ev.is_set():
+                                    raise KeyboardInterrupt("User Cancel")
+                                line_data_tup = self.get_mapping_info_data_from_file(
+                                    mount, dirpath, file, log_print, f"{files_processed}. ", shallow_map, 
+                                    log_callback=log_callback)
+                                data.append(line_data_tup)
+                                
+                                files_processed += 1
+                                jjj +=1
+                                per_progress = prog_upd(files_processed,num_files+num_sel_files)
+                                if jjj >= DATA_ADVANCE:
+                                    if log_print:
+                                        delta = datetime.now() - start_datetime
+                                        log_callback("+" * 10 + f" Time elapsed: {str(delta).split('.',  maxsplit=1)[0]}" + "+" * 10)
+                                    was_inserted = db.insert_data_to_table(table_name, data)
+                                    if not was_inserted:
+                                        time.sleep(0.333)
+                                        if not db.insert_data_to_table(table_name, data):
+                                            raise ValueError(f"Could not insert data in {table_name}")
+                                    data = []
+                                    jjj = 0
+                    else:
+                        line_data_tup = self.get_mapping_info_data_from_file(
+                                    mount, path_to_map, file_to_map, log_print, 
+                                    f"{files_processed}. ", 
+                                    shallow_map, log_callback=log_callback)
+                        data.append(line_data_tup)                        
+                        files_processed += 1
+                        num_sel_files += 1
+                        per_progress = prog_upd(files_processed,num_files+num_sel_files)
+
+                    was_inserted = db.insert_data_to_table(table_name, data)
+                    if not was_inserted:
+                        time.sleep(0.333)
+                        if not db.insert_data_to_table(table_name, data):
+                            raise ValueError(f"Could not insert data in {table_name}")
+                    data=[]
+                    iii += 1
+            
+                    if progress:
+                        progress.update(
+                            current=100,
+                            description="[green]Shallow Mapping complete")
+                    
+                    if log_print:
+                        delta = datetime.now() - start_datetime
+                        log_callback("+" * 33)
+                        n_r=0
+                        for t_n in fp_list:
+                            n_r += db.get_number_or_rows_in_table(t_n)
+                        log_callback(f'[green]Successfully Mapped {n_r} files in {str(delta).split(".", maxsplit=1)[0]}')
+                        n_total=n_total+n_r
+                
+                time.sleep(0.333)
+                if log_print:                    
+                    log_callback("[cyan]"+"*"*33*3+"[cyan]")
+                    log_callback("[cyan]Starting Deepening Threads[cyan]")
+                    log_callback("[cyan]"+"*"*33*3+"[cyan]")
+                if not shallow_map:
+                    for t_name in fp_list:
+                        self.remap_map_in_thread_to_db(t_name, progress_bar, False, log_callback = log_callback, kill_ev=kill_ev)
+                if log_print:
+                        delta = datetime.now() - start_datetime
+                        log_callback("[green]"+"+" * 33)
+                        log_callback(f'[green]Successfully Deep Mapped {len(fp_list)} file paths')
+                        log_callback("[green]"+"+" * 33)
+                        n_total=n_total+n_r
+                delta = datetime.now() - start_datetime        
+                msg = f'[green]Successfully Mapped {n_total} files in {str(delta).split(".", maxsplit=1)[0]}'
+        except KeyboardInterrupt:
+            log_callback("[magenta]User cancel")
+            log_callback("@" * 100, "\nPress any Key to continue\n", "@" * 100)
+            
+            msg = "[red] User Interrupt"
+        except Exception as eee:  # pylint: disable=broad-exception-caught
+            log_callback(f"[red]Error Selection Mapping: {eee}")
+            # log_callback(type(eee), line_data_tup)
+            if press_to_continue:
+                log_callback("@" * 100, "\nPress any Key to continue\n", "@" * 100)
+                getch()
+            
+            msg = f"[red]Error Selection Mapping: {eee}"
         finally:
             if progress:
                 progress.stop()
@@ -1088,7 +1291,10 @@ class FileMapper:
         the_size = -1
         f_m = FileManipulate()
         try:
+            # remove double // or \ and / formats
+            dirpath = f_m.normalize_path(dirpath)
             dirpath_nm = self.remove_mount_from_path(mount, dirpath)
+            dirpath_nm = f_m.remove_separator_in_path_end(dirpath_nm)
             dt_data_created = datetime.now()
             # when joining, calculating or sizing fails hava a datetime (required in db)
             dt_data_modified = dt_data_created

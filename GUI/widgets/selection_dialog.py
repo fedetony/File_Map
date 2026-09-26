@@ -413,7 +413,7 @@ class SelectionDialog(QtWidgets.QDialog):
 
         self.shallow_chkb = QtWidgets.QCheckBox("Shallow Map")
         self.shallow_chkb.setIcon(self.icons.icon("shallow"))
-        if self.mode not in ["create", "continue"]:
+        if self.mode not in ["FESelection"]:
             self.shallow_chkb.setHidden(True)
 
         self.stop_button.setEnabled(False)
@@ -596,28 +596,35 @@ class SelectionDialog(QtWidgets.QDialog):
         finally:
             self.fexp_widget.lazyLoading.emit(False)
         
+    def _get_path_list_from_node_list(self,node_list:list[TreeNode]):
+        path_list=[]
+        parent_node_list=[]
+        for node in node_list:
+            if node.i_am == "dir" and node.selected_children:
+                parent_node_list.append(node)
 
-    def start_fe_selection_worker(self, target_full):
-        pass
-        # isn search map are the functions
-
-    def start_db_selection_worker(self, target_full):
-        self.mapping_is_running_signal.emit()
-        self.worker = self.worker_manager.start(
-            self._create_selection_maps,
-            target_full=target_full,
-        )
-
-        self.worker.finished.connect(self.on_mapping_finished)
-        self.worker.stopped.connect(self.on_mapping_stopped)
-        self.worker.error.connect(self.on_mapping_error)
-        # killtemp=threading.Event()
-        # killtemp.clear()
-        # result=self._create_selection_maps(target_full,killtemp)
+        # Filter files and dirs inside tree paths    
+        new_node_list:list[TreeNode]=[]
+        for node in node_list:
+            bl=node.get_bloodline()
+            add_node=True
+            # dont include yourself
+            for pnode in bl[:-1]:
+                if pnode in parent_node_list:
+                    add_node=False
+                    break
+            if add_node:
+                new_node_list.append(node)
+                
+        for node in new_node_list:
+            if node.i_am == "dir":
+                path_list.append(os.path.join(node.mount,node.itempath))
+            elif node.i_am == "file":
+                path_list.append(os.path.join(node.mount,node.itempath,node.name))
         
+        return list(set(path_list))
 
-    def start_create_worker(self, table_name, path_to_map):
-        return #momcomment 
+    def start_fe_selection_worker(self, target_full: dict):
         self.mapping_is_running_signal.emit()
 
         self.progress = QtMapProgress()
@@ -626,26 +633,132 @@ class SelectionDialog(QtWidgets.QDialog):
         self.mapping_running = True
         is_shallow = self.shallow_chkb.isChecked()
 
-        # self.log_timer = QtCore.QTimer(self)
-        # self.log_timer.timeout.connect(self._flush_mapping_log)
-        # self.log_timer.start(100)
+        self._stop_fe_mapping = False
+        self.fmap.mapping_to_pair = (None, None)
 
+        # ------------------------------------------------------------
+        # Build a queue of mapping jobs.
+        #
+        # IMPORTANT:
+        # We do NOT start all workers here.
+        # Only the first worker will be started.
+        # The next worker is started from on_fe_mapping_finished().
+        # ------------------------------------------------------------
+        self._fe_mapping_queue = []
+        for ms, (a_target, a_node_list) in target_full.items():
+            if not isinstance(a_target, MapTargetItem):
+                continue
+            database = self.target_widget.database_ref.get(
+                a_target.target_database)
+
+            a_map = a_target.target_map_name
+
+            target_db_map_pair = (database, a_map)
+
+            path_list_to_map = self._get_path_list_from_node_list(
+                a_node_list)
+
+            self._fe_mapping_queue.append({
+                "mount_serial_pair": ms,
+                "database": database,
+                "map": a_map,
+                "target_db_map_pair": target_db_map_pair,
+                "path_list_to_map": path_list_to_map,
+                "shallow_map": is_shallow,
+            })
+        # Nothing to do
+        if not self._fe_mapping_queue:
+            self._mapping_finished()
+            return
+        # Start the first mapping.
+        self._start_next_fe_mapping()
+
+
+    @QtCore.pyqtSlot()
+    def _start_next_fe_mapping(self):
+        """
+        Start exactly ONE FE mapping worker.
+
+        The next worker is started only after this worker emits
+        finished/stopped/error.
+        """
+        # Stop requested
+        if self._stop_fe_mapping:
+            self._mapping_finished()
+            return
+
+        # Queue exhausted
+        if not self._fe_mapping_queue:
+            self._mapping_finished()
+            return
+        # ------------------------------------------------------------
+        # Get the next job
+        # ------------------------------------------------------------
+        job = self._fe_mapping_queue.pop(0)
+
+        database = job["database"]
+        a_map = job["map"]
+        ms = job["mount_serial_pair"]
+        path_list_to_map = job["path_list_to_map"]
+
+        # Store information belonging specifically to THIS worker.
+        # Do not rely on these values being updated by the next loop
+        # iteration because there is no loop starting workers anymore.
+        self.target_dbmap_pair = job["target_db_map_pair"]
+
+        # Optional but useful if you want to inspect the current job.
+        self._current_fe_mapping_job = job
+        # ------------------------------------------------------------
+        # Start worker
+        # ------------------------------------------------------------
         self.worker = self.worker_manager.start(
-            self.fmap.create_new_map,
-            self.database,
-            table_name,
-            path_to_map,
+            self.fmap.create_selection_map,
+            database=database,
+            mount_serial_pair_list=[ms],
+            table_name_list=[a_map],
+            path_list_to_map_list=[path_list_to_map],
             log_print=True,
             progress_bar=self.progress,
-            shallow_map=is_shallow,
+            shallow_map=job["shallow_map"],
             press_to_continue=False,
             log_callback=self.log_buffer.write
         )
 
-        self.worker.finished.connect(self.on_mapping_finished)
-        self.worker.stopped.connect(self.on_mapping_stopped)
-        self.worker.error.connect(self.on_mapping_error)
+        self.worker.finished.connect(self.on_fe_mapping_finished)
+        self.worker.stopped.connect(self.on_fe_mapping_stopped)
+        self.worker.error.connect(self.on_fe_mapping_error)
 
+        # is_shallow=job["shallow_map"]
+        # killtemp=threading.Event()
+        # killtemp.clear()
+        # self.fmap.create_selection_map(
+        #     database = database,
+        #     mount_serial_pair_list = [ms],
+        #     table_name_list=[a_map],
+        #     path_list_to_map_list=[path_list_to_map],
+        #     log_print=True,
+        #     progress_bar=self.progress,
+        #     shallow_map=is_shallow,
+        #     press_to_continue=False,
+        #     log_callback=self.log_buffer.write,
+        #     kill_ev=killtemp
+        # )
+
+
+    def start_db_selection_worker(self, target_full):
+        self.mapping_is_running_signal.emit()
+        self.worker = self.worker_manager.start(
+            self._create_selection_maps,
+            target_full=target_full,
+        )
+
+        self.worker.finished.connect(self.on_db_mapping_finished)
+        self.worker.stopped.connect(self.on_db_mapping_stopped)
+        self.worker.error.connect(self.on_db_mapping_error)
+        # killtemp=threading.Event()
+        # killtemp.clear()
+        # result=self._create_selection_maps(target_full,killtemp)
+        
     # -----------------------------------------------------
     # Updating
     # -----------------------------------------------------
@@ -718,9 +831,6 @@ class SelectionDialog(QtWidgets.QDialog):
     
     def stop_fe_selection(self):
         self.stop_mapping()
-
-    def stop_deepening(self):
-        self.stop_mapping()
         
     def stop_db_selection(self):
         self.stop_mapping()
@@ -729,66 +839,100 @@ class SelectionDialog(QtWidgets.QDialog):
     # -----------------------------------------------------
     # Worker callbacks
     # -----------------------------------------------------
-    @QtCore.pyqtSlot()
-    def on_mapping_stopped(self):
-        self._append_status("[yellow]Mapping worker stopped[/yellow]")
-        self._flush_mapping_log()
-        try:
-            self._commit_mapping()
-        except Exception as exc:
-            self.on_mapping_error(exc)
-            return
-        self._mapping_finished()
-
+    
+    # general Mapping error handler
     @QtCore.pyqtSlot(object)
     def on_mapping_error(self, error):
         self._append_status(f"[red]Mapping error: {error}[/red]")
         self._flush_mapping_log()
         self._mapping_finished()
+    
+    # ************* db **************
+    @QtCore.pyqtSlot()
+    def on_db_mapping_stopped(self):
+        self._append_status("[yellow]Mapping worker stopped[/yellow]")
+        self._flush_mapping_log()
+        try:
+            self._commit_db_mapping()
+        except Exception as exc:
+            self.on_mapping_error(exc)
+            return
+        self._mapping_finished()
+    
+    @QtCore.pyqtSlot(object)
+    def on_db_mapping_error(self, error):
+        self.on_mapping_error(error)
 
     @QtCore.pyqtSlot(object)
-    def on_mapping_finished(self, result=None):
+    def on_db_mapping_finished(self, result=None):
         try:
-            self._commit_mapping(result)
+            self._commit_db_mapping(result)
         except Exception as exc:
             self.on_mapping_error(exc)
             return
         self._flush_mapping_log()
         self._mapping_finished()
     
-    @QtCore.pyqtSlot()
-    def on_deepening_stopped(self):
-        self._append_status("[yellow]Mapping worker stopped[/yellow]")
-        self._commit_deepening()
-        self._mapping_finished()
+    # ************* fe ************** 
+
+    # FE selection mapping error handler
+    @QtCore.pyqtSlot(object)
+    def on_fe_mapping_error(self, error):
+        # Prevent the next queued FE mapping from starting.
+        self._stop_fe_mapping = True
+        # Clear the remaining jobs because this FE mapping sequence
+        # is being aborted.
+        if hasattr(self, "_fe_mapping_queue"):
+            self._fe_mapping_queue.clear()
+        # Use the common/general error handling.
+        self.on_mapping_error(error)
 
     @QtCore.pyqtSlot(object)
-    def on_deepening_error(self, error):
-        self._append_status(f"[red]Mapping error: {error}[/red]")
-        self._flush_mapping_log()
-        self._mapping_finished()
-
-    @QtCore.pyqtSlot(object)
-    def on_deepening_finished(self, result=None):
-        msg="[yellow]Deepening: [/yellow]"
-        replaced=False
-        if isinstance(result,tuple) and len(result)==3:
-            msg += "\n"+self.mark_txt(f"is_ok: {result[0]}",result[0])
-            msg += "\n"+self.mark_txt(f"is_finished: {result[1]}",result[1])
-            msg += "\n"+self.mark_txt(f"replaced: {result[2]}",result[2])
-            finished = result[1]
-            replaced = result[2]
+    def on_fe_mapping_finished(self, result=None):
+        msg = "[cyan]" + "*" * 33 + "[/cyan]"
         self._append_status(msg)
-        #if replaced:
-        self._commit_deepening()
+        self._append_status("[cyan]Finished Selection Mapping: [/cyan]")
+
+        temp_db, temp_map = self.fmap.mapping_to_pair
+        target_db, target_map = self.target_dbmap_pair
+
+        self._append_status(f"[cyan]Tranfering from: ({temp_db}, {temp_map})[/cyan]")
+        self._append_status(f"[cyan]===========> to: ({target_db}, {target_map})[/cyan]")
+        self._append_status(msg)
+        # Commit THIS worker before starting the next worker.
+        try:
+            self._commit_fe_mapping(result)
+        except Exception as exc:
+            self.on_mapping_error(exc)
+            return
+
         self._flush_mapping_log()
+        # Start the next mapping.
+        self._start_next_fe_mapping()
+
+
+    @QtCore.pyqtSlot()
+    def on_fe_mapping_stopped(self):
+        self._append_status(
+            "[yellow]Mapping worker stopped[/yellow]"
+        )
+        self._flush_mapping_log()
+        try:
+            self._commit_fe_mapping()
+        except Exception as exc:
+            self.on_mapping_error(exc)
+            return
         self._mapping_finished()
+
+        # Do not start another mapping after an explicit stop.
+        self._stop_fe_mapping = True
+
 
     # -----------------------------------------------------
     # Commit 
     # -----------------------------------------------------
 
-    def _commit_mapping(self,result=None):
+    def _commit_db_mapping(self,result=None):
         if isinstance(result,dict):
             maps_created=result
             msgbox=MsgBoxHelper()
@@ -812,6 +956,25 @@ class SelectionDialog(QtWidgets.QDialog):
                         detailed_text=dmsg,
                         informative_text=None,
                         )
+        self.refresh_mapping_tree.emit()
+    
+    def _commit_fe_mapping(self,result=None):
+        temp_db, temp_map = (self.fmap.mapping_to_pair)
+        target_db, target_map = (self.target_dbmap_pair)
+
+        if not all((temp_db, temp_map, target_db, target_map)):
+            raise RuntimeError(
+                "Mapping completed but mapping pair "
+                "information is missing.")
+
+        was_copied=self.fmap.copy_table_from_to_database(
+            temp_db, temp_map, target_db, target_map)
+        self._append_status(f"Map was copied: {was_copied} \n from {temp_db} \n to {target_db}")
+        if was_copied:
+            self._append_status("[yellow]Deleting Temporal database")
+            # for privacy dont keep temporal maps
+            self.fmap.delete_temporal_database()    
+        self.fmap.set_active_databases_in_dbm()
         self.refresh_mapping_tree.emit()
     
     # -----------------------------------------------------

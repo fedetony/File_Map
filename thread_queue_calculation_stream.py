@@ -198,14 +198,14 @@ class QueueCalcStream(threading.Thread):
             ids.append(str(an_id))
 
         sql = f"""
-            UPDATE {self.table}
+            UPDATE {self.db.quote_identifier(self.table)}
             SET {self.table_column} =
                 CASE id
                     {' '.join(case_parts)}
                 END
             WHERE id IN ({','.join(ids)})
         """
-
+        #print(f"QueueCalcStream Debug->{sql}")
         self.db.send_sql_command(sql)
 
     # ------------------------------------------------------------------
@@ -297,6 +297,7 @@ class QueueCalcStream(threading.Thread):
             # ----------------------------------------------------------
             # Load work
             # ----------------------------------------------------------
+            self.db.create_connection()
 
             self.fill_queue_with_files()
 
