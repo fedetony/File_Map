@@ -174,11 +174,17 @@ class DatabaseLazyLoader(LazyLoaderProvider):
         # Direct files
         # ---------------------------
         #Here ext_path include / in the end and no / in start
-        # data = fm.db.get_data_from_table(a_map, "*")
+        sep = "'" + os.sep + "'" 
+        if os.sep == '/':
+            rep = "char(92)"
+        else:
+            rep = "'/'" 
         where_files = (
-            "replace(filepath, char(92), '/') = "
-            + fm.db.quotes(ext_path)
+            f"replace(filepath, {rep}, {sep}) = "
+            + fm.db.quotes(ext_path if ext_path else os.sep)
         )
+        # debug see comment after
+        # data = fm.db.get_data_from_table(a_map, "*")
         data_files = fm.db.get_data_from_table(a_map, "*", where_files)
         if not data_files:            
             where1 = ("filepath = " + fm.db.quotes(ext_path))
@@ -263,34 +269,41 @@ class DatabaseLazyLoader(LazyLoaderProvider):
             ext_path = ext_path[1:]
         else:
             ext_path=self.fmap.fm.remove_mount_from_path(mount,ext_path,remove_start_separator=True)
-
+        # For directory search add end separator
+        if ext_path and not ext_path.endswith(os.sep):
+            ext_path += os.sep
         node.itempath=self._normalize_itempath(ext_path)
         # print(f"Dir Set {node.name} -> {node.itempath}")
         a_map = db_map_pair[1]
         # ---------------------------
         # Direct directories
         # ---------------------------
+        sep = "'" + os.sep + "'" 
+        if os.sep == '/':
+            rep = "char(92)"
+        else:
+            rep = "'/'" 
         where_dirs = (
-            "replace(filepath, char(92), '/') LIKE "
+            f"replace(filepath, {rep}, {sep}) LIKE "
             + fm.db.quotes(ext_path + "%")
         )
 
         relative_expr = (
-            "substr("
-            "replace(filepath, char(92), '/'), "
-            + str(len(ext_path) + 1)
-            + ")"
+            f"substr("
+            f"replace(filepath, {rep}, {sep}), "
+            f"{len(ext_path) + 1}"
+            f")"
         )
 
         dirname_expr = (
             "CASE "
-            "WHEN instr(" + relative_expr + ", '/') > 0 "
-            "THEN substr(" + relative_expr + ", 1, instr(" + relative_expr + ", '/') - 1) "
+            "WHEN instr(" + relative_expr + f", {sep}) > 0 "
+            "THEN substr(" + relative_expr + ", 1, instr(" + relative_expr + f", {sep}) - 1) "
             "ELSE " + relative_expr + " "
             "END"
         )
-
-        # data = fm.db.get_data_from_table(a_map, "*")
+        # debug see comment after
+        data = fm.db.get_data_from_table(a_map, "*")
         data_dirs = fm.db.get_data_from_table(a_map,f"DISTINCT {dirname_expr}", where_dirs)
         if not data_dirs:
             return 0
@@ -332,9 +345,16 @@ class DatabaseLazyLoader(LazyLoaderProvider):
         return count
     
     def _get_dir_size_sql(self, a_map, fm:FileMapper,ext_path):
-        
+        # For directory search add end separator
+        if ext_path and not ext_path.endswith(os.sep):
+            ext_path += os.sep
+        sep = "'" + os.sep + "'" 
+        if os.sep == '/':
+            rep = "char(92)"
+        else:
+            rep = "'/'" 
         where_dirs = (
-            "replace(filepath, char(92), '/') LIKE "
+            f"replace(filepath, {rep}, {sep}) LIKE "
             + fm.db.quotes(ext_path + "%")
         )
         data_size = fm.db.get_data_from_table(
@@ -347,9 +367,16 @@ class DatabaseLazyLoader(LazyLoaderProvider):
         return size
     
     def _get_dir_quantity_sql(self, a_map, fm:FileMapper,ext_path):
-        
+        # For directory search add end separator
+        if ext_path and not ext_path.endswith(os.sep):
+            ext_path += os.sep
+        sep = "'" + os.sep + "'" 
+        if os.sep == '/':
+            rep = "char(92)"
+        else:
+            rep = "'/'" 
         where_dirs = (
-            "replace(filepath, char(92), '/') LIKE "
+            f"replace(filepath, {rep} , {sep}) LIKE "
             + fm.db.quotes(ext_path + "%")
         )
         data_quant = fm.db.get_data_from_table(

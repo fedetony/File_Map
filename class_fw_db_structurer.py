@@ -387,25 +387,33 @@ class ForwardDBStructurer:
             ext_path = ext_path[1:]
         else:
             ext_path = ext_path.replace(mount, "")
+        # For directory search add end separator
+        if ext_path and not ext_path.endswith(os.sep):
+            ext_path += os.sep
         a_map = db_map_pair[1]
         # ---------------------------
         # Direct directories
         # ---------------------------
+        sep = "'" + os.sep + "'" 
+        if os.sep == '/':
+            rep = "char(92)"
+        else:
+            rep = "'/'" 
         where_dirs = (
-            "replace(filepath, char(92), '/') LIKE "
+            f"replace(filepath, {rep}, {sep}) LIKE "
             + fm.db.quotes(ext_path + "%")
         )
 
         relative_expr = (
-            "substr("
-            "replace(filepath, char(92), '/'), "
-            + str(len(ext_path) + 1)
-            + ")"
+            f"substr("
+            f"replace(filepath, {rep}, {sep}), "
+            f"{len(ext_path) + 1}"
+            f")"
         )
 
         dirname_expr = (
             "CASE "
-            "WHEN instr(" + relative_expr + ", '/') > 0 "
+            "WHEN instr(" + relative_expr + f", {sep}) > 0 "
             "THEN substr(" + relative_expr + ", 1, instr(" + relative_expr + ", '/') - 1) "
             "ELSE " + relative_expr + " "
             "END"

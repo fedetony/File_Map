@@ -637,8 +637,10 @@ class MappingDialog(QtWidgets.QDialog):
                 "information is missing.")
 
         was_copied=self.fmap.copy_table_from_to_database(
-            temp_db, temp_map, target_db, target_map)
-        self._append_status(f"Map was copied: {was_copied} \n from {temp_db} \n to {target_db}")
+            temp_db, temp_map, target_db, target_map, 
+            log_callback= self._append_status)
+        self._append_status(
+            f"Map was copied: {was_copied} \n from {temp_db} \n to {target_db}")
         if was_copied:
             self._append_status("[yellow]Deleting Temporal database")
             # for privacy dont keep temporal maps

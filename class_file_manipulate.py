@@ -39,7 +39,8 @@ class FileManipulate:
         """
         if not path:
             return path
-
+        path = os.path.normpath(path)
+        mount = os.path.normpath(mount)
         if not mount:
             relative = path
         elif path == mount:
@@ -50,13 +51,14 @@ class FileManipulate:
             relative = path[len(mount):]
         elif path.startswith(mount + os.sep):
             relative = path[len(mount):]
+        elif ":" in mount and mount in path:
+            relative = path[len(mount):]
         else:
             relative = path
 
         if remove_start_separator and relative:
             if relative[0] in ("\\", "/", os.sep):
                 relative = relative[1:]
-
         return relative
     
     @staticmethod
@@ -870,20 +872,35 @@ class FileManipulate:
     @staticmethod
     def fix_separator_in_path(a_path:str,add_sep_start=False):
         """Adds the separator to a path end. Replaces // for / in the start (linux)."""
-        if add_sep_start and not a_path.startswith(os.sep):
-            a_path = os.sep + a_path 
-        if a_path.startswith(os.sep+os.sep):
-            a_path=a_path[1:]
-        if a_path.endswith((os.sep,'\\','/')):
-            return a_path
+        if os.name == 'nt':
+            if add_sep_start and not a_path.startswith(os.sep) and ":" not in a_path:
+                a_path = os.sep + a_path 
+            if a_path.startswith(os.sep+os.sep):
+                a_path=a_path[1:]
+            if a_path.endswith((os.sep,'\\','/')):
+                return a_path   
+        else:
+            if add_sep_start and not a_path.startswith(os.sep):
+                a_path = os.sep + a_path 
+            if a_path.startswith(os.sep+os.sep):
+                a_path=a_path[1:]
+            if a_path.endswith((os.sep,'\\','/')):
+                return a_path
         return a_path + os.sep    
     
     @staticmethod
     def remove_separator_in_path_end(a_path:str):
-        """Removes the separator to a path end."""
+        """Removes the separator in a path end."""
         if a_path and a_path.endswith((os.sep,'\\','/')) and len(a_path)>1:
             return a_path[:-1]
         return a_path     
+
+    @staticmethod
+    def remove_separator_in_path_start(a_path:str):
+        """Removes the separator in a path start."""
+        if a_path and a_path.startswith((os.sep,'\\','/')) and len(a_path)>1:
+            return a_path[1:]
+        return a_path  
 
     @staticmethod
     def extract_parent_path(filename: str, with_separator: bool = True) -> str:

@@ -1025,8 +1025,13 @@ class SelectionDialog(QtWidgets.QDialog):
                     itempath = node.itempath
                     if node.itempath and node.itempath[-1] in ["/", "\\", os.sep] and len(node.itempath)>1:
                         itempath = node.itempath[:-1]
+                    sep = "'" + os.sep + "'" 
+                    if os.sep == '/':
+                        rep = "char(92)"
+                    else:
+                        rep = "'/'" 
                     where_files_dirs = (
-                        "replace(filepath, char(92), '/') LIKE "
+                        f"replace(filepath, {rep}, {sep}) LIKE "
                         + fm.db.quotes(itempath + "%")
                     )
                     data_ids=fm.db.get_data_from_table(db_map_pair[1],'id',where_files_dirs)

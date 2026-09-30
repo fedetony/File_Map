@@ -260,7 +260,7 @@ class SQLiteDatabase:
                 return txt  # is already '' quoted
             if txt.startswith('"') and txt.endswith('"') and '"' not in txt[1:-1]:
                 return txt  # is already "" quoted
-            txt.replace('"', "")
+            txt = txt.replace('"', "")
         if "'" in txt:
             if txt.startswith("'") and txt.endswith("'"):
                 return txt  # is already '' quoted

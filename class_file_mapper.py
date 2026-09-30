@@ -53,7 +53,31 @@ MAP_TYPES_LIST = [map_type.value for map_type in MapType]
 
 class FileMapper:
     """Class for Mapping functions in a specific database"""
+    description_reference_mapper_list=[
+                    ("dt_map_created", "DATETIME DEFAULT CURRENT_TIMESTAMP", True),
+                    ("dt_map_modified", "DATETIME", True),
+                    ("mappath", "TEXT", True),
+                    ("tablename", "TEXT", True),
+                    ("mount", "TEXT", True),
+                    ("serial", "TEXT", True),
+                    ("mapname", "TEXT", True),
+                    ("maptype", "TEXT", True),
+                    ("origin_db", "TEXT", True),
+                    ("origin_map", "TEXT", True),
+                ]
 
+    description_map_list=[
+                        ("dt_data_created", "DATETIME DEFAULT CURRENT_TIMESTAMP", True),
+                        ("dt_data_modified", "DATETIME", True),
+                        ("filepath", "TEXT", True),
+                        ("filename", "TEXT", True),
+                        ("md5", "TEXT", True),
+                        ("size", "REAL", True),
+                        ("dt_file_created", "DATETIME", False),
+                        ("dt_file_accessed", "DATETIME", False),
+                        ("dt_file_modified", "DATETIME", False),
+                    ]
+    
     def __init__(self, db_filepath, key_filepath, password, log_print=True):
         self.password = password
         self.db_path_file = db_filepath
@@ -284,6 +308,65 @@ class FileMapper:
                         serial = md[1]
         return mount, serial
 
+    def is_table_standarized(self, table_name: str) -> bool:
+        """Returns True if all filepaths in the table are standardized."""
+        if not self.db.table_exists(self.mapper_reference_table):
+            return False
+        t_id=self.get_table_id(table_name)
+        mappath_list = self.db.get_data_from_table(
+            self.mapper_reference_table, 
+            "mappath", 
+            f"id={self.db.quotes(str(t_id))}")
+        mappath = None
+        if len(mappath_list) > 0: # list[tuple]
+            mappath = mappath_list[0][0]
+        if not mappath:
+            return False
+        mod_mappath = self.get_standard_no_mount_path(mappath)
+        if mod_mappath != mappath:
+            return False
+        where = ("filepath IS NOT NULL"
+           " AND length(filepath) > 1"
+           " AND filepath != TRIM(filepath, '/\\')"
+           " LIMIT 1")
+        data=self.db.get_data_from_table(table_name,"1",where)
+        return not bool(data)
+
+    def standarize_map_paths(self, table_name:str)->bool:
+        """Makes paths in table standard"""
+        if not self.db.table_exists(self.mapper_reference_table):
+            return False
+        t_id=self.get_table_id(table_name)
+        mappath_list = self.db.get_data_from_table(
+            self.mapper_reference_table, 
+            "mappath", f"id={self.db.quotes(str(t_id))}")
+        mappath = None
+        if len(mappath_list) > 0: # list[tuple]
+            mappath = mappath_list[0][0]
+        if not mappath:
+            return False
+        mod_mappath = self.get_standard_no_mount_path(mappath)
+        if mod_mappath != mappath:
+            # Change mapping mappath in reference
+            self.db.edit_value_in_table(self.mapper_reference_table,t_id,'mappath',mod_mappath)
+        sql = (f"UPDATE {self.db.quote_identifier(table_name)}"
+           " SET filepath = TRIM(filepath, '/\\')"
+           " WHERE filepath IS NOT NULL"
+           " AND length(filepath) > 1"
+           " AND filepath != TRIM(filepath, '/\\')"
+           )
+
+        self.db.send_sql_command(sql)
+        
+        return True
+
+    def get_standard_no_mount_path(self, path):
+        f_m = FileManipulate()
+        mod_path = f_m.normalize_path(path)
+        mod_path = f_m.remove_separator_in_path_end(mod_path)
+        mod_path = f_m.remove_separator_in_path_start(mod_path)
+        return mod_path
+
     def add_table_to_mapper_index(self, table_name:str, path_to_map:str, table_type:str=None):  # pylint: disable=too-many-locals
         """Adds the information of the table to mapper index table
 
@@ -294,24 +377,14 @@ class FileMapper:
         Returns:
             bool: Was indexed
         """
-        db = self.db
         # if not db.table_exists(self.mapper_reference_table):
-        mapper_list=[
-                ("dt_map_created", "DATETIME DEFAULT CURRENT_TIMESTAMP", True),
-                ("dt_map_modified", "DATETIME", True),
-                ("mappath", "TEXT", True),
-                ("tablename", "TEXT", True),
-                ("mount", "TEXT", True),
-                ("serial", "TEXT", True),
-                ("mapname", "TEXT", True),
-                ("maptype", "TEXT", True),
-                ("origin_db", "TEXT", True),
-                ("origin_map", "TEXT", True),
-            ]
-        db.create_table(self.mapper_reference_table, mapper_list)
-        self._resize_mapper_reference_to_new_columns(db,mapper_list)
+        mapper_list = self.description_reference_mapper_list
+        self.db.create_table(self.mapper_reference_table, mapper_list)
+        self._resize_mapper_reference_to_new_columns()
+        db = self.db
         db_result = DBResult(db.describe_table_in_db(self.mapper_reference_table))
-        db_result.set_values(db.get_data_from_table(self.mapper_reference_table, "*", f"tablename={db.quotes(table_name)}"))
+        db_result.set_values(db.get_data_from_table(self.mapper_reference_table, 
+                            "*", f"tablename={db.quotes(table_name)}"))
         table_indexed = False
         if len(db_result.dbr) > 0:
             # 'id','dt_map_created','dt_map_modified','mappath','tablename','mount','serial','mapname','maptype'
@@ -340,11 +413,14 @@ class FileMapper:
         if table_indexed:
             # Update mount point and date modified
             print(f"Editing table {table_name}")
-            db.edit_value_in_table(self.mapper_reference_table, an_id, "dt_map_modified", dt_map_modified)
-            was_indexed = db.edit_value_in_table(self.mapper_reference_table, an_id, "mount", mount)
+            db.edit_value_in_table(self.mapper_reference_table, an_id, 
+                                   "dt_map_modified", dt_map_modified)
+            was_indexed = db.edit_value_in_table(self.mapper_reference_table, 
+                                                an_id, "mount", mount)
         else:
             print(f"Indexing table {table_name}")
-            data = [(dt_map_created, dt_map_modified, mappath, table_name, mount, serial, mapname, maptype, origin_db, origin_map)]
+            data = [(dt_map_created, dt_map_modified, mappath, table_name,
+                    mount, serial, mapname, maptype, origin_db, origin_map)]
             was_indexed = db.insert_data_to_table(self.mapper_reference_table, data)
         if not was_indexed:
             print(f"[red] Table {table_name} was not correctly indexed!!")
@@ -353,14 +429,19 @@ class FileMapper:
         # if db.get_number_or_rows_in_table(self.mapper_reference_table):
         #     raise ValueError("No data was added to index")
     
-    def _resize_mapper_reference_to_new_columns(self,db: SQLiteDatabase, mapper_list:list):
+    def standarize_columns_mapper_reference(self):
+        """Adds missing columns to an existing reference table with missing fields"""
+        self._resize_mapper_reference_to_new_columns()
+        
+    def _resize_mapper_reference_to_new_columns(self)->SQLiteDatabase:
         """Adds new columns to an existing reference table with missing fields"""
-        mapper_fields=db.get_column_list_of_table(self.mapper_reference_table)
+        mapper_list = self.description_reference_mapper_list
+        mapper_fields=self.db.get_column_list_of_table(self.mapper_reference_table)
         for map_field_tup in mapper_list:
             col_name=map_field_tup[0]
             col_type=map_field_tup[1]
             if col_name not in mapper_fields:
-                db.add_column_to_table(table=self.mapper_reference_table,
+                self.db.add_column_to_table(table=self.mapper_reference_table,
                                        column=col_name,
                                        column_type=col_type)
 
@@ -702,17 +783,7 @@ class FileMapper:
         """Creates map structure with table_name"""
         self.db.create_table(
                 table_name,
-                [
-                    ("dt_data_created", "DATETIME DEFAULT CURRENT_TIMESTAMP", True),
-                    ("dt_data_modified", "DATETIME", True),
-                    ("filepath", "TEXT", True),
-                    ("filename", "TEXT", True),
-                    ("md5", "TEXT", True),
-                    ("size", "REAL", True),
-                    ("dt_file_created", "DATETIME", False),
-                    ("dt_file_accessed", "DATETIME", False),
-                    ("dt_file_modified", "DATETIME", False),
-                ],
+                self.description_map_list,
             )
 
     def map_a_path_to_db(

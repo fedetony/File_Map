@@ -428,7 +428,7 @@ class DatabasePage(QWidget):
         conf_dialog = ConfirmationDialog()
         confirmed = default
 
-        if conf_dialog.exec():
+        if conf_dialog:
             confirmed = conf_dialog.ask_confirmation(message=message,default=default)
 
         return confirmed

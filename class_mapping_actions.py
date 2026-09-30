@@ -44,6 +44,7 @@ class MappingActions():
                     try:
                         fm=FileMapper(file,keyf,the_ppp)
                         self.active_databases.append({'file':file,'keyfile':keyf,'haspassword':pwd,'mapdb':fm})
+                        self.check_database_standarization(file)
                     except Exception as eee:
                         print(f"Could not activate {file}: {eee}")
     
@@ -107,6 +108,40 @@ class MappingActions():
                     ai_list.append([iii,file])
                     iii=iii+1
         return ai_list
+
+    def check_standarization(self):
+        db_map_pair_list = self.get_all_maps()
+        for a_db,a_map in db_map_pair_list:
+            if self.is_database_active(a_db):
+                fm = self.get_file_map(a_db)
+                if fm:
+                    if not fm.is_table_standarized(a_map):
+                        was_standarized =fm.standarize_map_paths(a_map)
+                        if was_standarized:
+                            print(f"Standarized paths in {a_db} {a_map}")
+                        else:
+                            print(f"Could not standarize paths in {a_db} {a_map}")
+
+    def check_database_standarization(self, db_file_name:str):
+            if not self.is_database_active(db_file_name):
+                return
+            a_db = db_file_name
+            fm = self.get_file_map(a_db)
+            if not fm:
+                return
+            fm.standarize_columns_mapper_reference()
+            decription = fm.db.describe_table_in_db(fm.mapper_reference_table)
+            map_list = self.get_maps_in_db(a_db)
+            for a_map in map_list:
+                map_info_dict = self.get_map_info_as_dict(a_db, a_map)
+                if len(decription) != len(map_info_dict.keys()):
+                    print(f"[red] debug ---> Incongruent db and map ref size {a_map}")
+                if not fm.is_table_standarized(a_map):
+                    was_standarized =fm.standarize_map_paths(a_map)
+                    if was_standarized:
+                        print(f"Standarized paths in {a_db} {a_map}")
+                    else:
+                        print(f"Could not standarize paths in {a_db} {a_map}")
 
     def is_database_active(self,db_file_name:str)->bool:
         """True if database active
@@ -1317,19 +1352,21 @@ class MappingActions():
     def clone_map(self,db_map_pair:tuple,selected_db:str,return_pair:bool=False):
         """Clones a map in the database"""
         map_info=self.get_map_info(db_map_pair[0],db_map_pair[1])
-        mappath=map_info[0][3]
+        map_info_dict=self.get_map_info_as_dict(db_map_pair[0],db_map_pair[1])
+        mappath=map_info_dict.get('mappath')
         newtablename=f"%{db_map_pair[1]}_clone"
         table_name=self.format_new_table_name(newtablename,mappath)
-        new_map_info=tuple()
-        for iii,item in enumerate(map_info[0]):
-            if iii==0:
-                pass
-            elif iii==2:
-                new_map_info=new_map_info+(str(datetime.now()),)
-            elif iii==4:
-                new_map_info=new_map_info+(table_name,)
+        new_map_info=[]
+        for field,value in map_info_dict.items():
+            if field=='id':
+                continue
+            elif field == 'dt_map_modified':
+                new_map_info.append(str(datetime.now()))
+            elif field == 'tablename':
+                new_map_info.append(table_name)
             else:
-                new_map_info=new_map_info+(item,)
+                new_map_info.append(value)
+        new_map_info = tuple(new_map_info)
         fm=self.get_file_map(selected_db)   
         if not fm.db.table_exists(table_name):
             was_indexed=fm.db.insert_data_to_table(fm.mapper_reference_table,[new_map_info]) 
@@ -1346,16 +1383,7 @@ class MappingActions():
                     cols=fmfrom.db.get_column_list_of_table(db_map_pair[1])
                     datasel=str(cols[1:]).replace("[",'').replace("]",'').replace("'",'')
                     all_data=fmfrom.db.get_data_from_table(db_map_pair[1],datasel)
-                    fm.db.create_table(table_name,[('dt_data_created', 'DATETIME DEFAULT CURRENT_TIMESTAMP', True),
-                                        ('dt_data_modified', 'DATETIME', True),
-                                        ('filepath','TEXT',True), 
-                                        ('filename','TEXT',True), 
-                                        ('md5', 'TEXT', True), 
-                                        ('size', 'REAL', True), 
-                                        ('dt_file_created','DATETIME',False),
-                                        ('dt_file_accessed','DATETIME',False),
-                                        ('dt_file_modified','DATETIME',False),
-                                        ])
+                    fm.db.create_table(table_name, fm.description_map_list)
                     if fm.db.insert_data_to_table(table_name,all_data):
                         newdb_map_pair=(selected_db,table_name)
                         if return_pair:
