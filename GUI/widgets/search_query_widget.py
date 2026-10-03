@@ -19,13 +19,24 @@ SQL_SG = SQLSearchGenerator()
 logging.getLogger("class_sql_search_query").propagate = False
 
 
-QUERY_COLORS = {
+QUERY_COLORS_DARK = {
     "operation": "bright_green",
     "operator": "green",
     "keyword": "magenta",
     "field": "yellow",
     "string": "bright_yellow",
     "number": "cyan",
+    "boolean": "bright_magenta",
+    "punctuation": "bold",
+}
+
+QUERY_COLORS_LIGHT = {
+    "operation": "bright_green",
+    "operator": "green",
+    "keyword": "magenta",
+    "field": "cyan",
+    "string": "bright_cyan",
+    "number": "blue",
     "boolean": "bright_magenta",
     "punctuation": "bold",
 }
@@ -1011,10 +1022,17 @@ class SearchQueryWidget(QtWidgets.QWidget):
 
     def _save_current_query(self):
         pass
-    
 
-    @staticmethod
-    def rich_query_markup(query: str, 
+    def is_dark_theme(self):
+        color = self.palette().color(QtGui.QPalette.ColorRole.Window)
+        return color.lightness() < 128
+    
+    def query_color(self, txt):
+        if self.is_dark_theme():
+            return QUERY_COLORS_DARK.get(txt)
+        return QUERY_COLORS_LIGHT.get(txt)
+
+    def rich_query_markup(self, query: str, 
                           operations: list[str] =ALLOWED_OPERATIONS, 
                           operators: list[str]=ALLOWED_OPERATORS):
         """
@@ -1070,7 +1088,7 @@ class SearchQueryWidget(QtWidgets.QWidget):
             if ((token.startswith("'") and token.endswith("'"))
                 or (token.startswith('"') and token.endswith('"'))):
                 result.append(
-                    f"[{QUERY_COLORS['string']}]"
+                    f"[{self.query_color('string')}]"
                     f"{token}"
                     f"[/]"
                 )
@@ -1080,7 +1098,7 @@ class SearchQueryWidget(QtWidgets.QWidget):
             # ------------------------------------------------------
             elif re.fullmatch(r"\d+(?:\.\d+)?", token):
                 result.append(
-                    f"[{QUERY_COLORS['number']}]"
+                    f"[{self.query_color('number')}]"
                     f"{token}"
                     f"[/]"
                 )
@@ -1090,7 +1108,7 @@ class SearchQueryWidget(QtWidgets.QWidget):
             # ------------------------------------------------------
             elif folded in operator_set:
                 result.append(
-                    f"[{QUERY_COLORS['operator']}]"
+                    f"[{self.query_color('operator')}]"
                     f"{token}"
                     f"[/]"
                 )
@@ -1100,7 +1118,7 @@ class SearchQueryWidget(QtWidgets.QWidget):
             # ------------------------------------------------------
             elif folded in operation_set:
                 result.append(
-                    f"[{QUERY_COLORS['operation']}]"
+                    f"[{self.query_color('operation')}]"
                     f"{token}"
                     f"[/]"
                 )
@@ -1111,7 +1129,7 @@ class SearchQueryWidget(QtWidgets.QWidget):
 
             elif folded in keyword_set:
                 result.append(
-                    f"[{QUERY_COLORS['keyword']}]"
+                    f"[{self.query_color('keyword')}]"
                     f"{token}"
                     f"[/]"
                 )
@@ -1122,7 +1140,7 @@ class SearchQueryWidget(QtWidgets.QWidget):
 
             elif folded in {"true", "false"}:
                 result.append(
-                    f"[{QUERY_COLORS['boolean']}]"
+                    f"[{self.query_color('boolean')}]"
                     f"{token}"
                     f"[/]"
                 )
@@ -1132,7 +1150,7 @@ class SearchQueryWidget(QtWidgets.QWidget):
             # ------------------------------------------------------
             elif token in {"(", ")", ","}:
                 result.append(
-                    f"[{QUERY_COLORS['punctuation']}]"
+                    f"[{self.query_color('punctuation')}]"
                     f"{token}"
                     f"[/]"
                 )

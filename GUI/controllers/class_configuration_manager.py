@@ -64,7 +64,7 @@ class ConfigurationManager:
         databases.append(database)
         save()
 
-    def remove_database(self, database, user=True):
+    def remove_database(self, database:dict, user=True):
         """
         Remove a database from the selected configuration.
 

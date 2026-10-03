@@ -228,9 +228,12 @@ class BrowseDialog(QtWidgets.QDialog):
         # Hide files
         if self.mode == "dirs":
             self.show_hide_files(self.hide_files_cb.checkState())
+            icon_name = "tree"
         elif self.mode == "files":
             self.hide_files_cb.setChecked(False)
             self.show_hide_files(self.hide_files_cb.checkState())
+            icon_name = "dir explore"
+        self.setWindowIcon(self.icons.icon(icon_name))
 
     def build_ui(self):
 
@@ -544,6 +547,10 @@ class BrowseDialog(QtWidgets.QDialog):
 
         return str(value)
     
+    def is_dark_theme(self):
+        color = self.palette().color(QtGui.QPalette.ColorRole.Window)
+        return color.lightness() < 128
+
     def _show_node_properties(self, node: TreeNode):
         self.properties_tree.clear()
         add_info_at_end=False
@@ -571,7 +578,10 @@ class BrowseDialog(QtWidgets.QDialog):
             if name in ("map","db") and node.i_exist:
                 value = "[magenta]" + value +"[/]"
             if name in ("path","name") and node.i_exist:
-                value = "[bright_yellow]" + value +"[/]"
+                if self.is_dark_theme():
+                    value = "[bright_yellow]" + value +"[/]"
+                else:
+                    value = "[bright_blue]" + value +"[/]"
 
             if name == "info" and node.i_am == "file":
                 add_info_at_end=True        
@@ -653,10 +663,13 @@ class BrowseDialog(QtWidgets.QDialog):
             value = f"[red]{value}[/]"
 
         elif name in ("filepath", "filename") and node.i_exist:
-            value = f"[bright_yellow]{value}[/]"
+            if self.is_dark_theme():
+                value = f"[bright_yellow]{value}[/]"
+            else:
+                value = f"[bright_blue]{value}[/]"
 
         elif name.startswith("dt_"):
-            value = f"[bright_blue]{value}[/]"
+            value = f"[magenta]{value}[/]"
 
         return value
     

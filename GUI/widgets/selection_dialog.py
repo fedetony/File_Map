@@ -326,7 +326,9 @@ class SelectionDialog(QtWidgets.QDialog):
 
         icon_name, title_text = mode_ui.get(self.mode,
             ("selection map",f"Selection Mapping: {the_db}"))
-
+        
+        self.setWindowIcon(self.icons.icon(icon_name))
+        
         icon.setPixmap(self.icons.icon(icon_name).pixmap(32, 32))
         title = QtWidgets.QLabel(title_text)
 

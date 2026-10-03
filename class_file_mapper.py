@@ -433,10 +433,16 @@ class FileMapper:
         """Adds missing columns to an existing reference table with missing fields"""
         self._resize_mapper_reference_to_new_columns()
         
-    def _resize_mapper_reference_to_new_columns(self)->SQLiteDatabase:
+    def _resize_mapper_reference_to_new_columns(self):
         """Adds new columns to an existing reference table with missing fields"""
         mapper_list = self.description_reference_mapper_list
         mapper_fields=self.db.get_column_list_of_table(self.mapper_reference_table)
+        DEFAULT_VALUES = {
+            "TEXT": "''",
+            "INTEGER": "0",
+            "REAL": "0.0",
+            "BOOLEAN": "0",
+        }
         for map_field_tup in mapper_list:
             col_name=map_field_tup[0]
             col_type=map_field_tup[1]
@@ -444,6 +450,15 @@ class FileMapper:
                 self.db.add_column_to_table(table=self.mapper_reference_table,
                                        column=col_name,
                                        column_type=col_type)
+            if col_type in DEFAULT_VALUES:
+                cn = self.db.quote_identifier(col_name)
+                table = self.db.quote_identifier(self.mapper_reference_table)
+                sql = (
+                    f"UPDATE {table} "
+                    f"SET {cn} = {DEFAULT_VALUES[col_type]} "
+                    f"WHERE {cn} IS NULL;"
+                )
+                self.db.send_sql_command(sql)
 
     def map_to_file_structure(
         self, a_map, where=None, fields_to_tab: list[str] = None, sort_by: list = None, 

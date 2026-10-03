@@ -111,8 +111,14 @@ class SelectionMenu(QtCore.QObject):
     def _set_icons_dict(self):
         """Treeview cache icons"""
         self.all_icons_dict={
-            "Device Map": self.icons.icon("device map"),
-            "Selection Map": self.icons.icon("selection map"),
+            MapType.DEVICE.value: self.icons.icon("device map"),
+            MapType.KEEP.value: self.icons.icon("keep map"),
+            MapType.REMOVE.value: self.icons.icon("remove map"),
+            MapType.BACKUP.value: self.icons.icon("backup map"),
+            MapType.SELECTION.value: self.icons.icon("selection map"),
+            MapType.INCOMPLETE.value: self.icons.icon("incomplete map"),
+            MapType.SORTED.value: self.icons.icon("sorted map"),
+            MapType.SEARCH.value: self.icons.icon("search map"),
             "Database Icon": self.icons.icon("db activate"),
         }
     def _set_style_dict(self):

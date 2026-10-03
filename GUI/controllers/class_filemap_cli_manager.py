@@ -330,7 +330,15 @@ class FileMapCliManager:
         """
         for db in self.dbm.databases:
             if isinstance(db,DatabaseInfo):
-                _, _, db_filepath, k_filepath = self.dbm.verify_db_paths(db)
+                is_ok_db, _, db_filepath, k_filepath = self.dbm.verify_db_paths(db)
+                if not is_ok_db:
+                    log.warning(f"Database {db.db_file} does not exist! Removing it from manager!")
+                    is_user = db.user_database
+                    # remove from default/user config
+                    self.cfg.remove_database(db.config_dict, user=is_user)
+                    # does not show it anymore is GUI
+                    self.dbm.remove_database(db)
+                    continue
                 if self.cma.is_database_active(db_filepath):
                     db.active=True
                 else:

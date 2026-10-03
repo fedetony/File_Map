@@ -420,8 +420,17 @@ class DatabasePage(QWidget):
         
         name=FM.extract_filename(filename,False)
         password, keyfile=self.ask_db_authentication(name)
-        self.fmap.add_database(filename,password, keyfile)
+        activate=self.ask_confirmation("Would you line to activate the Database?",True)
+        self.fmap.add_database(filename,password, keyfile,activate=activate)
+        self.fmap.cma.check_database_standarization(filename)
         self.refresh_table()
+
+        id_list=self._get_all_id_list()
+        active_db_list, unactive_db_list= self.fmap.get_active_unactive_db_id_list(id_list)
+        if activate:
+            self._activate_databases(active_db_list)
+        else:
+            self._deactivate_databases(unactive_db_list)
     
 
     def ask_confirmation(self, message, default:bool=False):
@@ -499,7 +508,8 @@ class DatabasePage(QWidget):
         self.append_database()
         # self.refresh_table() # in append
     
-    def _remove_databases(self,db_id_list):        
+    def _remove_databases(self,db_id_list):   
+        self._deactivate_databases(db_id_list)     
         self.fmap.remove_database(db_id_list)        
         self.refresh_table()
     

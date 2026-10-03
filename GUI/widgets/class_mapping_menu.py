@@ -130,12 +130,16 @@ class MappingMenu(QtCore.QObject):
     
     def _set_icons_dict(self):
         """Treeview cache icons"""
+        
         self.all_icons_dict={
-            "Device Map": self.icons.icon("device map"),
-            "Keep": self.icons.icon("keep map"),
-            "Remove": self.icons.icon("remove map"),
-            "Backup": self.icons.icon("backup map"),
-            "Selection Map": self.icons.icon("selection map"),
+            MapType.DEVICE.value: self.icons.icon("device map"),
+            MapType.KEEP.value: self.icons.icon("keep map"),
+            MapType.REMOVE.value: self.icons.icon("remove map"),
+            MapType.BACKUP.value: self.icons.icon("backup map"),
+            MapType.SELECTION.value: self.icons.icon("selection map"),
+            MapType.INCOMPLETE.value: self.icons.icon("incomplete map"),
+            MapType.SORTED.value: self.icons.icon("sorted map"),
+            MapType.SEARCH.value: self.icons.icon("search map"),
         }
 
     def _set_style_dict(self):
@@ -153,18 +157,23 @@ class MappingMenu(QtCore.QObject):
         #     SizeHintRole        -> QSize
         #     UserRole+N          -> anything
         self.style_dict = {
-            "Device Map":[{"field":'maptype'.upper(), "ForegroundRole":QtGui.QColor("#3498db")},
+            MapType.DEVICE.value:[{"field":'maptype'.upper(), "ForegroundRole":QtGui.QColor("#3498db")},
                           {"field":'maptype'.upper(), "DecorationRole":self.icons.icon("device map")}],
-            "Keep": [{"field":'maptype'.upper(), "ForegroundRole":QtGui.QColor("#27ae60"), 
+            MapType.KEEP.value: [{"field":'maptype'.upper(), "ForegroundRole":QtGui.QColor("#27ae60"), 
                       "DecorationRole":self.icons.icon("keep map")}],
-            "Remove": [{"field":'maptype'.upper(),"ForegroundRole":QtGui.QColor("#e74c3c"), 
+            MapType.REMOVE.value: [{"field":'maptype'.upper(),"ForegroundRole":QtGui.QColor("#e74c3c"), 
                         "DecorationRole":self.icons.icon("remove map")}],
-            "Backup": [{"field":'maptype'.upper(), "ForegroundRole":QtGui.QColor("#e67e22"), 
+            MapType.BACKUP.value: [{"field":'maptype'.upper(), "ForegroundRole":QtGui.QColor("#e67e22"), 
                         "DecorationRole":self.icons.icon("backup map")}],
-            "Selection Map": [{"field":'maptype'.upper(),"ForegroundRole":QtGui.QColor("#9b59b6"), 
+            MapType.SELECTION.value: [{"field":'maptype'.upper(),"ForegroundRole":QtGui.QColor("#9b59b6"), 
                                "DecorationRole":self.icons.icon("selection map")}], 
-            "Incomplete": [{"field":'maptype'.upper(),"ForegroundRole":QtGui.QColor("#b11717"), 
-                               "DecorationRole":self.icons.icon("selection map")}],            
+            MapType.SORTED.value: [{"field":'maptype'.upper(),"ForegroundRole":QtGui.QColor("#0dcac1"), 
+                               "DecorationRole":self.icons.icon("sorted map")}], 
+            MapType.INCOMPLETE.value: [{"field":'maptype'.upper(),"ForegroundRole":QtGui.QColor("#b11717"), 
+                               "DecorationRole":self.icons.icon("incomplete map")}], 
+            MapType.SEARCH.value: [{"field":'maptype'.upper(),"ForegroundRole":QtGui.QColor("#80939c"), 
+                               "DecorationRole":self.icons.icon("search map")}], 
+                                       
         }
         active_map = [{
                         "field": "mount".upper(),

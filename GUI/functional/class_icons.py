@@ -300,6 +300,8 @@ class Icons:
         "remove map":":/icons/Ahmadhania-Spherical-Close.128.png",
         "selection map":":/icons/Ahmadhania-Spherical-Mouse-curser.128.png",
         "backup map":":/icons/Ahmadhania-Spherical-Palm-print.128.png",
+        "sorted map":":/icons/Ahmadhania-Spherical-Shopping-cart.128.png",
+        "incomplete map":":/icons/Ahmadhania-Spherical-Bomb.128.png",
 
         "stop":":/icons/Ahmadhania-Spherical-Stop.128.png",
         "play":":/icons/Ahmadhania-Spherical-Play.128.png",
