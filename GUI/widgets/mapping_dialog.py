@@ -386,50 +386,74 @@ class MappingDialog(QtWidgets.QDialog):
         self._start_mapping(self.mode)
     
     def start_repeated_worker(self, table_name, path_to_map):
-        return
         self.mapping_is_running_signal.emit()
 
         self.progress = QtMapProgress()
         self.progress_layout.addWidget(self.progress)
 
         self.mapping_running = True
+        self.rep_dup_counter=0
 
         self.worker = self.worker_manager.start(
-            self.fmap.deepen_shallow_map,
-            self.database,
-            table_name,
-            path_to_map,
+            self.fmap.find_repeated_duplicates_in_map,
+            db_map_pair_list = [(self.database, table_name)],
+            mode=self.mode,
             progress_bar=self.progress,
-            press_to_continue=False,
-            log_callback=self.log_buffer.write
+            log_callback=self._append_status
+            #log_callback=self.log_buffer.write,
         ) # kill_ev added by worker_manager
 
-        self.worker.finished.connect(self.on_deepening_finished)
-        self.worker.stopped.connect(self.on_deepening_stopped)
-        self.worker.error.connect(self.on_deepening_error)
+        self.worker.finished.connect(self.on_repeated_finished)
+        self.worker.stopped.connect(self.on_repeated_stopped)
+        self.worker.error.connect(self.on_repeated_error)
+
+        # tempkill=threading.Event()
+        # tempkill.clear()
+        # values = self.fmap.find_repeated_duplicates_in_map(
+        #     db_map_pair_list = [(self.database, table_name)],
+        #     mode=self.mode,
+        #     progress_bar=self.progress,
+        #     log_callback=self.log_buffer.write,
+        #     kill_ev=tempkill
+        # ) # kill_ev added by worker_manager
+        # self._flush_mapping_log()
+        # self._mapping_finished()
     
     def start_duplicates_worker(self, table_name, path_to_map):
-        return
         self.mapping_is_running_signal.emit()
 
         self.progress = QtMapProgress()
         self.progress_layout.addWidget(self.progress)
 
         self.mapping_running = True
+        self.rep_dup_counter=0
 
         self.worker = self.worker_manager.start(
-            self.fmap.deepen_shallow_map,
-            self.database,
-            table_name,
-            path_to_map,
+            self.fmap.find_repeated_duplicates_in_map,
+            db_map_pair_list = [(self.database, table_name)],
+            mode=self.mode,
             progress_bar=self.progress,
-            press_to_continue=False,
-            log_callback=self.log_buffer.write
+            log_callback=self._append_status
+            #log_callback=self.log_buffer.write,
         ) # kill_ev added by worker_manager
 
-        self.worker.finished.connect(self.on_deepening_finished)
-        self.worker.stopped.connect(self.on_deepening_stopped)
-        self.worker.error.connect(self.on_deepening_error)
+        self.worker.finished.connect(self.on_duplicates_finished)
+        self.worker.stopped.connect(self.on_duplicates_stopped)
+        self.worker.error.connect(self.on_duplicates_error)
+
+        # tempkill=threading.Event()
+        # tempkill.clear()
+        # values = self.fmap.find_repeated_duplicates_in_map(
+        #     db_map_pair_list = [(self.database, table_name)],
+        #     mode=self.mode,
+        #     progress_bar=self.progress,
+        #     #log_callback=self.log_buffer.write, # ->buffer gets huge size here because writes all data to buffer, no thread to process it
+        #     log_callback=self._append_status
+        #     kill_ev=tempkill
+        # ) # kill_ev added by worker_manager
+        # self._flush_mapping_log() 
+        # self._mapping_finished()
+
     # -----------------------------------------------------
     # Deepening
     # -----------------------------------------------------
@@ -489,6 +513,12 @@ class MappingDialog(QtWidgets.QDialog):
     # -----------------------------------------------------
     # Mapping log
     # -----------------------------------------------------
+    # def _write_n_flush(self,*args, sep=" "):
+    #     if self.rep_dup_counter>10:
+    #         self.log_buffer.write(*args, sep=sep)
+    #         self._flush_mapping_log()
+    #         self.rep_dup_counter=-1
+    #     self.rep_dup_counter+=1
 
     def _flush_mapping_log(self):
         messages = self.log_buffer.drain(self.LOG_BATCH_SIZE)
@@ -614,14 +644,62 @@ class MappingDialog(QtWidgets.QDialog):
         msg="[yellow]Deepening: [/yellow]"
         replaced=False
         if isinstance(result,tuple) and len(result)==3:
-            msg += "\n"+self.mark_txt(f"is_ok: {result[0]}",result[0])
-            msg += "\n"+self.mark_txt(f"is_finished: {result[1]}",result[1])
-            msg += "\n"+self.mark_txt(f"replaced: {result[2]}",result[2])
+            msg += "\n"+self.mark_bool_txt(f"is_ok: {result[0]}",result[0])
+            msg += "\n"+self.mark_bool_txt(f"is_finished: {result[1]}",result[1])
+            msg += "\n"+self.mark_bool_txt(f"replaced: {result[2]}",result[2])
             finished = result[1]
             replaced = result[2]
         self._append_status(msg)
         #if replaced:
         self._commit_deepening()
+        self._flush_mapping_log()
+        self._mapping_finished()
+    
+    @QtCore.pyqtSlot()
+    def on_repeated_stopped(self):
+        self._append_status("[yellow]Repeated worker stopped[/yellow]")
+        #self._commit_repeated()
+        self._mapping_finished()
+
+    @QtCore.pyqtSlot(object)
+    def on_repeated_error(self, error):
+        self._append_status(f"[red]Repeated error: {error}[/red]")
+        self._flush_mapping_log()
+        self._mapping_finished()
+
+    @QtCore.pyqtSlot(object)
+    def on_repeated_finished(self, result=None):
+        msg="[yellow]Repeated: [/yellow]"
+        replaced=False
+        if isinstance(result,list) and len(result)>0:
+            msg += "\n"+self.mark_color(f"found: {len(result)} repeated Files!","magenta")
+        self._append_status(msg)
+        
+        #self._commit_repeated()
+        self._flush_mapping_log()
+        self._mapping_finished()
+    
+    @QtCore.pyqtSlot()
+    def on_duplicates_stopped(self):
+        self._append_status("[yellow]Duplicates worker stopped[/yellow]")
+        #self._commit_repeated()
+        self._mapping_finished()
+
+    @QtCore.pyqtSlot(object)
+    def on_duplicates_error(self, error):
+        self._append_status(f"[red]Duplicates error: {error}[/red]")
+        self._flush_mapping_log()
+        self._mapping_finished()
+
+    @QtCore.pyqtSlot(object)
+    def on_duplicates_finished(self, result=None):
+        msg="[yellow]Duplicates: [/yellow]"
+        replaced=False
+        if isinstance(result,list) and len(result)>0:
+            msg += "\n"+self.mark_color(f"found: {len(result)} duplicated Files!","magenta")
+        self._append_status(msg)
+        
+        #self._commit_repeated()
         self._flush_mapping_log()
         self._mapping_finished()
 
@@ -662,7 +740,7 @@ class MappingDialog(QtWidgets.QDialog):
                 "information is missing.")
 
         msg = self.mark_color("Map was deepened and replaced: ","yellow")
-        msg += f"{self.mark_txt(str(was_replaced),was_replaced)} \n" 
+        msg += f"{self.mark_bool_txt(str(was_replaced),was_replaced)} \n" 
         msg += f"from {temp_db} \n to {target_db}"
         self._append_status(msg)
 
@@ -715,8 +793,9 @@ class MappingDialog(QtWidgets.QDialog):
             self.log_timer.stop()
             
         event.accept()
+
     @staticmethod
-    def mark_txt(txt:str,val:bool):
+    def mark_bool_txt(txt:str,val:bool):
         if val:
             return f"[green]{txt}[/green]"
         return f"[red]{txt}[/red]"

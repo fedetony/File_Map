@@ -875,14 +875,15 @@ class FileMapCliManager:
             (database,a_map) = db_map_pair_list[0]
         else:
             raise TypeError("db_map_pair_list must be a list of db_map_pair tuples!")
-        db_list=[]
+        db_list=[] # list of sqlite database objects!
         map_list=[]
         if isinstance(db_map_pair_list,list):
             has_shallow=False
             for a_db,a_m in db_map_pair_list:
                 (size, shallow_count, calc_count)=self.get_map_size(a_db,a_m)
                 if not shallow_count and not calc_count:
-                    db_list.append(a_db)
+                    fmtemp=self.cma.get_file_map(a_db)
+                    db_list.append(fmtemp.db)
                     map_list.append(a_m)
                 else:
                     dbname=self.fm.extract_filename(a_db)

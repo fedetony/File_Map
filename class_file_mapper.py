@@ -1984,8 +1984,11 @@ class FileMapper:
                     f"[blue]Calculating Match [red]({exit_key} to Exit)",
                 )
             for count_processed, (a_key, db_id_tup_list) in enumerate(repeated_dict.items()):
-                msg1 = f"{count_processed+1}/{total_count} found {len(repeat_list)}"
-                msg2 = f" looking at {a_key}={repeated_dict[a_key]}"
+                msg1 = f"[green]{count_processed+1}[/green]/[cyan]{total_count}[/cyan] [magenta]found {len(repeat_list)}[/magenta]"
+                if len(repeated_dict[a_key])<10:
+                    msg2 = f" looking at [yellow]{a_key}[/yellow] = [bold]{repeated_dict[a_key]}[/bold]"
+                else:
+                    msg2 = f" looking at [yellow]{a_key}[/yellow] = [red]{repeated_dict[a_key][0]} and {len(repeated_dict[a_key])} cases found ....[/red]"
                 log_callback(f"{msg1}{msg2}")
                 data_same_md5 = []
                 if len(db_id_tup_list) <= SINGLE_MULTIPLE_SEARCH:
