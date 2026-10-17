@@ -14,6 +14,7 @@ from class_file_mapper import *
 from widgets.ask_confirmation_dialog import *
 from controllers.class_database_manager import *
 from class_fw_db_structurer import *
+from models.class_repeated_duplicate_search import RepeatedDuplicateSearch
 
 from functional.class_LogHandler import LM
 log=LM.get_logger_with_handler("FileMapCli","debug",True,None)
@@ -907,6 +908,17 @@ class FileMapCliManager:
         repeated_dict = fm.get_repeated_file_multiple_db_tables(db_list, map_list, ["id", "md5"], 1)
         if log_callback:
             log_callback(f"[cyan]Indexing completed .... starting {mode} matching!")
+        search = RepeatedDuplicateSearch(self)
+
+        search_dict = search.search(
+            db_map_pair_list=db_map_pair_list,
+            mode=mode,
+            progress_bar=progress_bar,
+            log_callback=log_callback,
+            kill_ev=kill_ev,
+        )
+        groups = search.repeated_duplicates_search_result(search_dict)
+        return groups
         if mode == "duplicates":
             #repeated_dict = fm.get_repeated_files(database, a_map)
             
@@ -934,6 +946,28 @@ class FileMapCliManager:
                                              kill_ev=kill_ev)
         
         return None
+    
+    def repeated_duplicates_search_result(self,search_dict):
+
+        """ Process repeated/duplicate search results from a temporary database.
+
+        Args: searchdict (dict): Contains: 
+        - database (str): Path to the temporary result database. 
+        - table (str): Result table containing file occurrences (id, dbmapindex, md5). 
+        - groupstable (str): Table grouping matching occurrences by MD5, with occurrence and map counts. 
+        - mode (str): Search mode, 'repeated' or 'duplicates'. 
+        - dbmappairlist (list[tuple]): Original (database, map) pairs indexed by dbmap_index, 
+        used by the lazy loader to retrieve full file information.
+
+        Returns: Depends on the result-processing implementation. """
+
+        if isinstance(search_dict,dict):
+            temp_db_path = search_dict.get("database")
+            result_table = search_dict.get("table")
+            groups_table = search_dict.get("groups_table")
+            mode = search_dict.get("mode")
+            db_map_pair_list = search_dict.get("db_map_pair_list")
+            
     
     def do_a_search(
         self,

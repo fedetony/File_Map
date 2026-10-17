@@ -31,6 +31,7 @@ class DataFrameCompare:
         """
         if not 'filepath' in df.columns:
             return df
+        df = df.copy()
         def set_standard_path(path):
             if not path or path.strip() == "":
                 return ''
@@ -193,6 +194,10 @@ class DataFrameCompare:
             return md5_comparison.loc[(md5_comparison['source'] == source) & (md5_comparison['num_ids_a'] == 0)]
         return md5_comparison.loc[(md5_comparison['num_ids_a'] == 0) | (md5_comparison['num_ids_b'] == 0)]
 
+    @staticmethod
+    def percentage(part, total, decimals=2):
+        return round(part / total * 100, decimals) if total else 0.0
+    
     def generate_comparison_stats(self,md5_comparison: pd.DataFrame) -> dict:
         """Make statistics of the comparison
 
@@ -216,14 +221,14 @@ class DataFrameCompare:
         return {
             'Total Unique': total_unique_md5,
             '# In A&B': len(a_and_b),
-            'In A&B %': round(len(a_and_b) / total_unique_md5 * 100,2),
+            'In A&B %': self.percentage(len(a_and_b),total_unique_md5),
             '# Only in A': len(only_a),
-            'Only in A %': round(len(only_a) / total_unique_md5 * 100,2),
+            'Only in A %': self.percentage(len(only_a), total_unique_md5),
             '# Only in B': len(only_b),
-            'Only in B %': round(len(only_b) / total_unique_md5 * 100,2),
+            'Only in B %': self.percentage(len(only_b), total_unique_md5),
             '# One to One A=B': len(one_to_one),
             '# Many to Many An=Bn': len(many_to_many),
-            'Mapped %': round((len(one_to_one)+len(many_to_many)) / total_unique_md5 * 100,2),
+            'Mapped %': self.percentage((len(one_to_one)+len(many_to_many)), total_unique_md5),
             '# Converging An>Bn': len(converged),
             '# Diverging An<Bn': len(diverged),
             '# Repeated A': len(repeated_a),
@@ -241,8 +246,8 @@ class DataFrameCompare:
             elif not isinstance(col1,list) and isinstance(col2,list):
                 return col2    
             return None
-
-        df_sorted[merged_name]=df_sorted.apply(mergecols(df_sorted[ids_a_name],df_sorted[ids_b_name]),axis=1)
+        df_sorted[merged_name] = df_sorted.apply(lambda row: mergecols(row[ids_a_name],row[ids_b_name]),axis=1)
+        #df_sorted[merged_name]=df_sorted.apply(mergecols(df_sorted[ids_a_name],df_sorted[ids_b_name]),axis=1)
         return  df_sorted
 
     @staticmethod
@@ -355,7 +360,6 @@ class DataFrameCompare:
         # selected_df_x = self.df_a_all.loc[(self.df_a_all['id'].isin(df_comp[ids_x_name])) & (self.df_a_all[column_name] == df_comp[column_name])]
         return selected_df_x
 
-
     @staticmethod
     def selected_df_from_comparison_df(df_all:pd.DataFrame,df_comp:pd.DataFrame,source='A&B',from_ids='ids_on_b',column_name='md5')->pd.DataFrame:
         """Gets a df with the original df_all fields/columns matching with the comparison of the selected column_name (normally md5),source and id list column
@@ -369,7 +373,7 @@ class DataFrameCompare:
         Returns:
             pd.DataFrame: _description_
         """
-        selected_df_a = df_all.loc[(df_all['id'].isin(df_comp[df_comp['source'] == source][from_ids])) & (df_a[column_name] == df_comp[df_comp['source'] == source][column_name])]
+        selected_df_a = df_all.loc[(df_all['id'].isin(df_comp[df_comp['source'] == source][from_ids])) & (df_all[column_name] == df_comp[df_comp['source'] == source][column_name])]
         return selected_df_a
     
     @staticmethod

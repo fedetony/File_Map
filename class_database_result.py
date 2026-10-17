@@ -55,9 +55,7 @@ class DBResult:
     def clear_values(self):
         """Clears the query data in the database result list dbr.
         """
-        numobj=len(self.dbr)
-        for _ in range(numobj):  
-            self.dbr.pop(0)
+        self.dbr.clear()
             
     @staticmethod
     def list_node_attr(a_node:Node):

@@ -21,6 +21,7 @@ class MappingDialog(QtWidgets.QDialog):
     mapping_is_running_signal = QtCore.pyqtSignal()
     mapping_is_not_running_signal = QtCore.pyqtSignal()
     dialog_exit = QtCore.pyqtSignal(str)
+    launch_results_dialog = QtCore.pyqtSignal(list,dict,str)
 
     def __init__(
         self,
@@ -393,10 +394,10 @@ class MappingDialog(QtWidgets.QDialog):
 
         self.mapping_running = True
         self.rep_dup_counter=0
-
+        self.db_map_pair_list = [(self.database, table_name)]
         self.worker = self.worker_manager.start(
             self.fmap.find_repeated_duplicates_in_map,
-            db_map_pair_list = [(self.database, table_name)],
+            db_map_pair_list = self.db_map_pair_list,
             mode=self.mode,
             progress_bar=self.progress,
             log_callback=self._append_status
@@ -413,7 +414,7 @@ class MappingDialog(QtWidgets.QDialog):
         #     db_map_pair_list = [(self.database, table_name)],
         #     mode=self.mode,
         #     progress_bar=self.progress,
-        #     log_callback=self.log_buffer.write,
+        #     log_callback=self._append_status,
         #     kill_ev=tempkill
         # ) # kill_ev added by worker_manager
         # self._flush_mapping_log()
@@ -427,10 +428,10 @@ class MappingDialog(QtWidgets.QDialog):
 
         self.mapping_running = True
         self.rep_dup_counter=0
-
+        self.db_map_pair_list = [(self.database, table_name)]
         self.worker = self.worker_manager.start(
             self.fmap.find_repeated_duplicates_in_map,
-            db_map_pair_list = [(self.database, table_name)],
+            db_map_pair_list = self.db_map_pair_list,
             mode=self.mode,
             progress_bar=self.progress,
             log_callback=self._append_status
@@ -448,7 +449,7 @@ class MappingDialog(QtWidgets.QDialog):
         #     mode=self.mode,
         #     progress_bar=self.progress,
         #     #log_callback=self.log_buffer.write, # ->buffer gets huge size here because writes all data to buffer, no thread to process it
-        #     log_callback=self._append_status
+        #     log_callback=self._append_status,
         #     kill_ev=tempkill
         # ) # kill_ev added by worker_manager
         # self._flush_mapping_log() 
@@ -678,6 +679,7 @@ class MappingDialog(QtWidgets.QDialog):
         #self._commit_repeated()
         self._flush_mapping_log()
         self._mapping_finished()
+        self.launch_results_dialog.emit(self.db_map_pair_list,result,"repeated")
     
     @QtCore.pyqtSlot()
     def on_duplicates_stopped(self):
@@ -702,6 +704,7 @@ class MappingDialog(QtWidgets.QDialog):
         #self._commit_repeated()
         self._flush_mapping_log()
         self._mapping_finished()
+        self.launch_results_dialog.emit(self.db_map_pair_list,result,"duplicates")
 
     # -----------------------------------------------------
     # Commit temporary database

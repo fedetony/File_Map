@@ -1010,6 +1010,7 @@ class MappingMenu(QtCore.QObject):
             lambda: self._set_mapping_state(database, True))
         dialog.mapping_is_not_running_signal.connect(
             lambda: self._set_mapping_state(database, False))
+        dialog.launch_results_dialog.connect(self._launch_repeat_duplicate_results)
 
         dialog.dialog_exit.connect(self._mapping_dialog_closed)
         # dialog.exec() # blocks user until closing window
@@ -1029,6 +1030,36 @@ class MappingMenu(QtCore.QObject):
             if was_mapping and not is_mapping:
                 self._update_regenerate()
         self.mapping_running_state.emit(database,is_mapping)
+    
+    def _launch_repeat_duplicate_results(self,db_map_pair_list:list,result:list[dict], mode:str):
+        dialog = RepeatedDuplicateResultDialog(self.fmap, 
+                                               db_map_pair_list, 
+                                               result, 
+                                               mode, 
+                                               worker_manager=None,parent=self.parent_widget)
+        
+        dialog.refresh_mapping_tree.connect(self.generate_mapping_struct)
+        # dialog.mapping_is_running_signal.connect(
+        #     lambda: self._set_mapping_state(database, True))
+        # dialog.mapping_is_not_running_signal.connect(
+        #     lambda: self._set_mapping_state(database, False))
+
+        if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
+            return
+
+        # db_to, map_to = dialog.get_values()
+
+        # if db_to == db_from and map_to == map_from:
+        #     return
+
+        # if not self.fmap.copy_table_from_to_database( db_from, map_from, db_to, map_to):
+        #     QtWidgets.QMessageBox.warning(
+        #         self.parent_widget,
+        #         "Clone Map",
+        #         f'Could not clone "{map_from}".',
+        #     )
+        #     return
+        # QtCore.QTimer.singleShot(0, self._update_regenerate)
     
     # ---------------------------------------------------------
     # Context helpers

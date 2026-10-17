@@ -735,3 +735,297 @@ class ActiveFELazyLoader(LazyLoaderProvider):
             child.hidden = False
         
 
+from controllers.class_database_manager import DatabaseInfo
+
+class RepeatedLazyLoader(LazyLoaderProvider):
+    """
+    Database explorer 
+    For repeated md5
+    """
+    def set_filemap(self,fmap):        
+        if isinstance(fmap,FileMapCliManager):
+            self.fmap = fmap
+        else:
+            self.fmap = None
+    
+    def set_db_map_pair_list(self,db_map_pair_list):        
+        if isinstance(db_map_pair_list,list):
+            self.db_map_pair_list = db_map_pair_list
+        else:
+            self.db_map_pair_list = []
+
+        self.map_dbmap_pairs={}
+        for db_map_index, db_map_pair in enumerate(self.db_map_pair_list):
+            self.map_dbmap_pairs[db_map_index]=db_map_pair
+    
+    def _get_selected_dbs(self)->list[DatabaseInfo]:
+        db_info_list = self.fmap.get_active_databases_in_dbm()
+        db_list = []
+        selected_db_info_list=[]
+        for (a_db,_) in self.db_map_pair_list:
+            if a_db not in db_list:
+                db_list.append(a_db)
+        for db in db_info_list:
+            if not db.active:
+                continue
+            if str(db.database_filepath) not in db_list:
+                continue
+            selected_db_info_list.append(db)
+        return selected_db_info_list
+    
+    def _get_selected_maps_from_db_pair(self,db:DatabaseInfo):
+        selected_maps=[]
+        for (a_db,a_map) in self.db_map_pair_list:
+            maps_in_db=self.fmap.get_maps_in_db(a_db)
+            if (a_db == str(db.database_filepath) 
+                and a_map in maps_in_db):
+                selected_maps.append(a_map)
+        return selected_maps
+    
+    def _check_valid_map_pairs(self):
+        valid_db_map_pairs={}
+        db_info_list = self._get_selected_dbs()
+        for idx,(a_db,a_map) in enumerate(self.db_map_pair_list):
+            valid_db = False
+            for db in db_info_list:
+                if a_db == str(db.database_filepath):
+                    valid_db = True
+                    valid_map=False
+                    maps_list = self._get_selected_maps_from_db_pair(db)
+                    if a_map in maps_list:
+                        valid_map=True
+                    break            
+            valid_db_map_pairs[idx] = valid_map and valid_db
+        return valid_db_map_pairs  
+
+    def lazy_loader(self, node: TreeNode):
+        success, bl = self._load_children(node)
+        if success is not True:
+            return
+        
+        #set selectability of children
+        for child in node.children:
+            if not isinstance(child,TreeNode):
+                continue
+            if child.i_am == "dir":
+                self._dir_selection(child)
+            elif child.i_am == "file":
+                self._file_selection(child)
+            # Persist info of database and map    
+            if node.db:
+                child.db=node.db
+            if node.map:
+                child.map=node.map
+            
+            if child.expand is None: 
+                child.expand = False
+
+            if child.id in self.locked:
+                child.locked = True
+            else:
+                child.locked = False
+
+            # Set defaults
+            if child.id in self.defaults:
+                child.default = True    
+            else:
+                child.default = None # No defaults for lazy db explorer
+            
+            # Set if item is selected
+            if child.default and child.selectable:
+                child.selected = True
+            else:
+                child.selected = False
+
+            child.level=len(bl)
+        
+        # Set selectability
+        node.selectable = self._node_selectable(node)
+        # mark loaded
+        node.loaded = True
+
+    def _set_files_children_in_md5(self, db_map_pair, fm: FileMapper,node: TreeNode,id_lists:list):
+        mount, serial = self.fmap.get_mount_serial_of_map(db_map_pair[0], db_map_pair[1])
+        ext_path = mount
+        if not mount:
+            return 0
+        # Remove mount to find path in filepath
+        if mount in ["/", "\\", os.sep]:
+            ext_path = ext_path[1:]
+        else:
+            ext_path=self.fmap.fm.remove_mount_from_path(mount,ext_path,remove_start_separator=True)
+        
+        a_map = db_map_pair[1]
+        what="*"
+        data_files = self.fmap.ba.get_data_from_id_list_batched(db_map_pair,id_lists,what)
+        
+        if not data_files:
+            return 0
+        
+        # # field list in map
+        # # id=0	dt_data_created'=1	'dt_data_modified'=2	'filepath'=3	'filename'=4	'md5'=5	'size'=6	
+        # # 'dt_file_created'=7	'dt_file_accessed'=8	'dt_file_modified'=9
+        
+        fields = fm.db.get_column_list_of_table(a_map)
+        count = 0
+        for info in data_files:
+            info_dict=fm.data_to_field_dict(fields,info)
+            if not info_dict:
+                continue
+            db_id = info_dict["id"]
+            filepath = info_dict["filepath"]
+            filename = info_dict["filename"]
+            size = info_dict["size"]
+
+            ch_full_path=os.path.join(mount,filepath)
+            ch_filepath=os.path.join(ch_full_path,filename)
+            # set child
+            ch_node=TreeNode(f"{filename} @ {ch_full_path}") #sets name
+            ch_node.i_am ="file"
+            ch_node.size = size
+            ch_node.path=ch_full_path
+            i_exist=(os.path.exists(ch_filepath) and 
+                     self.fmap.is_mount_serial_active(mount,serial))
+            ch_node.i_exist=i_exist
+            ch_node.db_id=db_id
+            ch_node.db = db_map_pair[0]
+            ch_node.map = db_map_pair[1]
+            ch_node.info=info
+            ch_node.loaded=True
+            ch_node.mount=mount
+            ch_node.serial=serial
+            ch_node.quantity=1
+            ch_node.num_files=1
+            ch_node.num_dirs=0
+            ch_node.itempath=self._normalize_itempath(filepath)
+            # print(f"ch_node File Set {ch_node.name} -> {ch_node.itempath}")
+            #----------------
+            node.add_child(ch_node)
+            count += 1
+        return count
+    
+    def _normalize_itempath(self,path):
+        if not path:
+            return path
+        if len(path)==1 and path in ["/", "\\", os.sep]:
+            return path
+        if path[0] in ["/", "\\", os.sep]:
+            #remove / in beguining
+            path=path[1:]
+        if path[-1] not in ["/", "\\", os.sep]:
+            return path + os.sep #add / in the end
+        else:
+            return path
+
+    def _load_children(self, node: TreeNode):
+        try:
+            bl = node.get_bloodline()
+            # Already loaded
+            if node.loaded:
+                # If returning True -> makes all validation again
+                return False, bl
+            if node.i_am != "md5":
+                return None, None
+            rep_list = node.info
+            if not isinstance(rep_list,list):
+                return None, None
+            valid_map_pairs = self._check_valid_map_pairs()
+            org_ids={}
+            for (db_map_index,id_in_db) in rep_list:
+
+                id_list_same_db:list = org_ids.get(db_map_index,[])
+                id_list_same_db.append(id_in_db)
+                org_ids.update({db_map_index:id_list_same_db.copy()})
+                
+            count_files_dict={}
+            for db_map_index,id_lists in org_ids.items():
+                db_map_pair=self.map_dbmap_pairs[db_map_index]
+                if not valid_map_pairs[db_map_index]:
+                    continue
+                fm = self.fmap.cma.get_file_map(db_map_pair[0]) 
+                if not fm:
+                    continue
+                count_files_dict[db_map_index] = self._set_files_children_in_md5(db_map_pair,fm,node,id_lists)
+                
+                
+            if not node.path and node.i_am not in ("database", "root", "md5"):
+                # set a path if lacking one
+                path = os.path.join(*[n.name for n in bl[1:]])
+                if os.path.exists(path):
+                    node.i_exist = True
+                node.path = path
+
+            
+            count_files = sum(count_files_dict.values())
+            node.num_files=count_files
+            node.num_dirs=0
+            node.quantity=count_files+0
+
+            return True, bl
+        except Exception:
+            return False, None
+
+
+    def _node_selectable(self,node:TreeNode):
+        if self.checkboxmode == CheckBoxMode.NO_CHECKBOX:
+            return False
+        
+        if self.selectionbytypemode == SelectionByTypeMode.ANY:
+            return True
+        
+        if node.i_am == "file":
+            if self.selectionbytypemode in (
+                    SelectionByTypeMode.DIRS_ONLY,
+                    ) :
+                return False
+            else:
+                return True
+        if node.i_am in ("dir","folder"):
+            if self.selectionbytypemode in (
+                    SelectionByTypeMode.FILES_ONLY,
+                    ) :
+                return False
+            else:
+                return True
+            
+        if node.i_am not in ("dir","folder","file"):
+            if self.selectionbytypemode in (
+                    SelectionByTypeMode.FILES_DIRS_ONLY,
+                    ) :
+                return False
+            else:
+                return True
+        
+        if node.i_am =="md5":
+            return False
+        
+        # if node.i_am =="root":
+        #     if self.selectionbytypemode ==  SelectionByTypeMode.ROOT:
+        #         return True
+            
+        return True
+
+    def _dir_selection(self,child:TreeNode):
+        child.i_am = "dir"
+        child.selectable = self._node_selectable(child)
+        # Hidden or blank
+        # True -> will appear disabled, None -> will appear the space blank,
+        if child.id in self.hidden:
+            child.hidden = True
+        elif child.id in self.blank:
+            child.hidden = True # Don't blank folders
+        else:
+            child.hidden = False
+    
+    def _file_selection(self,child:TreeNode):
+        child.i_am = "file"
+        child.selectable = self._node_selectable(child)
+        # Hidden or blank
+        # True -> will appear disabled, None -> will appear the space blank,
+        if child.id in self.hidden:
+            child.hidden = True
+        elif child.id in self.blank:
+            child.hidden = None
+        else:
+            child.hidden = False
+    
