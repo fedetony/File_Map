@@ -880,7 +880,7 @@ class RepeatedLazyLoader(LazyLoaderProvider):
             ch_full_path=os.path.join(mount,filepath)
             ch_filepath=os.path.join(ch_full_path,filename)
             # set child
-            ch_node=TreeNode(f"{filename} @ {ch_full_path}") #sets name
+            ch_node=TreeNode(f"{filename}") # @ {ch_full_path}") #sets name
             ch_node.i_am ="file"
             ch_node.size = size
             ch_node.path=ch_full_path

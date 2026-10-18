@@ -14,6 +14,16 @@ from models.class_explorer_config import *
 import os
 
 
+from dataclasses import dataclass
+from typing import Callable, Any
+
+
+@dataclass
+class TreeColumn:
+    key: str
+    title: str
+    value: Callable[[TreeNode], Any]
+
 class ExplorerTreeModel(QAbstractItemModel):
     userSelectionChanged = pyqtSignal(list)
     lazyLoading = pyqtSignal(bool)
@@ -45,7 +55,7 @@ class ExplorerTreeModel(QAbstractItemModel):
         return node.child_count()
 
     def columnCount(self, parent=QModelIndex()):
-        return 1
+        return 1 + len(self._extra_columns())
 
     def index(self, row, column, parent=QModelIndex()):
 
@@ -90,9 +100,25 @@ class ExplorerTreeModel(QAbstractItemModel):
         if not index.isValid():
             return None
         node = self.get_node_from_index(index)
-        if node.hidden is None: 
+
+        if node is None or node.hidden is None:
             return None
-        # text provider
+
+        column_index = index.column()
+
+        # Additional columns: display-only information
+        if column_index > 0:
+            if role == Qt.ItemDataRole.DisplayRole:
+                extra_columns = self._extra_columns()
+                extra_index = column_index - 1
+
+                if 0 <= extra_index < len(extra_columns):
+                    value = extra_columns[extra_index].value(node)
+                    return "" if value is None else str(value)
+
+            return None
+
+        # Original column: preserve existing behavior
         if role == Qt.ItemDataRole.DisplayRole:
             return self.style.text(node)
 
@@ -102,26 +128,23 @@ class ExplorerTreeModel(QAbstractItemModel):
         if role == Qt.ItemDataRole.DecorationRole:
             return self.style.icon(node)
 
-        # checkbox
         if role == Qt.ItemDataRole.CheckStateRole:
             if not node.selectable:
                 return None
+
             return (
                 Qt.CheckState.Checked
                 if node.selected
                 else Qt.CheckState.Unchecked
             )
-        
-        # visual styling provider
+
         if role in (
             Qt.ItemDataRole.ForegroundRole,
             Qt.ItemDataRole.BackgroundRole,
             Qt.ItemDataRole.FontRole,
         ):
-            return self.style_provider.get_style(
-                node,
-                role
-            )
+            return self.style_provider.get_style(node, role)
+
         return None
     
     # -------------------------------------------------
@@ -154,28 +177,37 @@ class ExplorerTreeModel(QAbstractItemModel):
             return Qt.ItemFlag.NoItemFlags
 
         node = self.get_node_from_index(index)
-        if not isinstance(node,TreeNode):
+        if not isinstance(node, TreeNode):
             return Qt.ItemFlag.NoItemFlags
-        selectable=self.get_node_selectability(node)
-        node.selectable= selectable
+        
+        selectable = self.get_node_selectability(node)
+        node.selectable = selectable
+
         if node.hidden:
             return Qt.ItemFlag.NoItemFlags
+
         if node.locked:
             return Qt.ItemFlag.ItemIsEnabled
-        # print("flags ",node,"->",node.selectable)
-        if selectable:
-            flags= (
-                Qt.ItemFlag.ItemIsEnabled
-                | Qt.ItemFlag.ItemIsSelectable
-                | Qt.ItemFlag.ItemIsUserCheckable
-            )
-        else:
-            flags = (
+
+        # Extra columns must not expose checkbox behavior
+        if index.column() > 0:
+            return (
                 Qt.ItemFlag.ItemIsEnabled
                 | Qt.ItemFlag.ItemIsSelectable
             )
 
-        return flags
+        # Original first-column behavior
+        if selectable:
+            return (
+                Qt.ItemFlag.ItemIsEnabled
+                | Qt.ItemFlag.ItemIsSelectable
+                | Qt.ItemFlag.ItemIsUserCheckable
+            )
+
+        return (
+            Qt.ItemFlag.ItemIsEnabled
+            | Qt.ItemFlag.ItemIsSelectable
+        )
 
     # -------------------------------------------------
     # Checkbox Editing
@@ -211,6 +243,8 @@ class ExplorerTreeModel(QAbstractItemModel):
     def setData( self, index, value, role=Qt.ItemDataRole.EditRole):
         if not index.isValid():
             return Qt.ItemFlag.NoItemFlags
+        if index.column() != 0:
+            return False
         node = self.get_node_from_index(index)
         selectable = self.get_node_selectability(node)
         node.selectable = selectable
@@ -332,5 +366,25 @@ class ExplorerTreeModel(QAbstractItemModel):
         node_list=self.curr()
         for node in node_list:
             self.t_m.toggle_selection(node)
+    
+    def _extra_columns(self):
+        return getattr(self.config, "extra_columns", []) or []
+    
+    def headerData(self, section, orientation,
+        role=Qt.ItemDataRole.DisplayRole):
+        if (
+            orientation == Qt.Orientation.Horizontal
+            and role == Qt.ItemDataRole.DisplayRole
+        ):
+            if section == 0:
+                return "Name"
+
+            extra_columns = self._extra_columns()
+            extra_index = section - 1
+
+            if 0 <= extra_index < len(extra_columns):
+                return extra_columns[extra_index].title
+
+        return super().headerData(section, orientation, role)
     
         

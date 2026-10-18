@@ -9,13 +9,13 @@ from PyQt6.QtWidgets import (
     QMenu,
     QListWidget,
 )
-from PyQt6.QtCore import QSortFilterProxyModel
-from PyQt6.QtWidgets import QAbstractItemView
+from PyQt6.QtCore import QSortFilterProxyModel, QModelIndex
+from PyQt6.QtWidgets import QAbstractItemView, QHeaderView
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from models.class_explorer_config import ExplorerConfig
 from models.class_enums_definitions import SelectionByTypeMode, SelectionMode, CheckBoxMode
-from models.class_explorer_tree_model import ExplorerTreeModel, TreeNode
+from models.class_explorer_tree_model import ExplorerTreeModel, TreeNode, TreeColumn
 from models.class_action_provider import DefaultFileActionProvider
 from models.class_lazy_loader import LazyLoaderProvider
 from PyQt6.QtGui import QShortcut, QKeySequence
@@ -97,9 +97,37 @@ class ExplorerTreeWidget(QWidget):
         # tree
         self.tree = QTreeView()
         self.tree.setModel(self.model)
-        self.tree.setHeaderHidden(True)
+
+        has_extra_columns = bool(
+            getattr(self.config, "extra_columns", []))
+
+        self.tree.setHeaderHidden(not has_extra_columns)
         self.tree.setAnimated(True)
         self.tree.setUniformRowHeights(True)
+
+        # if has_extra_columns:
+        #     self.tree.setRootIsDecorated(True)
+        #     self.tree.setItemsExpandable(True)
+        #     self.tree.header().setStretchLastSection(False)
+        #     self.tree.header().setSectionResizeMode(
+        #         0, QHeaderView.ResizeMode.Stretch)
+
+        #     for column_index in range(1, self.model.columnCount()):
+        #         self.tree.header().setSectionResizeMode(
+        #             column_index, QHeaderView.ResizeMode.ResizeToContents)         
+        if has_extra_columns:
+            self.tree.setRootIsDecorated(True)
+            self.tree.setItemsExpandable(True)
+
+            header = self.tree.header()
+            header.setStretchLastSection(False)
+
+            for column_index in range(self.model.columnCount()):
+                header.setSectionResizeMode(
+                    column_index,
+                    QHeaderView.ResizeMode.ResizeToContents,
+                )
+                
         self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         if self.config.selection_mode == SelectionMode.SINGLE:
             self.tree.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
@@ -586,6 +614,27 @@ class ExplorerTreeWidget(QWidget):
 
         super().keyPressEvent(event)
 
+    def columnCount(self, parent=QModelIndex()):
+        return 1 + len(self.config.extra_columns)
+    
+    def headerData(
+        self,
+        section,
+        orientation,
+        role=Qt.ItemDataRole.DisplayRole,
+    ):
+        if orientation == Qt.Orientation.Horizontal:
+            if role == Qt.ItemDataRole.DisplayRole:
+                if section == 0:
+                    return "Name"
+
+                extra_columns = self.config.extra_columns
+                extra_index = section - 1
+
+                if 0 <= extra_index < len(extra_columns):
+                    return extra_columns[extra_index].title
+
+        return super().headerData(section, orientation, role)
 
 
         

@@ -435,3 +435,123 @@ class DBSelectionExplorerStyle(TreeStyle):
 
     def icon(self, node)-> QIcon | None:
         return None    
+
+class RepDupExplorerStyle(TreeStyle):
+
+    def text(self, node:TreeNode):
+        node_size_txt=""
+        if node.i_am in ["file","dir"] and isinstance(node.size,(int | float)):
+            node_size_txt=FM.get_size_str_formatted(node.size,10,True)
+            node_size_txt=node_size_txt.replace(".00 By"," Bytes")
+            node_size_txt=node_size_txt.strip()
+
+        prefix = ""
+        if node.i_exist:
+            prefix += "✓"
+        else:
+            prefix += ""
+
+        if node.locked:
+            prefix += "🔒"
+
+        if node.i_am == "dir":
+            return f"{prefix}📁 {node.name} ({node_size_txt})"
+        if node.i_am == "file":
+            return f"{prefix}📄 {node.name} ({node_size_txt})"
+        if node.i_am == "md5":
+            if node.selected_count==1:
+                icon="🟢"
+            elif node.selected_count==0:    
+                icon="🔴"
+            elif node.selected_count >1 and node.selected_count!=len(node.children):
+                icon="🟡"
+            elif node.selected_count >1 and node.selected_count==len(node.children):
+                icon="⚪"                
+            else:
+                icon="🔵"
+            return f"{prefix}{icon} {node.name} ({node.quantity})"
+        
+        return f"{node.name}"
+
+    def tooltip(self, node:TreeNode)->str:
+        txt = [
+            f"Name : {'🔒' if node.locked else ''} {node.name}",
+            f"ID   : {node.id}",
+            f"Type : {node.i_am}"
+        ]
+
+        if node.path:
+            if node.i_exist:
+                txt.append(f"Path : ✓ {node.path}")
+            else:
+                txt.append(f"Path : ✗ {node.path}")
+
+        if node.i_am in ["file","dir"] and isinstance(node.size,(int | float)):
+            node_size_txt=FM.get_size_str_formatted(node.size,10,True)
+            node_size_txt=node_size_txt.replace(".00 By"," Bytes").strip()
+            txt.append(f"Size : {node_size_txt}")
+        
+        if node.i_am in ["md5"] and isinstance(node.quantity,(int | float)):
+            txt.append(f"Quantity : {node.quantity}")
+
+        return "\n".join(txt)
+
+    def icon(self, node)-> QIcon | None:
+        return None    
+
+class RepDupTreeStyle(TreeStyleProvider):
+
+    def __init__(self, reviewed_ids=None):
+        super().__init__()
+        self.reviewed_ids = (
+            reviewed_ids if reviewed_ids is not None else set()
+        )
+    
+    def clear_reviewed(self):
+        self.reviewed_ids = set()
+
+    def get_style(self, node: TreeNode, role: Qt.ItemDataRole):
+        state = self.get_node_state(node)
+
+        if role == Qt.ItemDataRole.ForegroundRole:
+
+            # Preserve the existing selection colors
+            if state == NodeVisualState.SELECTED:
+                return QColor("#00B45A") if node.i_exist else QColor("#3B82F6")
+
+            if state == NodeVisualState.BLOODLINE:
+                return QColor("#32B4DB") if node.i_exist else QColor("#60A5FA")
+
+            if state == NodeVisualState.LOCKED:
+                return QColor("#6F8F7A") if node.i_exist else QColor("#8A8F98")
+
+            # # Unreviewed items get a subtle amber text color
+            # if node.id not in self.reviewed_ids:
+            #     return QColor("#D6A84F")
+
+        # if role == Qt.ItemDataRole.BackgroundRole:
+        #     # Subtle background to identify items still needing review
+        #     if node.id not in self.reviewed_ids:
+        #         return QColor("#352D20")
+
+        if role == Qt.ItemDataRole.FontRole:
+            font = QFont("Consolas")
+
+            if state in (
+                NodeVisualState.SELECTED,
+                NodeVisualState.BLOODLINE,
+            ):
+                font.setBold(True)
+
+            if state == NodeVisualState.LOCKED:
+                font.setItalic(True)
+
+            return font
+
+        if role == Qt.ItemDataRole.UserRole:
+            return node.id
+
+        if role == Qt.ItemDataRole.UserRole + 1:
+            return node.path
+
+        return None

@@ -1,5 +1,5 @@
 # class_explorer_config.py
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from typing import Callable, Any
 from models.class_style_provider import (
@@ -33,3 +33,5 @@ class ExplorerConfig:
     action_provider = DefaultFileActionProvider()
     # root node
     root_node = None
+    # additional fileld # Treecolumn
+    extra_columns: list = field(default_factory=list)

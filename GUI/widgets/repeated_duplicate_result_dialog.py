@@ -86,13 +86,17 @@ class RepeatedDuplicateResultDialog(QtWidgets.QDialog):
         self.selected_occurrences = set()
 
         self.resize(1500, 950)
+        styles_dict={
+            "explorer_style":RepDupExplorerStyle(), # text, tooltips, icons
+            "tree_style":RepDupTreeStyle(), # role formatting by node, treemana
+        }
         self.setter= RepeatedDuplicateSetter(self.fmap,
                                              self.db_map_pair_list,
                                              {"mode":self.mode},
                                              self.groups,
                                              rep_dup_result_dbmap_pair=None,
                                              lazy_defaults=None,
-                                             styles_dict=None,
+                                             styles_dict=styles_dict,
                                              parent=self
                                              )
 
@@ -225,48 +229,76 @@ class RepeatedDuplicateResultDialog(QtWidgets.QDialog):
         # ----------------------------------------------------------
         # File tree
         # ----------------------------------------------------------
+        tree_group = QtWidgets.QGroupBox()
+        tree_layout = QtWidgets.QVBoxLayout(tree_group)
 
-        tree_group = QtWidgets.QGroupBox("Files")
-        tree_layout = QtWidgets.QHBoxLayout(tree_group)
-        result_properties_splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
+        # Header
+        self.files_header = QLabel(
+            f"{TEXT_ICONS['selected']}  Selected to KEEP"
+        )
+        self.files_header.setStyleSheet("""
+            QLabel {
+                font-size: 15px;
+                font-weight: bold;
+                color: #72D6A0;
+                padding: 4px 2px;
+            }
+        """)
+        self.files_header.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Preferred,
+            QtWidgets.QSizePolicy.Policy.Fixed,
+            )
+        self.files_header.setFixedHeight(self.files_header.sizeHint().height())
 
-        
+        tree_layout.addWidget(self.files_header, 0)
+
+        # Splitter: file tree + properties
+        result_properties_splitter = QtWidgets.QSplitter(
+            QtCore.Qt.Orientation.Horizontal
+        )
+
         # Explorer widget
-        ##################################
         self.results_etw = ExplorerTreeWidget(self.setter.config)
-        # self.results_etw.userSelectionChanged.connect(self.on_selection_changed)
+        self.results_tree = self.results_etw.tree
         # # self.results_etw.actionEvaluated.connect(self.on_action_evaluated)
         # self.results_etw.exportRequested.connect(self.on_export_requested)
         # self.results_etw.exportFormatChanged.connect(self.on_export_format_changed)
+
         # self.results_etw.lazyLoading.connect(self.on_lazy_loading)
         
         # self.results_etw.currentSelectionChanged.connect(self._on_current_selection_changed)
         # # Exporter widget
         # self._set_export_default_configuration()
-        self.results_tree=self.results_etw.tree
+
+
         self.results_tree.setAlternatingRowColors(True)
         self.results_tree.setUniformRowHeights(False)
 
-        # Proprties of each file treeview
-        ##################################
+        # Properties tree
         self.properties_tree = QtWidgets.QTreeWidget()
         self.properties_tree.setHeaderLabels(["Property", "Value"])
-        self.properties_tree.setAlternatingRowColors(True)      
-        self.ptv=PropertiesTreeView(self.fmap,
-                           self.properties_tree,
-                           parent=self,
-                           set_statistics_callback=self._set_statistics_node
-                           )
+        self.properties_tree.setAlternatingRowColors(True)
 
-        #self.results_etw.nodeDoubleClicked.connect(self.ptv._show_node_properties)
-        self.results_etw.nodeClicked.connect(self.ptv._show_node_properties)
+        self.ptv = PropertiesTreeWidget(
+            self.fmap,
+            self.properties_tree,
+            parent=self,
+            set_statistics_callback=self._set_statistics_node,
+        )
 
+        self.results_etw.nodeClicked.connect(
+            self.ptv._show_node_properties
+        )
+
+        # Add widgets to splitter
         result_properties_splitter.addWidget(self.results_etw)
         result_properties_splitter.addWidget(self.properties_tree)
-
         result_properties_splitter.setSizes([600, 300])
+
+        # Add splitter below header
         tree_layout.addWidget(result_properties_splitter)
 
+        # Add group to the main splitter
         results_splitter.addWidget(table_group)
         results_splitter.addWidget(tree_group)
         results_splitter.setSizes([350, 500])
@@ -494,7 +526,7 @@ class RepeatedDuplicateResultDialog(QtWidgets.QDialog):
         return set(self.selected_occurrences)
     
 
-class PropertiesTreeView:
+class PropertiesTreeWidget:
     def __init__(
             self,fmap:FileMapCliManager,
             properties_tree:QtWidgets.QTreeWidget,
@@ -1117,7 +1149,13 @@ class RepeatedDuplicateSetter:
 
 
     def _set_repeated_config(self):
-        virtual_root = TreeNode("Repeated")
+        mode=self.modding_info.get("mode")
+        if mode == "repeated":
+            vname= f"{TEXT_ICONS['file']} Repeated" 
+        else:
+            vname=f"{TEXT_ICONS['document']} Duplicates"
+        
+        virtual_root = TreeNode(vname)
         virtual_root.loaded = True
         virtual_root.i_am = "root"
 
@@ -1129,7 +1167,7 @@ class RepeatedDuplicateSetter:
             # Load MD5 Node
             md5_node = TreeNode(f"{md5_idx} {md5}")
             md5_node.i_am = "md5"
-            md5_node.mount = self.modding_info.get("mode")
+            md5_node.mount = mode
             md5_node.path = md5
             md5_node.num_dirs=0
             md5_node.num_files = len(rep_list)
@@ -1167,12 +1205,26 @@ class RepeatedDuplicateSetter:
 
         config.lazy_loader = lazy_class
         config.provider = DefaultProviderEngine() # functions for behavior
-        config.action_provider = DefaultFileActionProvider() # menu, shortcuts, global shortcuts
+        config.action_provider = RepDupActionProvider() #DefaultFileActionProvider() # menu, shortcuts, global shortcuts
         styles_dict=self.styles_dict
         if not isinstance(styles_dict,dict):
             styles_dict={}
         config.explorer_style = styles_dict.get("explorer_style",DefaultExplorerStyle()) # text, tooltips, icons
         config.tree_style = styles_dict.get("tree_style",DefaultTreeStyle()) # role formatting by node, treemanager
+        
+        config.extra_columns=[
+            TreeColumn(
+                key="type",
+                title="Type",
+                value=lambda node: node.i_am,
+            ),
+            TreeColumn(
+                key="path",
+                title="Location",
+                value=lambda node: node.itempath, #getattr(node, "path", ""),
+            ),
+        ]
+
         self.config = config
 
     

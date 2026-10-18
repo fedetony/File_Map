@@ -133,7 +133,7 @@ class SearchFileActionProvider(TreeActionProvider):
             return count
         if self.parent_widget:
             if hasattr(self.parent_widget,"expand_node"):
-                if node.i_am == "dir":
+                if node.i_am in ("dir","md5"):
                     if not node.loaded:
                         count += 1
                     self.parent_widget.expand_node(node)
@@ -153,7 +153,7 @@ class SearchFileActionProvider(TreeActionProvider):
         "Expand all nodes under the node"
         if self.parent_widget:
             if hasattr(self.parent_widget,"expand_node"):
-                if node.i_am == "dir":
+                if node.i_am in ("dir","md5"):
                     if count>self.max_depth_count:
                         return count
                     if not node.loaded:
@@ -194,7 +194,7 @@ class SearchFileActionProvider(TreeActionProvider):
                 args = (node,0),
                 icon=self.icons.icon('expand'),
                 tip="⏳ Warning: This may take a long time depending on the number of items in the tree ⌛" ,
-                visible=lambda node:(node.i_am in ("dir","map","database")),
+                visible=lambda node:(node.i_am in ("dir","map","database","md5")),
                 separator_before=True,
             ),
 
@@ -202,7 +202,7 @@ class SearchFileActionProvider(TreeActionProvider):
                 text = f"Collapse all in {node.name}",
                 callback = self._collapse_tree,
                 icon=self.icons.icon('collapse'),
-                visible=lambda node:(node.i_am in ("dir","map","database")),
+                visible=lambda node:(node.i_am in ("dir","map","database","md5")),
                 args = (node,),
                 
             ),
@@ -211,7 +211,7 @@ class SearchFileActionProvider(TreeActionProvider):
                 callback = self._select_tree,
                 args = (node, tree_manager, True, 0),
                 icon=self.icons.icon('select'),
-                visible=lambda node:(node.i_am in ("dir","map","database")),
+                visible=lambda node:(node.i_am in ("dir","map","database","md5")),
                 separator_before=True,
             ),
 
@@ -220,7 +220,7 @@ class SearchFileActionProvider(TreeActionProvider):
                 callback = self._select_tree,
                 icon=self.icons.icon('unselect'),
                 args = (node, tree_manager, False, 0),
-                visible=lambda node:(node.i_am in ("dir","map","database")),
+                visible=lambda node:(node.i_am in ("dir","map","database","md5")),
             ),
 
             # ExplorerAction(
@@ -441,3 +441,43 @@ class BrowseFileActionProvider(TreeActionProvider):
             # )
         ]
         return global_actions
+
+class RepDupActionProvider(SearchFileActionProvider):
+
+    def _keep_only_this(self, node: TreeNode, tree_manager: TreeManager):
+        """Select this file and deselect its siblings."""
+        if node.i_am != "file" or node.parent is None:
+            return
+
+        group = node.parent
+
+        if group.i_am != "md5":
+            return
+
+        for sibling in group.children:
+            tree_manager.set_selected(sibling, sibling is node)
+
+        if self.parent_widget:
+            self.parent_widget.refresh()
+
+    def get_actions(
+        self,
+        node: TreeNode,
+        tree_manager: TreeManager,
+    ) -> list[ExplorerAction]:
+
+        actions = super().get_actions(node, tree_manager)
+
+        if node.i_am == "file" and node.parent is not None:
+            if node.parent.i_am == "md5":
+                actions.extend([
+                    ExplorerAction(
+                        text="Keep only this copy",
+                        callback=self._keep_only_this,
+                        args=(node, tree_manager),
+                        icon=self.icons.icon("pin"),
+                        separator_before=True,
+                    ),
+                ])
+
+        return actions
