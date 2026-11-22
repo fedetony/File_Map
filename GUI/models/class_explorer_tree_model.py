@@ -7,7 +7,6 @@ from PyQt6.QtCore import (
 
 from PyQt6.QtGui import QColor
 from models.class_enums_definitions import *
-from models.class_explorer_tree_model import *
 from controllers.class_tree_node_manager import *
 from models.class_style_provider import *
 from models.class_explorer_config import *
@@ -386,5 +385,21 @@ class ExplorerTreeModel(QAbstractItemModel):
                 return extra_columns[extra_index].title
 
         return super().headerData(section, orientation, role)
+    
+    def remove_children(self, node: TreeNode):
+        if not node.children:
+            return
+
+        parent_index = self.get_index_from_node(node)
+
+        first = 0
+        last = len(node.children) - 1
+
+        self.beginRemoveRows(parent_index, first, last)
+
+        for child in list(node.children):
+            self.t_m.remove_node(child)
+
+        self.endRemoveRows()
     
         

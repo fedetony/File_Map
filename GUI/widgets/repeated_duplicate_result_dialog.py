@@ -17,6 +17,42 @@ NODE_HIDDEN_PROPERTIES = {
     "children",
 }
 
+from enum import Enum
+
+class GroupState(Enum):
+    SINGLE_SELECTED = "🟢"       # Exactly one selected
+    NONE_SELECTED = "🔴"         # None selected
+    PARTIALLY_SELECTED = "🟡"    # More than one, but not all selected
+    ALL_SELECTED = "⚪"          # All selected
+    NOT_LOADED = "🔵"            # Not loaded / unknown
+
+from dataclasses import dataclass
+
+@dataclass
+class RepDupStats:
+
+    # Group identification
+    md5: str = ""
+    
+    # Group statistics
+    total_groups: int = 0
+    loaded_groups: int = 0
+    unloaded_groups: int = 0
+    occurrences: int = 0
+    locations: int = 0
+    size: int = 0
+    potential_save: int = 0
+
+    # Selection statistics
+    selected: int = 0
+    unselected: int = 0
+    selected_size: int = 0
+
+    # Current node statistics
+    files: int = 0
+    folders: int = 0
+    quantity: int = 0
+    node_size: int = 0
 
 class RepeatedDuplicateResultDialog(QtWidgets.QDialog): 
     """
@@ -63,6 +99,8 @@ class RepeatedDuplicateResultDialog(QtWidgets.QDialog):
         self.icons = Icons()
         self.text_renderer = TextRenderer()
 
+        self.stats = RepDupStats()
+
         # ----------------------------------------------------------
         # Internal state
         # ----------------------------------------------------------
@@ -72,6 +110,7 @@ class RepeatedDuplicateResultDialog(QtWidgets.QDialog):
 
         # Current group selected in the table.
         self.current_group_index = None
+        self.selection_policy = "none"
 
         # Selection state.
         #
@@ -161,8 +200,32 @@ class RepeatedDuplicateResultDialog(QtWidgets.QDialog):
         # Toolbar
         # ==========================================================
 
+
         toolbar_group = QtWidgets.QGroupBox("Selection")
         toolbar_layout = QtWidgets.QHBoxLayout(toolbar_group)
+
+        self.policy_group = QtWidgets.QButtonGroup(self)
+        self.policy_group.setExclusive(True)
+
+        policies = {
+            "none": "Manual selection",
+            "oldest": "Keep Oldest",
+            "newest": "Keep Newest",
+            "all": "Keep All",
+        }
+
+        for key, label in policies.items():
+            button = QtWidgets.QRadioButton(label)
+            self.policy_group.addButton(button)
+            button.setProperty("policy", key)
+            toolbar_layout.addWidget(button)
+
+            if key == "none":
+                button.setChecked(True)
+
+        self.policy_group.buttonToggled.connect(
+            self._on_policy_changed
+        )
 
         self.btn_keep_newest = QtWidgets.QPushButton("Keep Newest")
         self.btn_keep_oldest = QtWidgets.QPushButton("Keep Oldest")
@@ -171,14 +234,14 @@ class RepeatedDuplicateResultDialog(QtWidgets.QDialog):
         self.btn_select_none = QtWidgets.QPushButton("Select None")
         self.btn_invert = QtWidgets.QPushButton("Invert Selection")
 
-        toolbar_layout.addWidget(self.btn_keep_newest)
-        toolbar_layout.addWidget(self.btn_keep_oldest)
+        # toolbar_layout.addWidget(self.btn_keep_newest)
+        # toolbar_layout.addWidget(self.btn_keep_oldest)
 
-        toolbar_layout.addSpacing(20)
+        # toolbar_layout.addSpacing(20)
 
-        toolbar_layout.addWidget(self.btn_select_all)
-        toolbar_layout.addWidget(self.btn_select_none)
-        toolbar_layout.addWidget(self.btn_invert)
+        # toolbar_layout.addWidget(self.btn_select_all)
+        # toolbar_layout.addWidget(self.btn_select_none)
+        # toolbar_layout.addWidget(self.btn_invert)
 
         toolbar_layout.addStretch(1)
 
@@ -209,7 +272,7 @@ class RepeatedDuplicateResultDialog(QtWidgets.QDialog):
         )
 
         self.results_table.setSelectionMode(
-            QtWidgets.QAbstractItemView.SelectionMode.SingleSelection
+            QtWidgets.QAbstractItemView.SelectionMode.ExtendedSelection #SingleSelection
         )
 
         self.results_table.setSortingEnabled(True)
@@ -226,6 +289,7 @@ class RepeatedDuplicateResultDialog(QtWidgets.QDialog):
 
         table_layout.addWidget(self.results_table)
 
+        
         # ----------------------------------------------------------
         # File tree
         # ----------------------------------------------------------
@@ -266,7 +330,8 @@ class RepeatedDuplicateResultDialog(QtWidgets.QDialog):
 
         # self.results_etw.lazyLoading.connect(self.on_lazy_loading)
         
-        # self.results_etw.currentSelectionChanged.connect(self._on_current_selection_changed)
+        
+        self.results_etw.currentSelectionChanged.connect(self._on_tree_selection_changed)
         # # Exporter widget
         # self._set_export_default_configuration()
 
@@ -311,27 +376,51 @@ class RepeatedDuplicateResultDialog(QtWidgets.QDialog):
         summary_group = QtWidgets.QGroupBox("Selection Summary")
         summary_layout = QtWidgets.QHBoxLayout(summary_group)
         self.lbl_groups = QtWidgets.QLabel("Groups: 0")
+        self.lbl_loaded_groups = QtWidgets.QLabel("Loaded: 0")
+        self.lbl_unloaded_groups = QtWidgets.QLabel("Unloaded: 0")
         self.lbl_occurrences = QtWidgets.QLabel("Occurrences: 0")
-        self.lbl_selected = QtWidgets.QLabel("Selected: 0")
+        self.lbl_selected = QtWidgets.QLabel(f"{TEXT_ICONS['success']} Keep: 0")
+        self.lbl_unselected = QtWidgets.QLabel(f"{TEXT_ICONS['error']} Remove: 0")
         self.lbl_space = QtWidgets.QLabel("Selected Space: 0 B")
         self.lbl_potential = QtWidgets.QLabel("Potential Save: 0 B")
+        
+        self.lbl_node_files = QtWidgets.QLabel("Files: 0")
+        self.lbl_node_folders = QtWidgets.QLabel("Folders: 0")
+        self.lbl_node_quantity = QtWidgets.QLabel("Quantity: 0")
+        self.lbl_node_size = QtWidgets.QLabel("Size: 0")
 
         summary_layout.addWidget(self.lbl_groups)
+        summary_layout.addWidget(self.lbl_loaded_groups)
+        summary_layout.addWidget(self.lbl_unloaded_groups)
         summary_layout.addSpacing(20)
 
         summary_layout.addWidget(self.lbl_occurrences)
         summary_layout.addSpacing(20)
 
         summary_layout.addWidget(self.lbl_selected)
+        summary_layout.addWidget(self.lbl_unselected)
         summary_layout.addSpacing(20)
 
         summary_layout.addWidget(self.lbl_space)
         summary_layout.addSpacing(20)
 
         summary_layout.addWidget(self.lbl_potential)
-
+        
         summary_layout.addStretch(1)
 
+        summary_layout.addWidget(self.lbl_node_files)
+        summary_layout.addSpacing(20)
+
+        summary_layout.addWidget(self.lbl_node_folders)
+        summary_layout.addSpacing(20)
+
+        summary_layout.addWidget(self.lbl_node_quantity)
+        summary_layout.addSpacing(20)
+
+        summary_layout.addWidget(self.lbl_node_size)
+        summary_layout.addSpacing(20)
+
+        
         main_layout.addWidget(summary_group)
 
         # ==========================================================
@@ -368,11 +457,31 @@ class RepeatedDuplicateResultDialog(QtWidgets.QDialog):
     # ==============================================================
     # Table
     # ==============================================================
-
     def populate_table(self):
-        model = RepeatedDuplicateTableModel(self.groups,self.mode,self)
+        self.results_table.setContextMenuPolicy(
+            QtCore.Qt.ContextMenuPolicy.CustomContextMenu
+        )
 
-        self.results_table.setModel(model)
+        self.results_table.customContextMenuRequested.connect(
+            self._show_groups_context_menu
+        )
+        self.table_model = RepeatedDuplicateTableModel(
+            self.groups, self.mode, 
+            self.results_etw.t_m 
+            ,self
+        )
+        
+        self.table_proxy = QtCore.QSortFilterProxyModel(self)
+        self.table_proxy.setSourceModel(self.table_model)
+
+        # Use raw values for sorting, formatted values for display.
+        self.table_proxy.setSortRole(
+            RepeatedDuplicateTableModel.SortRole
+        )
+
+        self.results_table.setModel(self.table_proxy)
+        self.results_table.setSortingEnabled(True)
+    
         self.results_table.setColumnWidth(RepeatedDuplicateTableModel.COL_GROUP, 70)
         self.results_table.setColumnWidth(RepeatedDuplicateTableModel.COL_MD5, 260)
         self.results_table.setColumnWidth(RepeatedDuplicateTableModel.COL_OCCURRENCES,110)
@@ -380,7 +489,15 @@ class RepeatedDuplicateResultDialog(QtWidgets.QDialog):
         self.results_table.setColumnWidth(RepeatedDuplicateTableModel.COL_SIZE, 100)
         self.results_table.setColumnWidth(RepeatedDuplicateTableModel.COL_POTENTIAL, 140)
 
+        # Assign Delegate
+        self.results_table.setItemDelegateForColumn(
+            RepeatedDuplicateTableModel.COL_GROUP,
+            GroupStateDelegate(self.results_table)
+        )
+
         self.lbl_groups.setText(f"Groups: {len(self.groups):,}")
+        self.lbl_loaded_groups.setText("Loaded: 0")
+        self.lbl_unloaded_groups.setText(f"Unloaded: {len(self.groups)}")
 
         total_occurrences = sum(
             len(items)
@@ -388,26 +505,275 @@ class RepeatedDuplicateResultDialog(QtWidgets.QDialog):
         )
 
         self.lbl_occurrences.setText(f"Occurrences: {total_occurrences:,}")
+        self._refresh_selection_summary()
+        self._clear_node_statistics()
+    
+    def get_md5_node_state(self, node: TreeNode) -> GroupState:
+        if not node.loaded:
+            return GroupState.NOT_LOADED
+
+        total = len(node.children)
+        selected = node.selected_count
+
+        if total == 0:
+            return GroupState.NOT_LOADED
+
+        if selected == 0:
+            return GroupState.NONE_SELECTED
+
+        if selected == 1:
+            return GroupState.SINGLE_SELECTED
+
+        if selected == total:
+            return GroupState.ALL_SELECTED
+
+        if selected > 1:
+            return GroupState.PARTIALLY_SELECTED
+
+        return GroupState.NOT_LOADED
+    
+    def _show_groups_context_menu(self, pos):
+        index = self.results_table.indexAt(pos)
+
+        if index.isValid() and not self.results_table.selectionModel().isSelected(index):
+            self.results_table.selectRow(index.row())
+
+        menu = QtWidgets.QMenu(self.results_table)
+
+        act_none = menu.addAction(f"{GroupState.NONE_SELECTED.value} Keep None (Clear selection)")
+        act_all = menu.addAction(f"{GroupState.ALL_SELECTED.value} Keep All")
+        menu.addSeparator()
+        act_policy = menu.addAction(f"{TEXT_ICONS['folder_sync']} Apply current selection policy")
+        menu.addSeparator()
+        act_unload = menu.addAction(f"{GroupState.NOT_LOADED.value} Unload Group")
+
+        action = menu.exec(
+            self.results_table.viewport().mapToGlobal(pos)
+        )
+
+        if action is None:
+            return
+
+        if action == act_none:
+            self._apply_policy_to_selected_groups("none")
+
+        elif action == act_all:
+            self._apply_policy_to_selected_groups("all")
+
+        elif action == act_policy:
+            self._apply_policy_to_selected_groups(self.selection_policy)
+        
+        elif action == act_unload:
+            self._apply_unload_to_selected_groups()
+
+    # ==============================================================
+    # Tree -> Table
+    # ==============================================================
+    def _on_tree_selection_changed(self, nodes_list):
+
+        if not self.current_group_md5:
+            return
+
+        self._refresh_group_table(self.current_group_md5)
+    
+    def _refresh_group_table(self, md5):
+
+        self.table_model.refresh_group(md5)
+
+        section = self.results_table.horizontalHeader().sortIndicatorSection()
+        order = self.results_table.horizontalHeader().sortIndicatorOrder()
+
+        self.table_proxy.sort(section, order)
+
+        # Find the group's new position
+        source_row = self.table_model.md5_list.index(md5)
+
+        source_index = self.table_model.index(
+            source_row,
+            RepeatedDuplicateTableModel.COL_GROUP
+        )
+
+        proxy_index = self.table_proxy.mapFromSource(source_index)
+
+        if proxy_index.isValid():
+            self.results_table.selectRow(proxy_index.row())
+            self.results_table.scrollTo(proxy_index)
+    
+    def _get_selected_group_nodes(self):
+        selection_model = self.results_table.selectionModel()
+
+        rows = selection_model.selectedRows()
+
+        nodes = []
+
+        for proxy_index in rows:
+            source_index = self.table_proxy.mapToSource(proxy_index)
+
+            md5 = self.table_model.md5_for_row(source_index.row())
+
+            if md5 is None:
+                continue
+
+            node_list = self.results_etw.t_m.get_nodes_by_attribute(
+                "path", md5
+            )
+
+            if node_list:
+                nodes.append(node_list[0])
+
+        return nodes
+    
+    
 
     # ==============================================================
     # Table -> Tree
     # ==============================================================
-
-    def _on_group_clicked(self, index: QtCore.QModelIndex):
-        if not index.isValid():
+    
+    def _on_group_clicked(self, proxy_index: QtCore.QModelIndex):
+        if not proxy_index.isValid():
             return
-        row = index.row()
-        self.current_group_index = row
-        md5 = self.group_md5_list[row]
+
+        source_index = self.table_proxy.mapToSource(proxy_index)
+        md5 = self.table_model.md5_for_row(source_index.row())
+
+        if md5 is None:
+            return
+
+        self.current_group_index = source_index.row()
+        self.current_group_md5 = md5
+
         node_list=self.results_etw.t_m.get_nodes_by_attribute("path",md5)
+        self.results_etw.t_m.select_descendants
         if node_list:
-            node=node_list[0]
+            node = node_list[0]
+            if not node.loaded:
+                self._apply_selection_policy(node)
             self.results_etw.expand_node(node)
             self.results_etw.set_current_node(node)
+            self._set_statistics_node(node)
 
     def _on_group_double_clicked(self,index: QtCore.QModelIndex):
         self.results_tree.collapseAll()
         self._on_group_clicked(index)
+   
+    def _apply_selection_policy(self, node: TreeNode):
+        # "none": Manual selection
+        if self.selection_policy == "none":
+            return
+
+        tm = self.results_etw.t_m
+        self.results_etw.load_node(node)
+
+        id_cre_dt = {}
+
+        for child in node.children:
+            if child.i_am == "file":
+                info_dict = self.ptv._parse_node_info(child)
+
+                fp = info_dict.get("filepath", "")
+                dt_str = info_dict.get("dt_file_created", "")
+
+                try:
+                    dt_c = datetime.fromisoformat(dt_str)
+                except (ValueError, TypeError):
+                    continue
+
+                clist = id_cre_dt.setdefault(fp, [])
+                clist.append((child.id, dt_c))
+
+        # "all": Keep All
+        if self.selection_policy == "all":
+            for clist in id_cre_dt.values():
+                for an_id, _ in clist:
+                    file_node = tm.get_node_by_id(an_id)
+                    if file_node:
+                        tm.set_selected(file_node, True)
+            return
+
+        # "oldest": Keep Oldest
+        if self.selection_policy == "oldest":
+            for clist in id_cre_dt.values():
+                if clist:
+                    oldest_id, _ = min(clist, key=lambda x: x[1])
+                    oldest_node = tm.get_node_by_id(oldest_id)
+
+                    if oldest_node:
+                        tm.set_selected(oldest_node, True)
+            return
+
+        # "newest": Keep Newest
+        if self.selection_policy == "newest":
+            for clist in id_cre_dt.values():
+                if clist:
+                    newest_id, _ = max(clist, key=lambda x: x[1])
+                    newest_node = tm.get_node_by_id(newest_id)
+
+                    if newest_node:
+                        tm.set_selected(newest_node, True)
+            return
+    
+    def _apply_policy_to_selected_groups(self, policy):
+        tm = self.results_etw.t_m
+
+        old_policy = self.selection_policy
+        self.selection_policy = policy
+
+        try:
+            node=None
+            for node in self._get_selected_group_nodes():
+                
+                # Make sure descendants are available
+                self.results_etw.load_node(node)
+
+                # Clear previous selections first
+                self._clear_group_selection(node)
+
+                # Apply requested policy
+                self._apply_selection_policy(node)
+
+            if node:
+                self._set_statistics_node(node)
+
+        finally:
+            self.selection_policy = old_policy
+
+        self.results_table.viewport().update()
+        
+    
+    
+    def _apply_unload_to_selected_groups(self):
+        tm = self.results_etw.t_m
+        node=None
+        for node in self._get_selected_group_nodes():
+
+            if not node.loaded:
+                continue
+            self._clear_group_selection(node)
+            self.results_etw.collapse_node(node)
+            for child in node.children:
+                tm.remove_node(child)
+            self.results_etw.model.remove_children(node)
+
+            node.loaded = False
+            
+
+        self.results_etw.refresh()
+        self.results_table.viewport().update()
+        if node:
+            self._set_statistics_node(node)
+    
+    def _clear_group_selection(self, node):
+        tm = self.results_etw.t_m
+
+        def visit(parent):
+            for child in parent.children:
+                if child.i_am == "file":
+                    tm.set_selected(child, False)
+                else:
+                    visit(child)
+
+        visit(node)
+        self._set_statistics_node(node)
 
     # ==============================================================
     # Tree
@@ -418,27 +784,19 @@ class RepeatedDuplicateResultDialog(QtWidgets.QDialog):
             node=nodes_list[0]
             if isinstance(node,TreeNode):
                 self._set_statistics_node(node)
-    
-    def _set_statistics_node(self, node: TreeNode):
-        if not node:
-            return
-        # db_total_matches=self.statistic_dict.get(f"Total_{node.db}",0)
-        # map_total_matches=self.statistic_dict.get((node.db,node.map),0)
-        # # sel_node_list=self.results_tree.selected_nodes()
-        # all_selected=len(self.results_tree.selected_ids())
 
-        # self.files_label.setText(f"Node Files: {node.num_files or 0}")
-        # self.folders_label.setText(f"Node Folders: {node.num_dirs or 0}")
-        # self.quantity_label.setText(f"Node Quantity: {node.quantity or 0}")
-        # if node.size:
-        #     value = self.fmap.fm.get_size_str_formatted(node.size)
-        # else:
-        #     value = 0
-        # self.size_label.setText(f"Size: {value}")
-        # self.db_matches_label.setText(f"DB Matches: {db_total_matches}")
-        # self.map_matches_label.setText(f"Map Matches: {map_total_matches}")
-        # self.selected_label.setText(f"Selected: {all_selected}")
+    def get_group_stats(self, md5) -> RepDupStats:
+        stats = RepDupStats()
 
+        stats.md5 = md5
+        stats.occurrences = len(self.groups[md5])
+
+        # Retrieve remaining values through your existing
+        # database access mechanisms.
+
+        return stats
+
+        
     
 
     # ==============================================================
@@ -470,6 +828,12 @@ class RepeatedDuplicateResultDialog(QtWidgets.QDialog):
     # Default policies
     # ==============================================================
 
+    def _on_policy_changed(self, button, checked):
+        if not checked:
+            return
+
+        self.selection_policy = button.property("policy")
+        
     def _keep_newest(self):
         """
         Placeholder.
@@ -495,17 +859,119 @@ class RepeatedDuplicateResultDialog(QtWidgets.QDialog):
     # ==============================================================
 
     def _refresh_selection_summary(self):
+        self._clear_node_statistics()
+        self._update_statistics_labels()
+    
+    def _clear_node_statistics(self):
+        self.lbl_node_files.setText("Files: 0")
+        self.lbl_node_folders.setText("Folders: 0")
+        self.lbl_node_quantity.setText("Quantity: 0")
+        self.lbl_node_size.setText("Size: 0 B")
+    
+    def _set_statistics_node(self, node: TreeNode):
 
-        selected_count = len(
-            self.selected_occurrences
+        if not node:
+            return
+
+        self.stats.files = node.num_files or 0
+        self.stats.folders = node.num_dirs or 0
+        self.stats.quantity = node.quantity or 0
+        self.stats.node_size = node.size or 0
+
+        info_dict = self.ptv._parse_node_info(node)
+        md5 = info_dict.get("md5", "")
+        self.stats.md5 = md5
+
+        tm=self.results_etw.t_m
+        selected_list=tm.get_nodes_by_attribute("selected",True)
+        total_s_size=0
+        selected_amount=0
+        for sel_node in selected_list:
+            if sel_node.i_am == "file":
+                selected_amount += 1 
+                if sel_node.size:
+                    total_s_size+=sel_node.size
+
+        
+        self.stats.selected=selected_amount
+        self.stats.selected_size=total_s_size      
+
+        total_ns_size=0
+        unselected_amount=0
+        nselected_list=tm.get_nodes_by_attribute("selected",False)
+        for nsel_node in nselected_list:
+            if nsel_node.i_am == "file": 
+                unselected_amount += 1
+                if nsel_node.size:
+                    total_ns_size+=nsel_node.size
+        
+        self.stats.unselected=unselected_amount
+        self.stats.potential_save = total_ns_size
+
+        node_list=tm.get_nodes_by_attribute("md5",md5)
+        
+        path_set=set()
+        for m_node in node_list:
+            if isinstance(m_node,TreeNode):
+                if m_node.i_am == "file":
+                    path_set.add(m_node.path)
+        
+        self.stats.locations = len(path_set)
+
+        # Total groups
+        self.stats.total_groups=len(self.groups)
+
+        # loaded groups
+        loaded=0
+        for lnode in tm.get_loaded_nodes():
+            if lnode.i_am == "md5":
+                loaded+=1  
+        unloaded=0
+        for lnode in tm.get_unloaded_nodes():
+            if lnode.i_am == "md5":
+                unloaded+=1  
+        self.stats.loaded_groups = loaded
+        self.stats.unloaded_groups = unloaded
+
+        # Total occurrences
+        total_occurrences = sum(
+            len(occurrences)
+            for occurrences in self.groups.values()
+        )
+        self.stats.occurrences=total_occurrences
+    
+        self._update_statistics_labels()
+    
+    def _update_statistics_labels(self):
+        self.lbl_occurrences.setText(f"Occurrences: {self.stats.occurrences:,}")
+        self.lbl_groups.setText(f"Groups: {self.stats.total_groups:,}")
+        self.lbl_loaded_groups.setText(f"Loaded: {self.stats.loaded_groups:,}")
+        self.lbl_unloaded_groups.setText(f"Unloaded: {self.stats.unloaded_groups:,}")
+        self.lbl_selected.setText(f"{TEXT_ICONS['success']} Keep: {self.stats.selected:,}")
+        self.lbl_unselected.setText(f"{TEXT_ICONS['error']} Remove: {self.stats.unselected:,}")
+        self.lbl_space.setText(
+            f"Selected Space: "
+            f"{self.fmap.fm.get_size_str_formatted(self.stats.selected_size)}"
+        )
+        self.lbl_potential.setText(
+            f"Potential Save: "
+            f"{self.fmap.fm.get_size_str_formatted(self.stats.potential_save)}"
         )
 
-        self.lbl_selected.setText(
-            f"Selected: {selected_count:,}"
+        self.lbl_node_files.setText(f"Files: {self.stats.files:,}")
+
+        self.lbl_node_folders.setText(
+            f"Folders: {self.stats.folders:,}"
         )
 
-        # Size will be calculated once the occurrence metadata
-        # is available through the lazy loader.
+        self.lbl_node_quantity.setText(
+            f"Quantity: {self.stats.quantity:,}"
+        )
+
+        self.lbl_node_size.setText(
+            f"Size: {self.fmap.fm.get_size_str_formatted(self.stats.node_size)}"
+        )
+    
 
     # ==============================================================
     # Public API
@@ -714,18 +1180,22 @@ class RepeatedDuplicateTableModel(QtCore.QAbstractTableModel):
         "Size",
         "Potential Save",
     ]
+    
+    SortRole = QtCore.Qt.ItemDataRole.UserRole + 1
 
     def __init__(
         self,
         groups: dict,
         mode: str,
+        tree_manager: TreeManager,
         parent=None
     ):
         super().__init__(parent)
-
+        self.t_m =tree_manager
+        self.fm=FileManipulate()
         self.groups = groups
         self.mode = mode
-
+        self.dialog_parent=parent
         self.md5_list = list(groups.keys())
 
     # --------------------------------------------------------------
@@ -765,53 +1235,180 @@ class RepeatedDuplicateTableModel(QtCore.QAbstractTableModel):
 
         return str(section)
 
-    def data(
-        self,
-        index,
-        role=QtCore.Qt.ItemDataRole.DisplayRole
-    ):
+    def md5_for_row(self, row):
+        if 0 <= row < len(self.md5_list):
+            return self.md5_list[row]
+        return None
+
+    def data(self, index, role=QtCore.Qt.ItemDataRole.DisplayRole):
 
         if not index.isValid():
             return None
 
-        if role != QtCore.Qt.ItemDataRole.DisplayRole:
-            return None
-
         row = index.row()
         column = index.column()
-
         md5 = self.md5_list[row]
+        count = len(self.groups[md5])
 
-        occurrences = self.groups[md5]
+        # --------------------------------------------------
+        # Sorting values (raw values)
+        # --------------------------------------------------
 
-        count = len(occurrences)
+        if role == self.SortRole:
+            if column == self.COL_GROUP:
+                return row
+            if column == self.COL_MD5:
+                return md5
+            if column == self.COL_OCCURRENCES:
+                return count
+            metadata = self.get_group_metadata(md5)
+            if column == self.COL_LOCATIONS:
+                return metadata["locations"]
+            if column == self.COL_SIZE:
+                return metadata["size"]
+            if column == self.COL_POTENTIAL:
+                return metadata["potential"]
+            return None
+        
+        if role == QtCore.Qt.ItemDataRole.UserRole:
+            md5 = self.md5_for_row(index.row())
+            if md5:
+                nodes = self.t_m.get_nodes_by_attribute("path", md5)
+                if nodes and self.dialog_parent:
+                    return self.dialog_parent.get_md5_node_state(nodes[0])
 
-        if column == self.COL_GROUP:
-            return row
+            return GroupState.NOT_LOADED
 
-        if column == self.COL_MD5:
-            return md5
+        # --------------------------------------------------
+        # Display values
+        # --------------------------------------------------
 
-        if column == self.COL_OCCURRENCES:
-            return f"{count:,}"
-
-        if column == self.COL_LOCATIONS:
-
-            # Temporary.
-            #
-            # Later this can be calculated from the
-            # (db_map_index, record_id) references or cached
-            # group metadata.
-            return "—"
-
-        if column == self.COL_SIZE:
-            return "—"
-
-        if column == self.COL_POTENTIAL:
-            return "—"
+        if role == QtCore.Qt.ItemDataRole.DisplayRole:
+            if column == self.COL_GROUP:
+                return row
+            if column == self.COL_MD5:
+                return md5
+            if column == self.COL_OCCURRENCES:
+                return f"{count:,}"
+            metadata = self.get_group_metadata(md5)
+            if column == self.COL_LOCATIONS:
+                return f"{metadata['locations']:,}"
+            if column == self.COL_SIZE:
+                return self._format_size(metadata["size"])
+            if column == self.COL_POTENTIAL:
+                return self._format_size(metadata["potential"])
 
         return None
+    
+    def _format_size(self, size):
+        return self.fm.get_size_str_formatted(size or 0)
+    
+    def get_group_metadata(self, md5):
 
+        node_list = self.t_m.get_nodes_by_attribute("path", md5)
+        locations = set()
+        size = 0
+        selected_count = 0
+        for md5_node in node_list:
+            if md5_node.i_am != "md5":
+                continue
+
+            for child in md5_node.children:
+                if child.i_am != "file":
+                    continue
+                if child.selected:
+                    selected_count += 1
+                locations.add(child.path)
+                if child.size:
+                    size = child.size
+
+        count = len(self.groups[md5])
+
+        return {
+            "locations": len(locations),
+            "size": size,
+            "potential": max(0, count - selected_count) * size,
+        }
+    
+    def refresh_group(self, md5):
+
+        try:
+            row = self.md5_list.index(md5)
+        except ValueError:
+            return
+
+        self.dataChanged.emit(
+            self.index(row, 0),
+            self.index(row, len(self.HEADERS) - 1),
+            [
+                QtCore.Qt.ItemDataRole.DisplayRole,
+                self.SortRole,
+            ]
+        )
+
+    def refresh_all(self):
+
+        if not self.md5_list:
+            return
+
+        self.dataChanged.emit(
+            self.index(0, 0),
+            self.index(len(self.md5_list) - 1, len(self.HEADERS) - 1),
+            [
+                QtCore.Qt.ItemDataRole.DisplayRole,
+                self.SortRole,
+            ]
+        )
+    
+
+class GroupStateDelegate(QtWidgets.QStyledItemDelegate):
+
+    def paint(self, painter, option, index):
+        # Draw normal cell: background, selection and group number
+        style_option = QtWidgets.QStyleOptionViewItem(option)
+        self.initStyleOption(style_option, index)
+
+        style = (
+            option.widget.style()
+            if option.widget
+            else QtWidgets.QApplication.style()
+        )
+
+        painter.save()
+
+        style.drawControl(
+            QtWidgets.QStyle.ControlElement.CE_ItemViewItem,
+            style_option,
+            painter,
+            option.widget
+        )
+
+        # Get state
+        state = index.data(QtCore.Qt.ItemDataRole.UserRole)
+
+        if isinstance(state, GroupState):
+            icon = state.value
+        else:
+            icon = str(state) if state else ""
+
+        # Draw icon on the right
+        icon_rect = option.rect.adjusted(
+            option.rect.width() - 30, 0, -5, 0
+        )
+
+        painter.setFont(QtGui.QFont("Segoe UI Emoji", 12))
+
+        painter.drawText(
+            icon_rect,
+            QtCore.Qt.AlignmentFlag.AlignCenter,
+            icon
+        )
+
+        painter.restore()
+
+    def sizeHint(self, option, index):
+        return QtCore.QSize(70, 28)
+    
 """
 Repeated / Duplicate Results Dialog
 ====================================

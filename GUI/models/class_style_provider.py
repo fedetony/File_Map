@@ -461,7 +461,7 @@ class RepDupExplorerStyle(TreeStyle):
         if node.i_am == "md5":
             if node.selected_count==1:
                 icon="🟢"
-            elif node.selected_count==0:    
+            elif node.selected_count==0 and len(node.children)>0:    
                 icon="🔴"
             elif node.selected_count >1 and node.selected_count!=len(node.children):
                 icon="🟡"
