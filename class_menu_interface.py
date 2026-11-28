@@ -1314,10 +1314,10 @@ class TerminalMenuInterface():
                 name=self.cma.format_new_table_name("%","")
                 rem_id_list=self._get_id_list_from_rem_keep_dict(selected_items,duplicte_list,'remove',rem_keep_dict)
                 if len (rem_id_list)>0:
-                    fm.map_an_id_selection('remove_'+name,db_map_pair[1],rem_id_list,MAP_TYPES_LIST[3])
+                    fm.map_an_id_selection('remove_'+name,db_map_pair[1],rem_id_list,MapType.REMOVE.value) #MAP_TYPES_LIST[3])
                 keep_id_list=self._get_id_list_from_rem_keep_dict(selected_items,duplicte_list,'keep',rem_keep_dict)
                 if len (keep_id_list)>0:
-                    fm.map_an_id_selection('keep_'+name,db_map_pair[1],keep_id_list,MAP_TYPES_LIST[4])
+                    fm.map_an_id_selection('keep_'+name,db_map_pair[1],keep_id_list,MapType.KEEP.value) #MAP_TYPES_LIST[4])
             elif answers['remove_type'] == 'Remove Selected': 
                 for md5,rem_keep in rem_keep_dict.items():
                     rem=True

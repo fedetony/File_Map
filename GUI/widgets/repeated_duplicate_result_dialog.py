@@ -100,6 +100,7 @@ class RepeatedDuplicateResultDialog(QtWidgets.QDialog):
         self.text_renderer = TextRenderer()
 
         self.stats = RepDupStats()
+        self.msg_box = MsgBoxHelper()
 
         # ----------------------------------------------------------
         # Internal state
@@ -111,6 +112,7 @@ class RepeatedDuplicateResultDialog(QtWidgets.QDialog):
         # Current group selected in the table.
         self.current_group_index = None
         self.selection_policy = "none"
+        self.on_click_selection_policy = False
 
         # Selection state.
         #
@@ -204,6 +206,13 @@ class RepeatedDuplicateResultDialog(QtWidgets.QDialog):
         toolbar_group = QtWidgets.QGroupBox("Selection")
         toolbar_layout = QtWidgets.QHBoxLayout(toolbar_group)
 
+        self.policy_click = QtWidgets.QCheckBox("Policy on Click")
+        self.policy_click.setChecked(self.on_click_selection_policy)
+        toolbar_layout.addWidget(self.policy_click)
+        self.policy_click.checkStateChanged.connect(
+            self._on_policy_click
+        )
+
         self.policy_group = QtWidgets.QButtonGroup(self)
         self.policy_group.setExclusive(True)
 
@@ -211,6 +220,10 @@ class RepeatedDuplicateResultDialog(QtWidgets.QDialog):
             "none": "Manual selection",
             "oldest": "Keep Oldest",
             "newest": "Keep Newest",
+            "last": "Keep last",
+            "first": "Keep first",
+            "exlast": "Keep All but last",
+            "exfirst": "Keep All but first",
             "all": "Keep All",
         }
 
@@ -428,11 +441,11 @@ class RepeatedDuplicateResultDialog(QtWidgets.QDialog):
         # ==========================================================
 
         button_layout = QtWidgets.QHBoxLayout()
-        self.btn_create_selection_map = QtWidgets.QPushButton("Create Selection Map")
+        self.btn_create_keeprem_maps = QtWidgets.QPushButton("Create Keep/Remove Maps")
 
         self.btn_export = QtWidgets.QPushButton("Export")
         self.btn_close = QtWidgets.QPushButton("Close")
-        button_layout.addWidget(self.btn_create_selection_map)
+        button_layout.addWidget(self.btn_create_keeprem_maps)
         button_layout.addWidget(self.btn_export)
 
         button_layout.addStretch(1)
@@ -445,6 +458,7 @@ class RepeatedDuplicateResultDialog(QtWidgets.QDialog):
         # Signals
         # ==========================================================
 
+        self.btn_create_keeprem_maps.clicked.connect(self._create_keepremove_maps)
         self.results_table.clicked.connect(self._on_group_clicked)
         self.results_table.doubleClicked.connect(self._on_group_double_clicked)
         self.btn_select_all.clicked.connect(self._select_all)
@@ -623,6 +637,35 @@ class RepeatedDuplicateResultDialog(QtWidgets.QDialog):
 
         return nodes
     
+    def _set_selected_group_nodes(self, node_list):
+        selection_model = self.results_table.selectionModel()
+
+        selection_model.clearSelection()
+
+        for node in node_list:
+            md5 = node.path
+
+            source_row = self.table_model.row_for_md5(md5)
+
+            if source_row is None:
+                continue
+
+            source_index = self.table_model.index(
+                source_row,
+                self.table_model.COL_GROUP
+            )
+
+            proxy_index = self.table_proxy.mapFromSource(source_index)
+
+            if not proxy_index.isValid():
+                continue
+
+            selection_model.select(
+                proxy_index,
+                QtCore.QItemSelectionModel.SelectionFlag.Select
+                | QtCore.QItemSelectionModel.SelectionFlag.Rows
+            )
+    
     
 
     # ==============================================================
@@ -643,11 +686,15 @@ class RepeatedDuplicateResultDialog(QtWidgets.QDialog):
         self.current_group_md5 = md5
 
         node_list=self.results_etw.t_m.get_nodes_by_attribute("path",md5)
-        self.results_etw.t_m.select_descendants
+        
         if node_list:
             node = node_list[0]
-            if not node.loaded:
+            if not node.loaded:                
                 self._apply_selection_policy(node)
+            if self.on_click_selection_policy:
+                self._clear_group_selection(node)
+                self._set_selected_group_nodes([node])
+                self._apply_policy_to_selected_groups(self.selection_policy)
             self.results_etw.expand_node(node)
             self.results_etw.set_current_node(node)
             self._set_statistics_node(node)
@@ -665,13 +712,18 @@ class RepeatedDuplicateResultDialog(QtWidgets.QDialog):
         self.results_etw.load_node(node)
 
         id_cre_dt = {}
-
+        
         for child in node.children:
             if child.i_am == "file":
                 info_dict = self.ptv._parse_node_info(child)
+                
+                if self.mode == "repeated":
+                    fp = info_dict.get("md5", "")
+                    dt_str = info_dict.get("dt_file_created", "")
 
-                fp = info_dict.get("filepath", "")
-                dt_str = info_dict.get("dt_file_created", "")
+                else:
+                    fp = info_dict.get("filepath", "")
+                    dt_str = info_dict.get("dt_file_created", "")
 
                 try:
                     dt_c = datetime.fromisoformat(dt_str)
@@ -680,6 +732,8 @@ class RepeatedDuplicateResultDialog(QtWidgets.QDialog):
 
                 clist = id_cre_dt.setdefault(fp, [])
                 clist.append((child.id, dt_c))
+            else:
+                self._apply_selection_policy(child)
 
         # "all": Keep All
         if self.selection_policy == "all":
@@ -710,6 +764,32 @@ class RepeatedDuplicateResultDialog(QtWidgets.QDialog):
 
                     if newest_node:
                         tm.set_selected(newest_node, True)
+            return
+        
+        # Selection policies based on list position
+        if self.selection_policy in ("last", "first", "exlast", "exfirst"):
+            for clist in id_cre_dt.values():
+                if not clist:
+                    continue
+
+                if self.selection_policy == "last":
+                    keep_list = clist[-1:]
+
+                elif self.selection_policy == "first":
+                    keep_list = clist[:1]
+
+                elif self.selection_policy == "exlast":
+                    keep_list = clist[:-1]
+
+                elif self.selection_policy == "exfirst":
+                    keep_list = clist[1:]
+
+                for an_id, _ in keep_list:
+                    file_node = tm.get_node_by_id(an_id)
+
+                    if file_node:
+                        tm.set_selected(file_node, True)
+
             return
     
     def _apply_policy_to_selected_groups(self, policy):
@@ -827,6 +907,9 @@ class RepeatedDuplicateResultDialog(QtWidgets.QDialog):
     # ==============================================================
     # Default policies
     # ==============================================================
+
+    def _on_policy_click(self,checked):
+        self.on_click_selection_policy=self.policy_click.isChecked()
 
     def _on_policy_changed(self, button, checked):
         if not checked:
@@ -973,6 +1056,197 @@ class RepeatedDuplicateResultDialog(QtWidgets.QDialog):
         )
     
 
+    def _get_loaded_duplicate_list(self):
+        tm = self.results_etw.t_m
+        root_node = tm.root
+        duplicte_list = []
+
+        for md5_node in root_node.children:
+            if not md5_node.loaded:
+                continue
+            if md5_node.i_am != "md5":
+                continue
+            dup_group = []
+            for file_node in md5_node.children:
+                if file_node.i_am != "file":
+                    continue
+
+                info_dict = self.ptv._parse_node_info(file_node)
+
+                if info_dict:
+                    dup_group.append(info_dict)
+
+            if len(dup_group) > 1:
+                duplicte_list.append(tuple(dup_group))
+
+        return duplicte_list
+    
+    def _get_selected_file_ids(self):
+        tm = self.results_etw.t_m
+        root_node = tm.root
+        selected_items = []
+        for md5_node in root_node.children:
+            if not md5_node.loaded:
+                continue
+            if md5_node.i_am != "md5":
+                continue
+
+            for file_node in md5_node.children:
+
+                if file_node.i_am != "file":
+                    continue
+
+                if file_node.selected:
+                    info_dict = self.ptv._parse_node_info(file_node)
+                    selected_items.append(str(info_dict['id']))
+
+        return selected_items
+
+    
+    def _create_keepremove_maps(self):
+        """
+        Creates KEEP and REMOVE selection maps from loaded duplicate
+        groups in the GUI.
+
+        GUI selection semantics:
+            - Selected file nodes   -> KEEP
+            - Unselected file nodes -> REMOVE
+
+        get_remove_keep_dict() uses the opposite convention:
+            - selected_items -> REMOVE
+            - remaining items -> KEEP
+
+        Original database IDs are retrieved from the parsed file
+        information whenever available. This is important because
+        node.db_id may refer to a temporary or cloned database.
+
+        Only loaded MD5 groups are processed, independently for
+        each database/map pair.
+        """
+        tm = self.results_etw.t_m
+
+        # Get loaded MD5 groups.
+        loaded_groups = [
+            node for node in tm.get_loaded_nodes()
+            if node.i_am == "md5"
+        ]
+
+        if not loaded_groups:
+            return
+        created_maps = []
+        # Process each database/map independently.
+        for db_map_pair in self.db_map_pair_list:
+            duplicte_list = []
+            remove_items = []
+            for md5_node in loaded_groups:
+                dup_group = []
+                for file_node in md5_node.children:
+                    if file_node.i_am != "file":
+                        continue
+                    # Only files belonging to this database/map.
+                    if (file_node.db, file_node.map) != db_map_pair:
+                        continue
+                    # Retrieve original file information.
+                    info_dict = self.ptv._parse_node_info(file_node)
+                    if not info_dict:
+                        continue
+                    dup_group.append(info_dict)
+                    # GUI unselected = REMOVE.
+                    if not file_node.selected:
+                        db_id = info_dict.get("id")
+                        # Fallback for incomplete information.
+                        if db_id is None:
+                            db_id = file_node.db_id
+                        if db_id is not None:
+                            remove_items.append(str(db_id))
+
+                # Only groups with at least two files are duplicates
+                # within this database/map.
+                if len(dup_group) > 1:
+                    duplicte_list.append(tuple(dup_group))
+
+            if not duplicte_list:
+                continue
+
+            # Build the original REMOVE/KEEP dictionary.
+            rem_keep_dict = self.fmap.cma.get_remove_keep_dict(
+                remove_items,
+                duplicte_list
+            )
+
+            fm = self.fmap.cma.get_file_map(db_map_pair[0])
+            name = self.fmap.cma.format_new_table_name("%_!", db_map_pair[1])
+
+            # Extract REMOVE and KEEP IDs.
+            rem_id_list = self._get_id_list_from_rem_keep_dict(
+                remove_items,
+                duplicte_list,
+                'remove',
+                rem_keep_dict
+            )
+
+            keep_id_list = self._get_id_list_from_rem_keep_dict(
+                remove_items,
+                duplicte_list,
+                'keep',
+                rem_keep_dict
+            )
+            if rem_id_list or keep_id_list:
+                try:
+                    self.mapping_is_running_signal.emit()            
+                    # Create REMOVE map.
+                    if rem_id_list:
+                        fm.map_an_id_selection(
+                            'remove_' + name,
+                            db_map_pair[1],
+                            rem_id_list,
+                            MapType.REMOVE.value
+                        )
+                        created_maps.append(f'@{db_map_pair} : remove_{name}')
+
+                    # Create KEEP map.
+                    if keep_id_list:
+                        fm.map_an_id_selection(
+                            'keep_' + name,
+                            db_map_pair[1],
+                            keep_id_list,
+                            MapType.KEEP.value
+                        )
+                        created_maps.append(f'@{db_map_pair} : keep_{name}')
+                finally:
+                    self.mapping_is_not_running_signal.emit()
+                
+        
+        if created_maps:
+            self.refresh_mapping_tree.emit()
+
+            self.msg_box.show(
+                title="Selection Maps Created",
+                text=f"Successfully created {len(created_maps)} selection map(s).",
+                informative_text="The following maps are now available:",
+                detailed_text="\n".join(created_maps)
+            )
+        
+
+    
+    def _get_id_list_from_rem_keep_dict(self,selected_items,d_list,a_key='remove',rem_keep_dict=None):
+        """Gets an id list of items in rem,keep dictionary
+
+        Args:
+            selected_items (_type_): selected items
+            d_list (_type_): duplicate list
+            a_key (str, optional): 'remove', 'keep' or 'all'. Defaults to 'remove'.
+            rem_keep_dict (dict,optional): pass the dictionary if it was already calculated.
+        Returns:
+            list: id list of items with a_key
+        """
+        if not rem_keep_dict:
+            rem_keep_dict=self.fmap.cma.get_remove_keep_dict(selected_items,d_list)
+        id_list=[]
+        for _,rem_keep in rem_keep_dict.items():
+            id_list=id_list+rem_keep[a_key]
+        return id_list
+        
     # ==============================================================
     # Public API
     # ==============================================================
@@ -1239,6 +1513,12 @@ class RepeatedDuplicateTableModel(QtCore.QAbstractTableModel):
         if 0 <= row < len(self.md5_list):
             return self.md5_list[row]
         return None
+    
+    def row_for_md5(self, md5):
+        try:
+            return self.md5_list.index(md5)
+        except ValueError:
+            return None
 
     def data(self, index, role=QtCore.Qt.ItemDataRole.DisplayRole):
 
